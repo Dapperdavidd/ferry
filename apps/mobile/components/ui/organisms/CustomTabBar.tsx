@@ -1,0 +1,218 @@
+import React, { useState } from "react";
+import { View } from "react-native";
+import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import History from "../atoms/icons/history";
+import Home from "../atoms/icons/home";
+import Settings from "../atoms/icons/settings";
+import { ActionPill } from "../molecules";
+import HapticPressable from "../atoms/HapticPressable";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import { ActionMenu } from "./ActionMenu";
+
+import { BlurView } from "expo-blur";
+import { useSegments } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/utils/cn";
+
+const iconMappings = {
+  index: Home,
+  settings: Settings,
+  history: History,
+} as Record<string, React.FC<{ isActive?: boolean }>>;
+
+const fabShadow = {
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4.65,
+  elevation: 8,
+};
+
+export function CustomTabBar({
+  state,
+  descriptors,
+  navigation,
+}: BottomTabBarProps) {
+  // Expo Router's typed-route segment tuple comes from the gitignored
+  // `.expo/types`, absent in CI; treat segments as a plain string array so
+  // depth checks type-check without the generated route types.
+  const segments = useSegments() as string[];
+  const { sessionTier } = useAuth();
+  const [isActionMenuVisible, setIsActionMenuVisible] = useState(false);
+  // Everything behind the button moves money, and an email-only session
+  // cannot. The home banner says why and offers the passkey; the button just
+  // stops pretending.
+  const readOnly = sessionTier === "entry";
+
+  const fabScale = useSharedValue(1);
+  const fabOpacity = useSharedValue(1);
+
+  const isHome = segments[0] === "(tabs)" && segments[1] === undefined;
+  const isSettingsSubPage =
+    segments[0] === "(tabs)" &&
+    segments[1] === "settings" &&
+    segments[2] !== undefined;
+
+  React.useEffect(() => {
+    fabOpacity.value = withTiming(isActionMenuVisible ? 0 : 1, {
+      duration: 200,
+    });
+  }, [isActionMenuVisible, fabOpacity]);
+
+  const fabStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: fabScale.value }],
+      opacity: fabOpacity.value,
+    };
+  });
+
+  if (isSettingsSubPage) {
+    return null;
+  }
+
+  const handleFabPress = () => {
+    fabScale.value = withSequence(
+      withTiming(0.9, { duration: 100 }),
+      withSpring(1, { damping: 15, stiffness: 200 })
+    );
+
+    setIsActionMenuVisible(true);
+  };
+
+  return (
+    <>
+      <ContainerWrapper withBlur={!isHome}>
+        <ActionPill
+          items={state.routes.map((route, index) => {
+            const { options } = descriptors[route.key];
+            const isFocused = state.index === index;
+
+            const onPress = () => {
+              const event = navigation.emit({
+                type: "tabPress",
+                target: route.key,
+                canPreventDefault: true,
+              });
+
+              if (event.defaultPrevented) return;
+
+              // A tab lands on the tab, not on wherever it was left. Settings
+              // is the only one with a stack under it, and something that deep
+              // links into that stack (the home banner does) otherwise leaves
+              // the tab pointing at a sub-screen with no way back to the list.
+              if (route.name === "settings") {
+                (
+                  navigation.navigate as unknown as (
+                    name: string,
+                    params: { screen: string }
+                  ) => void
+                )(route.name, { screen: "index" });
+                return;
+              }
+              if (!isFocused) navigation.navigate(route.name);
+            };
+
+            const onLongPress = () => {
+              navigation.emit({
+                type: "tabLongPress",
+                target: route.key,
+              });
+            };
+
+            return {
+              icon: iconMappings[route.name],
+              onPress,
+              onLongPress,
+              isActive: isFocused,
+              accessibilityLabel: options.tabBarAccessibilityLabel,
+              testID: options.title,
+            };
+          })}
+          containerStyle={
+            isHome
+              ? {
+                  backgroundColor: "transparent",
+                  borderWidth: 1,
+                  borderColor: "#fff",
+                  shadowColor: "transparent",
+                }
+              : {}
+          }
+        />
+
+        {isHome && (
+          // REANIMATED-EXCEPTION
+          <Animated.View
+            className="absolute right-4 top-3 z-[2]"
+            style={fabStyle}
+          >
+            <HapticPressable
+              className={cn(
+                "h-[50px] w-[50px] items-center justify-center rounded-[28px] bg-black",
+                readOnly && "opacity-30"
+              )}
+              // PLATFORM-SHADOW
+              style={fabShadow}
+              onPress={handleFabPress}
+              disabled={readOnly}
+              accessibilityLabel={
+                readOnly ? "Sign in with your passkey to send" : "Actions"
+              }
+            >
+              <Ionicons name="add" size={28} color="white" />
+            </HapticPressable>
+          </Animated.View>
+        )}
+      </ContainerWrapper>
+
+      <ActionMenu
+        visible={isActionMenuVisible}
+        onClose={() => setIsActionMenuVisible(false)}
+      />
+    </>
+  );
+}
+
+const ContainerWrapper = ({
+  children,
+  withBlur,
+}: {
+  children: React.ReactNode;
+  withBlur?: boolean;
+}) => {
+  const insets = useSafeAreaInsets();
+  const bottom = insets.bottom + 8;
+  if (!withBlur) {
+    return (
+      <View
+        className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
+        // MEASURED-LAYOUT (safe-area inset)
+        style={{ bottom }}
+      >
+        {children}
+      </View>
+    );
+  }
+  // No `blurMethod` here on purpose: this BlurView has no blurTarget, so
+  // Android has always fallen back to no blur, and naming the method only
+  // earned a warning on every mount. iOS blurs natively either way.
+  return (
+    <BlurView
+      intensity={10}
+      tint="light"
+      className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
+      // MEASURED-LAYOUT (safe-area inset)
+      style={{ bottom }}
+    >
+      {children}
+    </BlurView>
+  );
+};

@@ -1,0 +1,282 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
+import { eq } from 'drizzle-orm';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { assertPublicHttpsUrl, UnsafeUrlError } from '../common/url-safety';
+import { FX_QUOTE_PROVIDER } from '../fx/fx-quote-provider.interface';
+import type { FxQuoteProvider } from '../fx/fx-quote-provider.interface';
+import { localMinorToUsdcRaw, usdcRawToUsdMinor } from '../fx/fx-math';
+import { FxQuoteUnavailableError } from '../fx/fx.errors';
+import {
+  PaymentIntentService,
+  type CreateIntentParams,
+} from '../payment/payment-intent.service';
+import {
+  IntentNotFoundError,
+  MerchantNotFoundError,
+  MerchantSuspendedError,
+} from '../payment/payment.errors';
+import { DbService } from '../db/db.service';
+import { paymentIntents } from '../db/schema';
+import { ApiKeyGuard, type MerchantRequest } from './api-key.guard';
+import { IdempotencyService } from './idempotency.service';
+import {
+  CreateIntentBodySchema,
+  type CreateIntentBody,
+  type IntentObject,
+} from './dtos';
+import { IdempotencyKeyReuseError } from './merchant.errors';
+import { isLivePayment } from '../payment/payment-mode';
+
+type IntentRow = typeof paymentIntents.$inferSelect;
+
+/** Stable JSON so a re-ordered body hashes identically. */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * The merchant API surface: server-to-server payment intent create/retrieve
+ * under the ApiKeyGuard. Intents are created server-side only; the browser
+ * never supplies an amount. NGN intents pin an executable FX quote at
+ * creation; USDC intents leave the FX columns null. Every write is idempotent
+ * by Idempotency-Key.
+ */
+@Controller('v1')
+@UseGuards(ApiKeyGuard)
+export class MerchantController {
+  constructor(
+    private readonly intents: PaymentIntentService,
+    private readonly idempotency: IdempotencyService,
+    private readonly config: ConfigService,
+    private readonly db: DbService,
+    @Inject(FX_QUOTE_PROVIDER) private readonly fx: FxQuoteProvider,
+  ) {}
+
+  @Post('payment_intents')
+  @HttpCode(HttpStatus.CREATED)
+  async createIntent(
+    @Req() req: MerchantRequest,
+    @Body(new ZodValidationPipe(CreateIntentBodySchema)) body: CreateIntentBody,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<IntentObject> {
+    const { merchantId, mode } = req.merchant;
+    try {
+      const executionCluster = this.config.getOrThrow<string>('SOLANA_CLUSTER');
+      const allowPrivate =
+        this.config.get<boolean>('WEBHOOK_ALLOW_PRIVATE_URLS') ?? false;
+      if (body.return_url) {
+        await assertPublicHttpsUrl(body.return_url, { allowPrivate });
+      }
+      if (body.cancel_url) {
+        await assertPublicHttpsUrl(body.cancel_url, { allowPrivate });
+      }
+
+      const requestHash = createHash('sha256')
+        .update(
+          stableStringify({
+            method: 'POST',
+            path: '/v1/payment_intents',
+            body,
+          }),
+        )
+        .digest('hex');
+
+      const result = await this.idempotency.run<IntentObject>(
+        merchantId,
+        idempotencyKey,
+        requestHash,
+        async () => {
+          const params: CreateIntentParams = {
+            merchantId,
+            mode,
+            usdcSettlementRaw: '',
+            pricingCurrency: body.currency,
+            displayCurrency: '',
+            displayAmountMinor: '',
+            merchantReference: body.merchant_reference,
+            returnUrl: body.return_url,
+            cancelUrl: body.cancel_url,
+            idempotencyKey,
+          };
+
+          if (body.currency === 'NGN') {
+            const quote = await this.fx.getQuote();
+            // The provider's exact decimal string is the pinned quote. The
+            // configured scale is a minimum, not permission to truncate it.
+            const rateDecimals = Math.max(
+              this.config.getOrThrow<number>('FX_RATE_DECIMALS'),
+              quote.ngnPerUsdc.split('.')[1]?.length ?? 0,
+            );
+            params.usdcSettlementRaw = localMinorToUsdcRaw(
+              body.amount,
+              quote.ngnPerUsdc,
+              rateDecimals,
+              'NGN',
+            );
+            params.displayCurrency = 'NGN';
+            params.displayAmountMinor = body.amount;
+            params.fxRate = quote.ngnPerUsdc;
+            params.fxSource = quote.source;
+            params.fxQuotedAt = quote.quotedAt;
+          } else if (body.currency === 'USD') {
+            // Pilot dollar pricing is denominated at one USDC per USD.
+            // This is not an executable fiat conversion or payout quote.
+            params.usdcSettlementRaw = localMinorToUsdcRaw(
+              body.amount,
+              '1',
+              0,
+              'USD',
+            );
+            params.displayCurrency = 'USD';
+            params.displayAmountMinor = body.amount;
+          } else {
+            // Priced in the settlement asset. There is no rate to pin, and the
+            // Consumer is shown dollars: USDC is a chain detail and never
+            // reaches a surface a shopper reads.
+            params.usdcSettlementRaw = body.amount;
+            params.displayCurrency = 'USD';
+            params.displayAmountMinor = usdcRawToUsdMinor(body.amount);
+          }
+
+          let intent = await this.intents.create(params);
+          if (body.metadata && !intent.metadata) {
+            intent = await this.attachMetadata(intent.id, body.metadata);
+          }
+          return { status: HttpStatus.CREATED, body: this.toObject(intent) };
+        },
+        executionCluster,
+      );
+      return result.body;
+    } catch (err) {
+      this.mapServiceError(err);
+    }
+  }
+
+  @Get('payment_intents/:id')
+  async getIntent(
+    @Req() req: MerchantRequest,
+    @Param('id') id: string,
+  ): Promise<IntentObject> {
+    try {
+      const intent = await this.intents.findById(id);
+      // Scope to the calling merchant + mode; never leak cross-merchant
+      // existence.
+      if (
+        intent.merchantId !== req.merchant.merchantId ||
+        intent.mode !== req.merchant.mode ||
+        (req.merchant.executionCluster !== null &&
+          intent.executionCluster !== null &&
+          intent.executionCluster !== req.merchant.executionCluster)
+      ) {
+        throw new IntentNotFoundError(`intent ${id} not found`);
+      }
+      return this.toObject(intent);
+    } catch (err) {
+      this.mapServiceError(err);
+    }
+  }
+
+  private async attachMetadata(
+    intentId: string,
+    metadata: Record<string, string>,
+  ): Promise<IntentRow> {
+    const [updated] = await this.db.client
+      .update(paymentIntents)
+      .set({ metadata, updatedAt: new Date() })
+      .where(eq(paymentIntents.id, intentId))
+      .returning();
+    return updated;
+  }
+
+  private toObject(intent: IntentRow): IntentObject {
+    // Only a USDC-priced intent is displayed in USD; the Merchant sent six
+    // decimal raw units and reads the same back, not the cents shown to the
+    // shopper.
+    const currency =
+      intent.pricingCurrency ??
+      (intent.displayCurrency === 'USD' ? 'USDC' : intent.displayCurrency);
+    const pricedInUsdc = currency === 'USDC';
+    return {
+      id: intent.id,
+      object: 'payment_intent',
+      status: intent.status,
+      currency,
+      amount: pricedInUsdc
+        ? intent.usdcSettlementRaw
+        : intent.displayAmountMinor,
+      usdc_settlement_raw: intent.usdcSettlementRaw,
+      fx_rate: intent.fxRate,
+      fx_source: intent.fxSource,
+      fx_quoted_at: intent.fxQuotedAt ? intent.fxQuotedAt.toISOString() : null,
+      expires_at: intent.expiresAt.toISOString(),
+      merchant_reference: intent.merchantReference,
+      return_url: intent.returnUrl,
+      cancel_url: intent.cancelUrl,
+      livemode: isLivePayment(intent.mode, intent.executionCluster),
+      created: Math.floor(intent.createdAt.getTime() / 1000),
+      metadata: intent.metadata ?? null,
+    };
+  }
+
+  private mapServiceError(err: unknown): never {
+    if (
+      err instanceof MerchantNotFoundError ||
+      err instanceof IntentNotFoundError
+    ) {
+      throw new HttpException(
+        { code: err.code, message: err.message },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (err instanceof MerchantSuspendedError) {
+      throw new HttpException(
+        { code: err.code, message: err.message },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    if (err instanceof IdempotencyKeyReuseError) {
+      throw new HttpException(
+        { code: err.code, message: err.message },
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (err instanceof FxQuoteUnavailableError) {
+      throw new HttpException(
+        { code: err.code, message: err.message },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    if (err instanceof UnsafeUrlError) {
+      throw new HttpException(
+        { code: err.code, message: err.message },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+    throw err as Error;
+  }
+}

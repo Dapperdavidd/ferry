@@ -1,0 +1,143 @@
+/**
+ * Typed errors thrown by the merchant services and guards. Plain Error
+ * subclasses with a SCREAMING_SNAKE `code`, kept out of @nestjs/common so the
+ * services stay HTTP-framework-agnostic (same posture as transfer.errors.ts).
+ * Intent-level cases (MerchantNotFound, IntentNotFound, ...) reuse the Phase 2
+ * payment errors and are not redefined here.
+ */
+
+export class InvalidApiKeyError extends Error {
+  readonly code = 'INVALID_API_KEY';
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidApiKeyError';
+  }
+}
+
+export class ApiKeyNotFoundError extends Error {
+  readonly code = 'API_KEY_NOT_FOUND';
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiKeyNotFoundError';
+  }
+}
+
+export class ApiKeyRotationInProgressError extends Error {
+  readonly code = 'API_KEY_ROTATION_IN_PROGRESS';
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiKeyRotationInProgressError';
+  }
+}
+
+export class MerchantSuspendedError extends Error {
+  readonly code = 'MERCHANT_SUSPENDED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'MerchantSuspendedError';
+  }
+}
+
+export class IdempotencyKeyReuseError extends Error {
+  readonly code = 'IDEMPOTENCY_KEY_REUSE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdempotencyKeyReuseError';
+  }
+}
+
+/** A write that moves money is refused without an Idempotency-Key. */
+export class IdempotencyKeyRequiredError extends Error {
+  readonly code = 'IDEMPOTENCY_KEY_REQUIRED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdempotencyKeyRequiredError';
+  }
+}
+
+export class UnauthorizedInternalError extends Error {
+  readonly code = 'UNAUTHORIZED_INTERNAL';
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnauthorizedInternalError';
+  }
+}
+
+/** Live-key gate: the Merchant's KYB is not verified. */
+export class KybNotVerifiedError extends Error {
+  readonly code = 'KYB_NOT_VERIFIED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'KybNotVerifiedError';
+  }
+}
+
+/**
+ * Verification was attempted against a profile version that is not the one
+ * currently submitted for review (no active submission, or the profile changed
+ * after submission). The reviewed details must match what gets verified.
+ */
+export class KybSubmissionMismatchError extends Error {
+  readonly code = 'KYB_SUBMISSION_MISMATCH';
+  constructor(message: string) {
+    super(message);
+    this.name = 'KybSubmissionMismatchError';
+  }
+}
+
+/** The requested execution-key kind cannot be used on this deployment. */
+export class ExecutionClusterDisabledError extends Error {
+  readonly code = 'EXECUTION_CLUSTER_DISABLED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExecutionClusterDisabledError';
+  }
+}
+
+/** Live-key gate: no provisioned provider settlement endpoint reference. */
+export class SettlementDestinationMissingError extends Error {
+  readonly code = 'SETTLEMENT_DESTINATION_MISSING';
+  constructor(message: string) {
+    super(message);
+    this.name = 'SettlementDestinationMissingError';
+  }
+}
+
+export class RefundNotFoundError extends Error {
+  readonly code = 'REFUND_NOT_FOUND';
+  constructor(message: string) {
+    super(message);
+    this.name = 'RefundNotFoundError';
+  }
+}
+
+/** The requested refund amount exceeds the remaining refundable balance. */
+export class RefundAmountExceedsRefundableError extends Error {
+  readonly code = 'REFUND_AMOUNT_EXCEEDS_REFUNDABLE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'RefundAmountExceedsRefundableError';
+  }
+}
+
+/**
+ * The settlement provider for this Merchant does not advertise reverse
+ * support. The Blockradar/naira reverse flow stays capability-gated until
+ * Phase 8 confirms it; the direct-USDC path works now.
+ */
+export class RefundNotSupportedError extends Error {
+  readonly code = 'REFUND_NOT_SUPPORTED';
+  constructor(message: string) {
+    super(message);
+    this.name = 'RefundNotSupportedError';
+  }
+}
+
+/** The payment is not settlement-confirmed, so it cannot be reversed. */
+export class PaymentNotRefundableError extends Error {
+  readonly code = 'PAYMENT_NOT_REFUNDABLE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'PaymentNotRefundableError';
+  }
+}

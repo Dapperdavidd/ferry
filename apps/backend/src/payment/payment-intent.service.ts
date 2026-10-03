@@ -1,0 +1,357 @@
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
+import { DbService } from '../db/db.service';
+import { merchants, paymentIntents } from '../db/schema';
+import { EVENT_PUBLISHER } from '../events/event-publisher.interface';
+import { paymentIntentTransitions } from '../metrics/metrics';
+import type { EventPublisher } from '../events/event-publisher.interface';
+import {
+  IntentNotFoundError,
+  IntentStateConflictError,
+  MerchantNotFoundError,
+  MerchantSuspendedError,
+} from './payment.errors';
+
+type IntentRow = typeof paymentIntents.$inferSelect;
+type PaymentIntentStatus = IntentRow['status'];
+type IntentPatch = Partial<typeof paymentIntents.$inferInsert>;
+
+/** Postgres unique-violation SQLSTATE, surfaced by node-postgres. */
+function pgErrorCode(err: unknown): string | undefined {
+  const e = err as { code?: string; cause?: { code?: string } };
+  return e?.code ?? e?.cause?.code;
+}
+
+export interface CreateIntentParams {
+  merchantId: string;
+  usdcSettlementRaw: string;
+  pricingCurrency?: 'NGN' | 'USD' | 'USDC';
+  /** What the Merchant priced in, and the figure the Consumer is shown. */
+  displayCurrency: string;
+  displayAmountMinor: string;
+  fxRate?: string;
+  fxSource?: string;
+  fxQuotedAt?: Date;
+  merchantReference?: string;
+  idempotencyKey?: string;
+  /** The api-key mode the intent is created under; defaults to test. */
+  mode?: 'test' | 'live';
+  /** Merchant-supplied redirect targets, SSRF-validated by the caller. */
+  returnUrl?: string;
+  cancelUrl?: string;
+}
+
+/**
+ * Durable Payment intents. Every read and write hits Postgres; there is no
+ * in-memory intent state. Replaying the same (merchant, execution cluster,
+ * idempotency key)
+ * returns the existing intent instead of creating a second one, and status
+ * only ever changes through the conditional {@link transition}, which is the
+ * race arbiter for concurrent confirmers.
+ */
+@Injectable()
+export class PaymentIntentService implements OnModuleInit {
+  private readonly logger = new Logger(PaymentIntentService.name);
+
+  constructor(
+    private readonly db: DbService,
+    private readonly config: ConfigService,
+    @Inject(EVENT_PUBLISHER) private readonly events: EventPublisher,
+  ) {}
+
+  /**
+   * Migration 0042 could add the execution-cluster column but could not know
+   * which network each deployment uses. Backfill only nonterminal work here,
+   * where the validated SOLANA_CLUSTER is available, before traffic starts.
+   */
+  async onModuleInit(): Promise<void> {
+    const cluster = this.config.getOrThrow<string>('SOLANA_CLUSTER');
+    const backfilled = await this.db.client
+      .update(paymentIntents)
+      .set({ executionCluster: cluster, updatedAt: new Date() })
+      .where(
+        and(
+          isNull(paymentIntents.executionCluster),
+          inArray(paymentIntents.status, ['created', 'authorized', 'settling']),
+        ),
+      )
+      .returning({ id: paymentIntents.id });
+    if (backfilled.length > 0) {
+      this.logger.warn(
+        `payment_intent.execution_cluster_backfilled cluster=${cluster} count=${backfilled.length}`,
+      );
+    }
+  }
+
+  async create(params: CreateIntentParams): Promise<IntentRow> {
+    const executionCluster = this.config.getOrThrow<string>('SOLANA_CLUSTER');
+    const [merchant] = await this.db.client
+      .select()
+      .from(merchants)
+      .where(eq(merchants.id, params.merchantId))
+      .limit(1);
+    if (!merchant) {
+      throw new MerchantNotFoundError(
+        `merchant ${params.merchantId} not found`,
+      );
+    }
+    if (merchant.status !== 'active') {
+      throw new MerchantSuspendedError(
+        `merchant ${params.merchantId} is ${merchant.status}`,
+      );
+    }
+
+    let amount: bigint;
+    try {
+      amount = BigInt(params.usdcSettlementRaw);
+    } catch {
+      throw new Error('usdcSettlementRaw must be a positive integer string');
+    }
+    if (amount <= 0n) {
+      throw new Error('usdcSettlementRaw must be a positive integer string');
+    }
+
+    // Idempotency-first: a replay with the same key returns the original
+    // intent and publishes nothing.
+    if (params.idempotencyKey) {
+      const existing = await this.findByIdempotency(
+        params.merchantId,
+        params.idempotencyKey,
+        executionCluster,
+      );
+      if (existing) return existing;
+    }
+
+    const ttlMinutes =
+      merchant.intentTtlMinutes ??
+      this.config.getOrThrow<number>('PAYMENT_INTENT_TTL_MINUTES');
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
+
+    let intent: IntentRow;
+    try {
+      [intent] = await this.db.client
+        .insert(paymentIntents)
+        .values({
+          merchantId: params.merchantId,
+          usdcSettlementRaw: params.usdcSettlementRaw,
+          pricingCurrency: params.pricingCurrency ?? null,
+          executionCluster,
+          displayCurrency: params.displayCurrency,
+          displayAmountMinor: params.displayAmountMinor,
+          fxRate: params.fxRate ?? null,
+          fxSource: params.fxSource ?? null,
+          fxQuotedAt: params.fxQuotedAt ?? null,
+          merchantReference: params.merchantReference ?? null,
+          idempotencyKey: params.idempotencyKey ?? null,
+          mode: params.mode ?? 'test',
+          returnUrl: params.returnUrl ?? null,
+          cancelUrl: params.cancelUrl ?? null,
+          expiresAt,
+        })
+        .returning();
+    } catch (err) {
+      // Lost the race on the merchant-idempotency unique index: the winning
+      // intent already exists, so return it instead of a second row.
+      if (pgErrorCode(err) === '23505' && params.idempotencyKey) {
+        const winner = await this.findByIdempotency(
+          params.merchantId,
+          params.idempotencyKey,
+          executionCluster,
+        );
+        if (winner) return winner;
+      }
+      throw err;
+    }
+
+    paymentIntentTransitions.inc({ from: 'none', to: 'created' });
+    // The intent id IS the correlation id: one id traces the Payment across
+    // every service (ADR 0012).
+    await this.events.publish({
+      topic: 'payment.created',
+      key: intent.id,
+      payload: {
+        intentId: intent.id,
+        merchantId: intent.merchantId,
+        usdcSettlementRaw: intent.usdcSettlementRaw,
+        displayCurrency: intent.displayCurrency,
+        displayAmountMinor: intent.displayAmountMinor,
+        expiresAt: intent.expiresAt.toISOString(),
+      },
+      correlationId: intent.id,
+    });
+
+    return intent;
+  }
+
+  /**
+   * The only status-write path. A single conditional UPDATE gated on the
+   * expected current status: two racing confirmers cannot both win because
+   * the second one's WHERE matches zero rows.
+   */
+  async transition(
+    intentId: string,
+    from: PaymentIntentStatus,
+    to: PaymentIntentStatus,
+    patch: IntentPatch = {},
+  ): Promise<IntentRow> {
+    const [updated] = await this.db.client
+      .update(paymentIntents)
+      .set({ ...patch, status: to, updatedAt: new Date() })
+      .where(
+        and(eq(paymentIntents.id, intentId), eq(paymentIntents.status, from)),
+      )
+      .returning();
+    if (updated) {
+      this.db.afterCommit(() => paymentIntentTransitions.inc({ from, to }));
+      return updated;
+    }
+
+    const existing = await this.findByIdOrNull(intentId);
+    if (!existing) {
+      throw new IntentNotFoundError(`intent ${intentId} not found`);
+    }
+    throw new IntentStateConflictError(
+      `intent ${intentId} expected status ${from} but was ${existing.status}`,
+    );
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expireStale(): Promise<void> {
+    const now = new Date();
+    const expired = await this.db.client
+      .update(paymentIntents)
+      .set({ status: 'expired', updatedAt: now })
+      .where(
+        and(
+          eq(paymentIntents.status, 'created'),
+          lt(paymentIntents.expiresAt, now),
+        ),
+      )
+      .returning({ id: paymentIntents.id });
+
+    for (const row of expired) {
+      await this.events.publish({
+        topic: 'payment.expired',
+        key: row.id,
+        payload: { intentId: row.id },
+        correlationId: row.id,
+      });
+    }
+    if (expired.length > 0) {
+      paymentIntentTransitions.inc(
+        { from: 'created', to: 'expired' },
+        expired.length,
+      );
+      this.logger.log(`payment.intent.expired count=${expired.length}`);
+    }
+  }
+
+  /**
+   * Marks a Payment as one only the Consumer's phone can finish, and records
+   * who that Consumer is.
+   *
+   * The intent stays `created`: nothing has been authorized, no capacity is
+   * spent and it is still payable, which is the whole point. Writing the
+   * consumer here is what makes it findable from the app at all, since an
+   * intent otherwise only learns who is paying when it is authorized and this
+   * one never got that far.
+   */
+  async deferToApproval(
+    intentId: string,
+    consumerId: string,
+  ): Promise<IntentRow> {
+    const [updated] = await this.db.client
+      .update(paymentIntents)
+      .set({
+        consumerId,
+        approvalDeferredAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(paymentIntents.id, intentId),
+          eq(paymentIntents.status, 'created'),
+        ),
+      )
+      .returning();
+    if (updated) return updated;
+    return this.findById(intentId);
+  }
+
+  /**
+   * Payments waiting on this Consumer's phone: still payable, not yet expired,
+   * newest first. A Consumer standing at a checkout that just told them to open
+   * the app should find it at the top.
+   */
+  async listAwaitingApproval(consumerId: string): Promise<IntentRow[]> {
+    const executionCluster = this.config.getOrThrow<string>('SOLANA_CLUSTER');
+    return this.db.client
+      .select()
+      .from(paymentIntents)
+      .where(
+        and(
+          eq(paymentIntents.consumerId, consumerId),
+          eq(paymentIntents.executionCluster, executionCluster),
+          eq(paymentIntents.status, 'created'),
+          isNotNull(paymentIntents.approvalDeferredAt),
+          gt(paymentIntents.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(desc(paymentIntents.approvalDeferredAt))
+      .limit(20);
+  }
+
+  async findById(intentId: string): Promise<IntentRow> {
+    const row = await this.findByIdOrNull(intentId);
+    if (!row) throw new IntentNotFoundError(`intent ${intentId} not found`);
+    return row;
+  }
+
+  private async findByIdOrNull(
+    intentId: string,
+  ): Promise<IntentRow | undefined> {
+    const [row] = await this.db.client
+      .select()
+      .from(paymentIntents)
+      .where(eq(paymentIntents.id, intentId))
+      .limit(1);
+    return row;
+  }
+
+  private async findByIdempotency(
+    merchantId: string,
+    idempotencyKey: string,
+    executionCluster: string,
+  ): Promise<IntentRow | undefined> {
+    const [row] = await this.db.client
+      .select()
+      .from(paymentIntents)
+      .where(
+        and(
+          eq(paymentIntents.merchantId, merchantId),
+          eq(paymentIntents.executionCluster, executionCluster),
+          eq(paymentIntents.idempotencyKey, idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (row) return row;
+
+    // Terminal intents created before execution-cluster scoping were left
+    // null because their original cluster cannot be inferred safely. They
+    // still own their idempotency key and must win a replay before insertion.
+    const [legacy] = await this.db.client
+      .select()
+      .from(paymentIntents)
+      .where(
+        and(
+          eq(paymentIntents.merchantId, merchantId),
+          isNull(paymentIntents.executionCluster),
+          eq(paymentIntents.idempotencyKey, idempotencyKey),
+        ),
+      )
+      .limit(1);
+    return legacy;
+  }
+}

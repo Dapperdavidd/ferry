@@ -1,0 +1,410 @@
+import React, { useEffect, useState } from "react";
+import { View, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { ThemedScreen } from "@/components/ui/layout";
+import { useThemeColor } from "@/hooks/useThemeColor";
+import {
+  Keypad,
+  ThemedButton,
+  ThemedTextInput,
+} from "@/components/ui/molecules";
+import { Chip, IconSymbol, ThemedText } from "@/components/ui/atoms";
+import { formatAmount } from "@/utils/helper";
+import { ExternalAccountMapping } from "@/types/Transaction";
+import { deleteAccount, getExternalAccountIds } from "@/utils/externalAccount";
+import {
+  Address,
+  AddressInput,
+  ACHBankAccount,
+  PersonalInformation,
+  AccountLabel,
+} from "@/types/ExternalAccounts";
+import { handleError, ErrorCode } from "@/utils/errors";
+import { useBalances } from "@/hooks/useBalances";
+import { useToast } from "@/contexts/ToastContext";
+
+export default function AmountScreen() {
+  const [amount, setAmount] = useState("0");
+  const [step, setStep] = useState(1);
+  const [accountNumber, setAccountNumber] = useState("");
+  const [routingNumber, setRoutingNumber] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [accountLabel, setAccountLabel] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [externalAccounts, setExternalAccounts] = useState<
+    ExternalAccountMapping[]
+  >([]);
+  const { total } = useBalances();
+  const balance = total ?? 0;
+  const { showToast } = useToast();
+
+  const [address, setAddress] = useState<AddressInput>({
+    street_number: "",
+    street_name: "",
+    street_line_2: "",
+    city: "",
+    state: "",
+    postal_code: "",
+    country: "",
+  });
+  const textColor = useThemeColor({}, "text");
+
+  const steps = [
+    {
+      index: 1,
+      label: "Enter amount",
+      render: () => renderAmount(),
+    },
+    {
+      index: 2,
+      label: "Select account",
+      render: () => renderAccountList(),
+    },
+    {
+      index: 3,
+      label: "Enter your details",
+      render: () => renderBankDetails(),
+    },
+  ];
+
+  async function getExtAccount() {
+    const ext = await getExternalAccountIds();
+    ext?.accounts.forEach((account) => {
+      if (account.label === "[object Object]") {
+        deleteAccount(account.grid_user_id, account.external_account_id);
+      }
+    });
+    setExternalAccounts(ext?.accounts ?? []);
+  }
+
+  useEffect(() => {
+    getExtAccount();
+  }, []);
+
+  const handleKeyPress = (key: string) => {
+    if (key === "backspace") {
+      setAmount((prev) => (prev.length > 1 ? prev.slice(0, -1) : "0"));
+    } else if (key === ".") {
+      if (!amount.includes(".")) {
+        setAmount((prev) => prev + ".");
+      }
+    } else {
+      if (amount === "0") {
+        setAmount(key);
+      } else {
+        // Limit to 2 decimal places.
+        const parts = amount.split(".");
+        if (parts.length > 1 && parts[1].length >= 2) {
+          return;
+        }
+        setAmount((prev) => prev + key);
+      }
+    }
+  };
+
+  const handleExistingContinue = () => {
+    // Fiat off-ramp is not yet available; the confirm route does not exist.
+    showToast("Fiat transfers are coming soon");
+  };
+
+  const handleContinue = () => {
+    if (step === 1) {
+      if (Number(amount) > balance) {
+        handleError(ErrorCode.INSUFFICIENT_BALANCE, true, true);
+        return;
+      }
+      if (Number(amount) < 1) {
+        handleError(ErrorCode.INVALID_AMOUNT, true, true);
+        return;
+      }
+      setStep(2);
+    } else {
+      let validationError = false;
+
+      try {
+        PersonalInformation.parse({
+          first_name: firstName,
+          last_name: lastName,
+        });
+      } catch {
+        validationError = true;
+        handleError(ErrorCode.INVALID_NAME, true, true);
+      }
+
+      try {
+        Address.parse(address);
+      } catch {
+        validationError = true;
+        handleError(ErrorCode.INVALID_ADDRESS, true, true);
+      }
+
+      try {
+        ACHBankAccount.parse({
+          account_number: accountNumber,
+          routing_number: routingNumber,
+          bank_name: bankName,
+        });
+      } catch {
+        validationError = true;
+        handleError(ErrorCode.INVALID_BANK_ACCOUNT, true, true);
+      }
+
+      try {
+        AccountLabel.parse({
+          label: accountLabel,
+        });
+      } catch {
+        validationError = true;
+        handleError(ErrorCode.INVALID_LABEL, true, true);
+      }
+
+      if (!validationError) {
+        // Fiat off-ramp is not yet available; the confirm route does not exist.
+        showToast("Fiat transfers are coming soon");
+      }
+    }
+  };
+
+  const renderKeypad = () => {
+    return (
+      <View className="w-full flex-1 justify-center">
+        <Keypad onKeyPress={handleKeyPress} />
+      </View>
+    );
+  };
+
+  const renderAmount = () => {
+    return (
+      // DYNAMIC-COLOR
+      <ThemedText type="highlight" style={{ color: textColor }}>
+        {formatAmount({ amount })}
+      </ThemedText>
+    );
+  };
+
+  const renderExternalAccounts = (currentLabel: string, id: string) => {
+    return (
+      <View key={id} className="mb-2">
+        <ThemedButton
+          title={currentLabel}
+          variant="outline"
+          // DYNAMIC-COLOR
+          textStyle={{ color: textColor }}
+          onPress={() => {
+            handleExistingContinue();
+          }}
+        />
+      </View>
+    );
+  };
+
+  const renderBankDetails = () => {
+    return (
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="flex-grow"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="w-full px-6">
+          <ThemedText type="regular" className="mb-2 opacity-60">
+            Personal Information
+          </ThemedText>
+          <ThemedTextInput
+            value={firstName}
+            onChangeText={setFirstName}
+            placeholder="First Name"
+          />
+          <View className="mb-2" />
+          <ThemedTextInput
+            value={lastName}
+            onChangeText={setLastName}
+            placeholder="Last Name"
+          />
+          <View className="mb-6" />
+
+          <ThemedText type="regular" className="mb-2 opacity-60">
+            Address
+          </ThemedText>
+          <View className="w-full flex-row">
+            <View className="flex-1">
+              <ThemedTextInput
+                value={address.street_number}
+                onChangeText={(text) =>
+                  setAddress((prev) => ({ ...prev, street_number: text }))
+                }
+                placeholder="123"
+                keyboardType="numeric"
+              />
+            </View>
+            <View className="w-2" />
+            <View className="flex-[3]">
+              <ThemedTextInput
+                value={address.street_name}
+                onChangeText={(text) =>
+                  setAddress((prev) => ({ ...prev, street_name: text }))
+                }
+                placeholder="Main St"
+              />
+            </View>
+          </View>
+          <View className="mb-2" />
+          <ThemedTextInput
+            value={address.street_line_2}
+            onChangeText={(text) =>
+              setAddress((prev) => ({ ...prev, street_line_2: text }))
+            }
+            placeholder="e.g. APT 2135"
+          />
+          <View className="mb-2" />
+          <View className="w-full flex-row">
+            <View className="flex-1">
+              <ThemedTextInput
+                value={address.city}
+                onChangeText={(text) =>
+                  setAddress((prev) => ({ ...prev, city: text }))
+                }
+                placeholder="e.g. Austin"
+              />
+            </View>
+            <View className="w-2" />
+            <View className="flex-1">
+              <ThemedTextInput
+                value={address.state}
+                onChangeText={(text) =>
+                  setAddress((prev) => ({ ...prev, state: text }))
+                }
+                placeholder="e.g. TX"
+              />
+            </View>
+          </View>
+          <View className="mb-2" />
+          <View className="w-full flex-row">
+            <View className="flex-1">
+              <ThemedTextInput
+                value={address.postal_code}
+                onChangeText={(text) =>
+                  setAddress((prev) => ({ ...prev, postal_code: text }))
+                }
+                placeholder="e.g. 78745"
+                keyboardType="numeric"
+              />
+            </View>
+            <View className="w-2" />
+            <View className="flex-1">
+              <ThemedTextInput
+                value={address.country}
+                onChangeText={(text) =>
+                  setAddress((prev) => ({ ...prev, country: text }))
+                }
+                placeholder="USA"
+                editable={true}
+              />
+            </View>
+          </View>
+          <View className="mb-6" />
+
+          <ThemedText type="regular" className="mb-2 opacity-60">
+            Bank Account
+          </ThemedText>
+          <ThemedTextInput
+            value={bankName}
+            onChangeText={setBankName}
+            placeholder="Bank Name"
+          />
+          <View className="mb-2" />
+          <ThemedTextInput
+            value={accountNumber}
+            onChangeText={setAccountNumber}
+            placeholder="Account Number"
+            keyboardType="numeric"
+          />
+          <View className="mb-2" />
+          <ThemedTextInput
+            value={routingNumber}
+            onChangeText={setRoutingNumber}
+            placeholder="Routing Number"
+            keyboardType="numeric"
+          />
+          <View className="mb-6" />
+
+          <ThemedText type="regular" className="mb-2 opacity-60">
+            Bank Label
+          </ThemedText>
+          <ThemedTextInput
+            placeholder="Enter a label for this account"
+            placeholderTextColor={textColor + "40"}
+            value={accountLabel}
+            onChangeText={setAccountLabel}
+          />
+          <View className="mb-16" />
+        </View>
+      </ScrollView>
+    );
+  };
+
+  const renderAccountList = () => {
+    return (
+      <ScrollView>
+        {externalAccounts?.map((account) =>
+          renderExternalAccounts(account.label, account.external_account_id)
+        )}
+        <ThemedButton
+          variant="outline"
+          // DYNAMIC-COLOR
+          textStyle={{ color: textColor }}
+          title="Add new account"
+          onPress={() => {
+            setStep(3);
+          }}
+        />
+      </ScrollView>
+    );
+  };
+
+  return (
+    <ThemedScreen
+      useSafeArea={true}
+      safeAreaEdges={["bottom", "left", "right"]}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+      >
+        <View className="mb-4 w-full px-6">
+          <View className="h-[30px] flex-row items-center justify-between">
+            <ThemedText type="defaultSemiBold" className="mb-2 py-1">
+              {steps[step - 1].label}
+            </ThemedText>
+            {step === 3 && (
+              <Chip className="px-2 py-1">
+                <View className="flex-row">
+                  <ThemedText type="tiny">ACH </ThemedText>
+                  <IconSymbol name="chevron.down" size={12} color={textColor} />
+                </View>
+              </Chip>
+            )}
+          </View>
+        </View>
+
+        <View className="flex-1">
+          {step === 1 && (
+            <>
+              <View className="flex-1 items-center justify-center">
+                {renderAmount()}
+              </View>
+              {renderKeypad()}
+            </>
+          )}
+          {step === 2 && renderAccountList()}
+          {step === 3 && renderBankDetails()}
+        </View>
+
+        <View className="w-full px-6 pb-8">
+          <ThemedButton title="Continue" onPress={handleContinue} />
+        </View>
+      </KeyboardAvoidingView>
+    </ThemedScreen>
+  );
+}

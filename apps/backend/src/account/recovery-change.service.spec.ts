@@ -1,0 +1,695 @@
+import {
+  Keypair,
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
+} from '@solana/web3.js';
+import { deriveAccountAddresses } from '@xend/smart-account';
+
+import type {
+  RecoverySignerStatus,
+  RecoverySignerSummary,
+} from '../recovery/recovery.service';
+import type { AccountEventsService } from '../activity/account-events.service';
+import { RecoveryService } from '../recovery/recovery.service';
+import type {
+  ProposalState,
+  ProvisioningChain,
+  SquadsAccountRow,
+  SquadsAccountStore,
+} from './account.interface';
+import { InMemoryPreparedTxStore } from '../prepared/prepared-tx.memory';
+import { RecoveryChangeService } from './recovery-change.service';
+
+const USER = 'user-1';
+const PRIMARY = '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9';
+const APPROVAL = 'GkP9xL7mQwR2sT4vB6nH8jC3dF5aZ1yU2eW4rK6tN9pM';
+const SETTINGS = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const AUTHORITY = 'Eo5wriQzhkJrQKEwTLMBMBDdCq1tE7QzKw8ias91pft5';
+const SIGNER_ADDRESS = Keypair.generate().publicKey.toBase58();
+const DAY = 24 * 60 * 60;
+
+const ACCOUNT: SquadsAccountRow = {
+  userId: USER,
+  settingsSeed: 42n,
+  settingsAddress: SETTINGS,
+  vaultAddress: 'Vau1t111111111111111111111111111111111111111',
+  primarySigner: PRIMARY,
+  approvalSigner: APPROVAL,
+  approvalSubOrgId: 'suborg-1',
+};
+
+const ADDRESSES = deriveAccountAddresses(ACCOUNT.settingsSeed);
+
+function store(row: SquadsAccountRow | null = ACCOUNT): SquadsAccountStore {
+  return {
+    findByUserId: () => Promise.resolve(row),
+    insert: (r) => Promise.resolve(r),
+    listAll: () => Promise.resolve([]),
+    findUserEmail: () => Promise.resolve('consumer@example.com'),
+    withUserLock: <T>(_userId: string, fn: () => Promise<T>) => fn(),
+    updateByUserId: () =>
+      Promise.reject(new Error('updateByUserId is not exercised here')),
+  };
+}
+
+interface ChainState {
+  transactionIndex?: bigint;
+  proposal?: Partial<ProposalState> | null;
+  /** The on-chain signer set, which is what a settled change is read against. */
+  signers?: string[];
+}
+
+function fakeChain(state: ChainState = {}, messageBase64 = 'message') {
+  const compiled: { instructions: unknown[] }[] = [];
+  const submitted: string[] = [];
+
+  const chain: ProvisioningChain = {
+    rentPayer: AUTHORITY,
+    readSettings: () =>
+      Promise.resolve({
+        timeLockSeconds: DAY,
+        transactionIndex: state.transactionIndex ?? 0n,
+        policySeed: null,
+        signers: (state.signers ?? []).map((key) => ({
+          key: new PublicKey(key),
+          permissions: { mask: 7 },
+        })),
+      }),
+    readSpendingLimit: () =>
+      Promise.reject(new Error('readSpendingLimit is not exercised here')),
+    policyExists: () => Promise.resolve(true),
+    readProposal: () =>
+      Promise.resolve(
+        state.proposal
+          ? {
+              approved: [],
+              rejected: [],
+              settled: false,
+              status: 'Active',
+              statusTimestamp: null,
+              ...state.proposal,
+            }
+          : null,
+      ),
+    compile: (params) => {
+      compiled.push({ instructions: params.instructions });
+      return Promise.resolve({
+        unsignedTxBase64: 'unsigned',
+        messageBase64,
+        blockhash: 'hash',
+        lastValidBlockHeight: 100,
+      });
+    },
+    submit: (tx) => {
+      submitted.push(tx);
+      return Promise.resolve('sig-1');
+    },
+  };
+
+  return { chain, compiled, submitted };
+}
+
+function signerSummary(
+  patch: Partial<RecoverySignerSummary> = {},
+): RecoverySignerSummary {
+  return {
+    id: 'signer-1',
+    address: SIGNER_ADDRESS,
+    channel: 'external_wallet',
+    channelValue: SIGNER_ADDRESS,
+    createdAt: new Date(0),
+    status: 'pending_add',
+    removable: false,
+    isContactAddress: false,
+    ...patch,
+  };
+}
+
+/** Only the parts of RecoveryService this service actually reaches. */
+function fakeRecovery({
+  status = 'pending_add',
+  changeIndex = null,
+  staged,
+}: {
+  status?: RecoverySignerStatus;
+  changeIndex?: bigint | null;
+  /** The rows the staged change carries. One by default; two for a rotation. */
+  staged?: RecoverySignerSummary[];
+} = {}) {
+  const calls: string[] = [];
+  const summary = signerSummary({ status });
+  const carried = staged ?? [summary];
+  let index = changeIndex;
+
+  const recovery = {
+    pendingChange: () =>
+      Promise.resolve(
+        index === null ? null : { signerId: summary.id, changeIndex: index },
+      ),
+    list: () => Promise.resolve(carried),
+    stagedSigners: (_userId: string, at: bigint) =>
+      Promise.resolve(index === at ? carried : []),
+    markSignature: () => Promise.resolve(),
+    markChange: (id: string, at: bigint) => {
+      index = at;
+      calls.push(`markChange:${id}:${at}`);
+      return Promise.resolve();
+    },
+    settle: (_userId: string, at: bigint) => {
+      calls.push(`settle:${at}`);
+      return Promise.resolve();
+    },
+    abandon: (_userId: string, at: bigint) => {
+      calls.push(`abandon:${at}`);
+      return Promise.resolve();
+    },
+  } as unknown as RecoveryService;
+
+  return { recovery, calls };
+}
+
+/** Only what RecoveryChangeService records. */
+function fakeEvents() {
+  const recorded: string[] = [];
+  const stamp = (
+    stage: string,
+    params: { changeIndex: bigint | string; subject?: string | null },
+  ) => {
+    recorded.push(`${stage}:${params.changeIndex}:${params.subject ?? ''}`);
+    return Promise.resolve(null);
+  };
+  const events = {
+    recordSettingsChangeStaged: (
+      _userId: string,
+      params: { changeIndex: bigint; subject?: string | null; change?: string },
+    ) => stamp(`staged:${params.change}`, params),
+    recordSettingsChangeExecuted: (
+      _userId: string,
+      params: { changeIndex: bigint; subject?: string | null },
+    ) => stamp('executed', params),
+    recordSettingsChangeRejected: (
+      _userId: string,
+      params: { changeIndex: bigint; subject?: string | null },
+    ) => stamp('rejected', params),
+  } as unknown as AccountEventsService;
+  return { events, recorded };
+}
+
+/** A transaction whose compiled message is `messageBase64`. */
+function signedFor(messageBase64: string): string {
+  const message = new TransactionMessage({
+    payerKey: new PublicKey(AUTHORITY),
+    recentBlockhash: PublicKey.default.toBase58(),
+    instructions: [],
+  }).compileToV0Message();
+  const tx = new VersionedTransaction(message);
+  const real = Buffer.from(tx.message.serialize()).toString('base64');
+  expect(real).not.toBe(messageBase64);
+  return Buffer.from(tx.serialize()).toString('base64');
+}
+
+function keysOf(compiled: { instructions: unknown[] }): string[] {
+  return (compiled.instructions as { keys: { pubkey: PublicKey }[] }[]).flatMap(
+    (ix) => ix.keys.map((k) => k.pubkey.toBase58()),
+  );
+}
+
+describe('RecoveryChangeService.start', () => {
+  it('stages the change at the index after the current one', async () => {
+    const { chain, compiled } = fakeChain({ transactionIndex: 7n });
+    const { recovery, calls } = fakeRecovery();
+    const { events, recorded } = fakeEvents();
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      events,
+      new InMemoryPreparedTxStore(),
+    ).start(USER, 'signer-1');
+
+    expect(plan.step).toBe('propose');
+    expect(plan.changeIndex).toBe('8');
+    // Recorded before the chain is touched, so an interrupted change is found
+    // and re-proposed rather than lost.
+    expect(calls).toContain('markChange:signer-1:8');
+    expect(compiled).toHaveLength(1);
+    // Announced at the moment of staging, naming the key, so the Consumer's
+    // warning does not wait on a poll or on the app being open.
+    expect(recorded).toEqual([`staged:recovery_key:8:${SIGNER_ADDRESS}`]);
+  });
+
+  it('refuses to claim an index a device or passkey rotation already holds', async () => {
+    const { chain } = fakeChain({ transactionIndex: 7n });
+    const { recovery, calls } = fakeRecovery();
+
+    for (const pending of [
+      { pendingApprovalChangeIndex: '8' },
+      { pendingPrimaryChangeIndex: '8' },
+    ]) {
+      await expect(
+        new RecoveryChangeService(
+          store({ ...ACCOUNT, ...pending }),
+          chain,
+          recovery,
+          fakeEvents().events,
+          new InMemoryPreparedTxStore(),
+        ).start(USER, 'signer-1'),
+      ).rejects.toThrow('already in flight');
+    }
+    // Nothing staged: two changes on one index would settle the wrong one.
+    expect(calls).toEqual([]);
+  });
+
+  it('stages a rotation with both rows on the same index', async () => {
+    const { chain } = fakeChain({ transactionIndex: 7n });
+    const { recovery, calls } = fakeRecovery();
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).start(USER, 'signer-new', 'signer-old');
+
+    expect(plan.changeIndex).toBe('8');
+    // One change, not two: the key coming in and the key going out are the
+    // same act, and the same day of waiting.
+    expect(calls).toEqual([
+      'markChange:signer-new:8',
+      'markChange:signer-old:8',
+    ]);
+  });
+
+  it('proposes a rotation naming both the incoming and the outgoing key', async () => {
+    const incoming = Keypair.generate().publicKey;
+    const outgoing = Keypair.generate().publicKey;
+    const { chain, compiled } = fakeChain({ transactionIndex: 7n });
+    const { recovery } = fakeRecovery({
+      staged: [
+        signerSummary({
+          id: 'signer-new',
+          address: incoming.toBase58(),
+          channel: 'email',
+          channelValue: 'new@example.com',
+          status: 'pending_add',
+        }),
+        signerSummary({
+          id: 'signer-old',
+          address: outgoing.toBase58(),
+          channel: 'email',
+          channelValue: 'old@example.com',
+          status: 'pending_remove',
+          isContactAddress: true,
+        }),
+      ],
+    });
+
+    await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).start(USER, 'signer-new', 'signer-old');
+
+    // A single settings transaction whose action list carries both keys,
+    // rather than an add at one index and a remove at the next.
+    const [proposal] = compiled;
+    expect(proposal.instructions).toHaveLength(2);
+    const data = Buffer.from(
+      (proposal.instructions[0] as { data: Uint8Array }).data,
+    );
+    expect(data.includes(incoming.toBuffer())).toBe(true);
+    expect(data.includes(outgoing.toBuffer())).toBe(true);
+  });
+
+  it('proposes an addition that names the staged signer', async () => {
+    const { chain, compiled } = fakeChain();
+    const { recovery } = fakeRecovery({ status: 'pending_add' });
+
+    await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).start(USER, 'signer-1');
+
+    expect(keysOf(compiled[0])).toContain(ADDRESSES.settings.toBase58());
+    // The Consumer's S1 proposes; the authority only funds it.
+    expect(keysOf(compiled[0])).toContain(PRIMARY);
+    expect(keysOf(compiled[0])).toContain(AUTHORITY);
+  });
+
+  it('refuses to stage over a Spending Limit change holding the index', async () => {
+    const { chain } = fakeChain();
+    const { recovery } = fakeRecovery();
+
+    const service = new RecoveryChangeService(
+      store({ ...ACCOUNT, pendingSpendingLimitChangeIndex: '8' }),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    );
+
+    await expect(service.start(USER, 'signer-1')).rejects.toThrow(
+      'already in flight',
+    );
+  });
+
+  it('refuses to prepare for a Consumer with no Account', async () => {
+    const { chain } = fakeChain();
+    const { recovery } = fakeRecovery();
+
+    await expect(
+      new RecoveryChangeService(
+        store(null),
+        chain,
+        recovery,
+        fakeEvents().events,
+        new InMemoryPreparedTxStore(),
+      ).start(USER, 'signer-1'),
+    ).rejects.toThrow();
+  });
+});
+
+describe('RecoveryChangeService.next', () => {
+  it('is done when nothing is staged', async () => {
+    const { chain } = fakeChain();
+    const { recovery } = fakeRecovery({ changeIndex: null });
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.done).toBe(true);
+  });
+
+  it('re-proposes a change that was staged but never reached the chain', async () => {
+    const { chain } = fakeChain({ proposal: null });
+    const { recovery } = fakeRecovery({ changeIndex: 8n });
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.step).toBe('propose');
+    expect(plan.changeIndex).toBe('8');
+  });
+
+  it('asks each signer for its own approval in turn', async () => {
+    const first = fakeChain({ proposal: { approved: [] } });
+    const second = fakeChain({ proposal: { approved: [PRIMARY] } });
+
+    expect(
+      (
+        await new RecoveryChangeService(
+          store(),
+          first.chain,
+          fakeRecovery({ changeIndex: 8n }).recovery,
+          fakeEvents().events,
+          new InMemoryPreparedTxStore(),
+        ).next(USER)
+      ).step,
+    ).toBe('approve-primary');
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      second.chain,
+      fakeRecovery({ changeIndex: 8n }).recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+    expect(plan.step).toBe('approve-approval');
+    expect(plan.needsApprovalSignature).toBe(true);
+  });
+
+  it('waits out the time lock before offering the execute step', async () => {
+    const approvedAt = BigInt(Math.floor(Date.now() / 1000));
+    const { chain } = fakeChain({
+      proposal: {
+        approved: [PRIMARY, APPROVAL],
+        status: 'Approved',
+        statusTimestamp: approvedAt,
+      },
+    });
+    const { recovery } = fakeRecovery({ changeIndex: 8n });
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.step).toBe('waiting');
+    // The deadline for rejecting it, and the moment it can be finished.
+    expect(Date.parse(plan.executableAt as string)).toBeGreaterThan(Date.now());
+    expect(plan.unsignedTxBase64).toBeUndefined();
+  });
+
+  it('offers the execute step once the lock has elapsed', async () => {
+    const approvedAt = BigInt(Math.floor(Date.now() / 1000) - DAY - 60);
+    const { chain } = fakeChain({
+      proposal: {
+        approved: [PRIMARY, APPROVAL],
+        status: 'Approved',
+        statusTimestamp: approvedAt,
+      },
+    });
+    const { recovery } = fakeRecovery({ changeIndex: 8n });
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.step).toBe('execute');
+  });
+
+  it('settles the staged rows when the change executed', async () => {
+    const { chain } = fakeChain({
+      proposal: { settled: true, status: 'Executed', approved: [PRIMARY] },
+      signers: [PRIMARY, APPROVAL, SIGNER_ADDRESS],
+    });
+    const { recovery, calls } = fakeRecovery({ changeIndex: 8n });
+    const { events, recorded } = fakeEvents();
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.done).toBe(true);
+    expect(calls).toContain('settle:8');
+    expect(recorded).toEqual([`executed:8:${SIGNER_ADDRESS}`]);
+  });
+
+  it('refuses to settle a key the signer set does not carry', async () => {
+    // An executed proposal at the index proves some change landed there, not
+    // that it was this one. Settling on that alone would mark a recovery key
+    // active that the Account never accepted.
+    const { chain } = fakeChain({
+      proposal: { settled: true, status: 'Executed', approved: [PRIMARY] },
+      signers: [PRIMARY, APPROVAL],
+    });
+    const { recovery, calls } = fakeRecovery({ changeIndex: 8n });
+    const { events, recorded } = fakeEvents();
+
+    const service = new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      events,
+      new InMemoryPreparedTxStore(),
+    );
+
+    await expect(service.next(USER)).rejects.toThrow(
+      'the executed change did not install the staged recovery key',
+    );
+    expect(calls).not.toContain('settle:8');
+    expect(recorded).toEqual([]);
+  });
+
+  it('settles a removal only once the key has left the signer set', async () => {
+    const { chain } = fakeChain({
+      proposal: { settled: true, status: 'Executed', approved: [PRIMARY] },
+      signers: [PRIMARY, APPROVAL],
+    });
+    const { recovery, calls } = fakeRecovery({
+      changeIndex: 8n,
+      status: 'pending_remove',
+    });
+    const { events } = fakeEvents();
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.done).toBe(true);
+    expect(calls).toContain('settle:8');
+  });
+
+  it('abandons the staged rows when a fully approved change was rejected', async () => {
+    // The case an approval count would get wrong. The time lock exists so an
+    // approved change can still be refused, and calling that executed would
+    // mark a recovery key active that never reached the signer set.
+    const { chain } = fakeChain({
+      proposal: {
+        settled: true,
+        status: 'Rejected',
+        approved: [PRIMARY, APPROVAL],
+      },
+    });
+    const { recovery, calls } = fakeRecovery({ changeIndex: 8n });
+    const { events, recorded } = fakeEvents();
+
+    const plan = await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(plan.done).toBe(true);
+    expect(calls).toContain('abandon:8');
+    expect(calls).not.toContain('settle:8');
+    expect(recorded).toEqual([`rejected:8:${SIGNER_ADDRESS}`]);
+  });
+
+  it('abandons the staged rows when the change was cancelled', async () => {
+    const { chain } = fakeChain({
+      proposal: { settled: true, status: 'Cancelled', approved: [] },
+    });
+    const { recovery, calls } = fakeRecovery({ changeIndex: 8n });
+
+    await new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    ).next(USER);
+
+    expect(calls).toContain('abandon:8');
+  });
+});
+
+describe('RecoveryChangeService.submit', () => {
+  it('refuses a transaction that is not the step it prepared', async () => {
+    const { chain } = fakeChain({ transactionIndex: 7n }, 'prepared-message');
+    const { recovery } = fakeRecovery();
+    const service = new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    );
+    await service.start(USER, 'signer-1');
+
+    // The authority partially signs whatever arrives, so anything but the
+    // exact prepared bytes would be a way to have the backend sign for you.
+    await expect(
+      service.submit(USER, signedFor('prepared-message')),
+    ).rejects.toThrow('does not match the prepared recovery key step');
+  });
+
+  it('refuses a submission when nothing was prepared', async () => {
+    const { chain } = fakeChain();
+    const { recovery } = fakeRecovery();
+
+    await expect(
+      new RecoveryChangeService(
+        store(),
+        chain,
+        recovery,
+        fakeEvents().events,
+        new InMemoryPreparedTxStore(),
+      ).submit(USER, signedFor('anything')),
+    ).rejects.toThrow('No recovery key step is awaiting a signature');
+  });
+
+  it('refuses bytes that are not a transaction at all', async () => {
+    const { chain } = fakeChain({ transactionIndex: 7n });
+    const { recovery } = fakeRecovery();
+    const service = new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    );
+    await service.start(USER, 'signer-1');
+
+    await expect(service.submit(USER, 'bm90LWEtdHg=')).rejects.toThrow(
+      'not a valid transaction',
+    );
+  });
+
+  it('spends the prepared step so it cannot be replayed', async () => {
+    const { chain, submitted } = fakeChain({ transactionIndex: 7n });
+    const { recovery } = fakeRecovery();
+    const service = new RecoveryChangeService(
+      store(),
+      chain,
+      recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    );
+    const plan = await service.start(USER, 'signer-1');
+
+    // Sign exactly what was prepared, by reusing the fake's message.
+    const tx = new VersionedTransaction(
+      new TransactionMessage({
+        payerKey: new PublicKey(AUTHORITY),
+        recentBlockhash: PublicKey.default.toBase58(),
+        instructions: [],
+      }).compileToV0Message(),
+    );
+    const message = Buffer.from(tx.message.serialize()).toString('base64');
+    const replayable = fakeChain({ transactionIndex: 7n }, message);
+    const pinned = new RecoveryChangeService(
+      store(),
+      replayable.chain,
+      fakeRecovery().recovery,
+      fakeEvents().events,
+      new InMemoryPreparedTxStore(),
+    );
+    await pinned.start(USER, 'signer-1');
+
+    const wire = Buffer.from(tx.serialize()).toString('base64');
+    await expect(pinned.submit(USER, wire)).resolves.toBe('sig-1');
+    expect(replayable.submitted).toEqual([wire]);
+
+    await expect(pinned.submit(USER, wire)).rejects.toThrow(
+      'No recovery key step is awaiting a signature',
+    );
+    expect(plan.step).toBe('propose');
+    expect(submitted).toEqual([]);
+  });
+});

@@ -1,0 +1,284 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+import { NotificationsService } from './notifications.service';
+import type { DbService } from '../db/db.service';
+import type { PushMessage, PushSender } from './push-sender.interface';
+
+interface FakeDbOptions {
+  /** Tokens the arrival query returns, i.e. enabled devices of the owner. */
+  tokens?: string[];
+  /** What the user's stored preference reads as. */
+  userEnabled?: boolean;
+  /** Tokens the by-user device lookup returns, whatever the preference says. */
+  deviceTokens?: string[];
+}
+
+function makeFakeDb(opts: FakeDbOptions = {}) {
+  const deleted: string[][] = [];
+  const execute = jest.fn().mockResolvedValue({
+    rows: (opts.tokens ?? []).map((token) => ({ token })),
+  });
+
+  const client = {
+    execute,
+    select: () => ({
+      from: () => ({
+        // Awaited directly by the by-user device lookup, and finished with
+        // .limit() by the preference read. One object answers both.
+        where: () =>
+          Object.assign(
+            Promise.resolve(
+              (opts.deviceTokens ?? []).map((token) => ({ token })),
+            ),
+            {
+              limit: () =>
+                Promise.resolve(
+                  opts.userEnabled === undefined
+                    ? []
+                    : [{ enabled: opts.userEnabled }],
+                ),
+            },
+          ),
+      }),
+    }),
+    insert: () => ({
+      values: () => ({ onConflictDoUpdate: () => Promise.resolve() }),
+    }),
+    update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+    delete: () => ({
+      where: (clause: unknown) => {
+        deleted.push(clause as never);
+        return Promise.resolve();
+      },
+    }),
+  };
+
+  return { db: { client } as unknown as DbService, execute, deleted };
+}
+
+/** The literals a Drizzle condition will bind, wherever they are nested. */
+function boundValues(clause: unknown): unknown[] {
+  const found: unknown[] = [];
+  const seen = new Set<unknown>();
+  const walk = (node: unknown) => {
+    if (node === null || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    const record = node as Record<string, unknown>;
+    if ('value' in record && typeof record.value !== 'object') {
+      found.push(record.value);
+    }
+    for (const key of ['queryChunks', 'params']) {
+      const children = record[key];
+      if (Array.isArray(children)) children.forEach(walk);
+    }
+  };
+  walk(clause);
+  return found;
+}
+
+function makeSender(invalidTokens: string[] = []) {
+  return {
+    send: jest.fn().mockResolvedValue({ invalidTokens }),
+  } as unknown as PushSender;
+}
+
+/** A sender that keeps what it was handed, so a test can read the notice. */
+function makeRecordingSender(invalidTokens: string[] = []) {
+  const sent: PushMessage[][] = [];
+  const sender: PushSender = {
+    send: (messages: PushMessage[]) => {
+      sent.push(messages);
+      return Promise.resolve({ invalidTokens });
+    },
+  };
+  return { sender, sent };
+}
+
+describe('NotificationsService', () => {
+  describe('notifyArrival', () => {
+    it('tells every device the account owner has enabled', async () => {
+      const { db } = makeFakeDb({ tokens: ['tok-phone', 'tok-tablet'] });
+      const sender = makeSender();
+      const service = new NotificationsService(db, sender);
+
+      await service.notifyArrival({ smartAccountId: 'sa_1', amount: '5 SOL' });
+
+      // Carries where it leads, like every notice: tapping it opens Activity
+      // rather than dropping the Consumer wherever the app happened to be.
+      expect(sender.send).toHaveBeenCalledWith([
+        {
+          token: 'tok-phone',
+          title: 'Money in',
+          body: 'You received 5 SOL',
+          data: { kind: 'arrival' },
+        },
+        {
+          token: 'tok-tablet',
+          title: 'Money in',
+          body: 'You received 5 SOL',
+          data: { kind: 'arrival' },
+        },
+      ]);
+    });
+
+    it('sends nothing when the owner has no enabled device', async () => {
+      const { db } = makeFakeDb({ tokens: [] });
+      const sender = makeSender();
+      const service = new NotificationsService(db, sender);
+
+      await service.notifyArrival({ smartAccountId: 'sa_1', amount: '1 USDC' });
+
+      expect(sender.send).not.toHaveBeenCalled();
+    });
+
+    it('forgets a token the provider says is dead for good', async () => {
+      // A reinstalled device keeps its old token alive in the table forever
+      // otherwise, and every later notification pays to reach nobody.
+      const { db, deleted } = makeFakeDb({ tokens: ['tok-gone'] });
+      const service = new NotificationsService(db, makeSender(['tok-gone']));
+
+      await service.notifyArrival({ smartAccountId: 'sa_1', amount: '1 USDC' });
+
+      expect(deleted).toHaveLength(1);
+    });
+
+    it('never throws, because the transfer already happened', async () => {
+      const { db } = makeFakeDb({ tokens: ['tok'] });
+      const sender = {
+        send: jest.fn().mockRejectedValue(new Error('expo down')),
+      } as unknown as PushSender;
+      const service = new NotificationsService(db, sender);
+
+      await expect(
+        service.notifyArrival({ smartAccountId: 'sa_1', amount: '1 USDC' }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('forgetDevice', () => {
+    it('deletes only the registration of the Consumer signing out', async () => {
+      const { db, deleted } = makeFakeDb({});
+
+      await new NotificationsService(db, makeSender()).forgetDevice(
+        'user-1',
+        'tok-phone',
+      );
+
+      // Both halves matter. Scoped to the token alone, a caller could name
+      // somebody else's phone and silence it; scoped to the user alone,
+      // signing out on one device would silence every device they own.
+      expect(deleted).toHaveLength(1);
+      expect(boundValues(deleted[0])).toEqual(
+        expect.arrayContaining(['user-1', 'tok-phone']),
+      );
+    });
+  });
+
+  describe('isEnabled', () => {
+    it('reads as on for a user who has never touched the setting', async () => {
+      const { db } = makeFakeDb({ userEnabled: true });
+      const service = new NotificationsService(db, makeSender());
+
+      await expect(service.isEnabled('u_1')).resolves.toBe(true);
+    });
+
+    it('reads as off once they have turned it off', async () => {
+      const { db } = makeFakeDb({ userEnabled: false });
+      const service = new NotificationsService(db, makeSender());
+
+      await expect(service.isEnabled('u_1')).resolves.toBe(false);
+    });
+
+    it('reads as on when the user row cannot be found', async () => {
+      // Nothing has been silenced; there is simply nothing recorded.
+      const { db } = makeFakeDb({});
+      const service = new NotificationsService(db, makeSender());
+
+      await expect(service.isEnabled('u_1')).resolves.toBe(true);
+    });
+  });
+
+  describe('notifyPaymentNeedsApproval', () => {
+    it('names the Merchant and the amount on the notice itself', async () => {
+      // A notice that says only "a payment needs you" makes the Consumer open
+      // the app to find out whether it is even theirs.
+      const { db } = makeFakeDb({ deviceTokens: ['tok-1', 'tok-2'] });
+      const { sender, sent } = makeRecordingSender();
+      const service = new NotificationsService(db, sender);
+
+      await service.notifyPaymentNeedsApproval('u_1', {
+        merchantName: 'Sabi Market',
+        amount: '₦200,000',
+      });
+
+      expect(sent).toHaveLength(1);
+      // One notice per device the Consumer has.
+      expect(sent[0]).toHaveLength(2);
+      expect(sent[0][0].title).toBe('Finish your payment');
+      expect(sent[0][0].body).toContain('Sabi Market');
+      expect(sent[0][0].body).toContain('₦200,000');
+      // Carried so the app opens the Payment rather than the home screen.
+      expect(sent[0][0].data).toEqual({ kind: 'payment_approval' });
+    });
+
+    it('reaches a Consumer who has turned arrival notices off', async () => {
+      // The preference is about being told money arrived. This is a thing they
+      // asked to do and cannot finish anywhere else.
+      const { db } = makeFakeDb({
+        deviceTokens: ['tok-1'],
+        userEnabled: false,
+      });
+      const sender = makeSender();
+      const service = new NotificationsService(db, sender);
+
+      await service.notifyPaymentNeedsApproval('u_1', {
+        merchantName: 'Sabi Market',
+        amount: '₦200,000',
+      });
+
+      expect(sender.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('says so loudly when there is no device to reach', async () => {
+      const { db } = makeFakeDb({ deviceTokens: [] });
+      const sender = makeSender();
+      const service = new NotificationsService(db, sender);
+
+      await service.notifyPaymentNeedsApproval('u_1', {
+        merchantName: 'Sabi Market',
+        amount: '₦200,000',
+      });
+
+      expect(sender.send).not.toHaveBeenCalled();
+    });
+
+    it('never throws when the push provider is down', async () => {
+      // A Payment is correctly refused whether or not a notice gets out.
+      const { db } = makeFakeDb({ deviceTokens: ['tok-1'] });
+      const sender = {
+        send: jest.fn().mockRejectedValue(new Error('provider down')),
+      } as unknown as PushSender;
+      const service = new NotificationsService(db, sender);
+
+      await expect(
+        service.notifyPaymentNeedsApproval('u_1', {
+          merchantName: 'Sabi Market',
+          amount: '₦200,000',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('forgets a token the provider rejects as dead', async () => {
+      // A reinstalled phone keeps its old token alive in the table forever
+      // otherwise, and every later notice pays to deliver to nobody.
+      const { db, deleted } = makeFakeDb({ deviceTokens: ['tok-1', 'tok-2'] });
+      const service = new NotificationsService(db, makeSender(['tok-2']));
+
+      await service.notifyPaymentNeedsApproval('u_1', {
+        merchantName: 'Sabi Market',
+        amount: '₦200,000',
+      });
+
+      expect(deleted).toHaveLength(1);
+    });
+  });
+});

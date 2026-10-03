@@ -1,0 +1,115 @@
+name: xend-local
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.0.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      # A client reconnects to whatever the broker advertises, not to the
+      # address it dialled. PLAINTEXT says localhost because the apps run on
+      # the host; INTERNAL is the name the topic seeder resolves on this
+      # network. One listener cannot serve both.
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,PLAINTEXT://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  # Auto-creation covers the producer, but the consumer subscribes with
+  # fromBeginning:false, so a topic born at subscribe time starts at an offset
+  # past anything already published. Seeding first makes the ordering moot.
+  # The list is the ADR 0012 catalog plus events.dead-letter, where the
+  # consumer parks a message it cannot parse or keeps failing on.
+  kafka-topics:
+    image: apache/kafka:4.0.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for topic in payment.created payment.authorized payment.settling \
+                     payment.succeeded payment.failed payment.expired \
+                     payout.initiated payout.completed payout.failed \
+                     refund.recorded session.issued session.revoked \
+                     events.dead-letter; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 \
+            --create --if-not-exists --topic "$$topic" \
+            --partitions 1 --replication-factor 1
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+
+  # Fee-payer relayer: separate deployable, its own env (incl. the fee-payer
+  # key). The healthcheck AUTHENTICATES because /health sits behind the
+  # correlation middleware and the internal-auth guard like every other
+  # route (no unauthenticated route exists). The probe runs inside the
+  # container and reads the secret from the container's own env, so nothing
+  # new is exposed. Uses Node's built-in fetch (no curl dependency).
+  relayer:
+    build:
+      context: .
+      dockerfile: apps/relayer/Dockerfile
+    ports:
+      - "8787:8787"
+    env_file:
+      - apps/relayer/.env
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8787/health',{headers:{'x-correlation-id':'relayer-compose-healthcheck','x-relayer-auth':process.env.RELAYER_INTERNAL_AUTH_SECRET}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Opt-in via `--profile postgres`. Off by default because a natively
+  # installed Postgres usually already holds 5432, and binding it twice fails
+  # the whole `up`. This one needs credentials, so DATABASE_URL becomes
+  # postgresql://postgres:postgres@localhost:5432/fuse.
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fuse
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

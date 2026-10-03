@@ -1,0 +1,46 @@
+import React from "react";
+import { View, ViewStyle, StyleProp } from "react-native";
+import { ThemedButton } from "./ThemedButton";
+import { cn } from "@/utils/cn";
+
+interface ButtonGroupProps {
+  leftTitle: string;
+  leftOnPress: () => void;
+  rightTitle: string;
+  rightOnPress: () => void;
+  leftVariant?: "primary" | "secondary" | "outline" | "quiet";
+  rightVariant?: "primary" | "secondary" | "outline" | "quiet";
+  className?: string;
+  style?: StyleProp<ViewStyle>;
+}
+
+export function ButtonGroup({
+  leftTitle,
+  leftOnPress,
+  rightTitle,
+  rightOnPress,
+  leftVariant = "primary",
+  rightVariant = "secondary",
+  className,
+  style,
+}: ButtonGroupProps) {
+  return (
+    <View
+      className={cn("flex-row justify-between gap-3", className)}
+      style={style}
+    >
+      <ThemedButton
+        title={leftTitle}
+        onPress={leftOnPress}
+        variant={leftVariant}
+        style={{ flex: 1 }}
+      />
+      <ThemedButton
+        title={rightTitle}
+        onPress={rightOnPress}
+        variant={rightVariant}
+        style={{ flex: 1 }}
+      />
+    </View>
+  );
+}

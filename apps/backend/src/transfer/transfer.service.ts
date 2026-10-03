@@ -1,0 +1,834 @@
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createId } from '@paralleldrive/cuid2';
+import { eq, and, lt, or, desc, sql } from 'drizzle-orm';
+import {
+  PublicKey,
+  TransactionInstruction,
+  TransactionMessage,
+  VersionedTransaction,
+} from '@solana/web3.js';
+import type { SQL } from 'drizzle-orm';
+import {
+  createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
+import { AccountService } from '../account/account.service';
+import { AccountEventsService } from '../activity/account-events.service';
+import { SpendService } from '../account/spend.service';
+import { DbService } from '../db/db.service';
+import { smartAccounts, transfers, payments, merchants } from '../db/schema';
+import { PREPARED_TX_STORE } from '../prepared/prepared-tx.interface';
+import type { PreparedTxStore } from '../prepared/prepared-tx.interface';
+import { SOLANA_RPC } from '../solana/solana-rpc.interface';
+import { TOKEN_METADATA_PROVIDER } from '../tokens/token-metadata.interface';
+import type {
+  TokenMetadata,
+  TokenMetadataProvider,
+} from '../tokens/token-metadata.interface';
+import type { SolanaRpc } from '../solana/solana-rpc.interface';
+import {
+  InvalidRecipientError,
+  IntentExpiredError,
+  IntentMismatchError,
+  PresenceProofInvalidError,
+  PresenceProofRequiredError,
+  RpcUnavailableError,
+  UnsupportedMintError,
+} from './transfer.errors';
+import { verifyPresenceProof } from './presence-proof';
+import {
+  APPROVAL_SIGNER_STORE,
+  type ApprovalSignerStore,
+} from '../turnkey/approval-signer.store';
+import type {
+  ListTransfersResponse,
+  PrepareResponse,
+  SubmitResponse,
+  TransferRow,
+} from './dtos';
+
+/**
+ * A prepared transfer intent. Held in the prepared-transaction store only
+ * between /transfers/prepare and /transfers/submit; once submit lands the
+ * intent is erased and the canonical row lives in the `transfers` table
+ * (idempotency on intentId is enforced by the UNIQUE index on
+ * `transfers.intent_id`).
+ *
+ * A short TTL is enough: blockhash lifetime is about a minute, so an intent
+ * that outlives it cannot be broadcast anyway.
+ */
+interface IntentRecord {
+  intentId: string;
+  smartAccountId: string;
+  walletAddress: string;
+  toAddress: string;
+  mint: string;
+  amountRaw: string;
+  memo?: string;
+  blockhash: string;
+  lastValidBlockHeight: number;
+  /**
+   * Base64 of the compiled v0 message the backend built. submit() requires the
+   * client's signed transaction to carry this exact message, so the broadcast
+   * tx can't diverge from the recorded intent.
+   */
+  messageBase64: string;
+  /**
+   * True when this leaves the Squads vault rather than the Privy wallet. Such a
+   * transaction is paid for by the settlement authority, so it comes back from
+   * the device a signature short and has to be completed before broadcast.
+   */
+  vaultSpend: boolean;
+  /**
+   * True when the route needs S2 on the transaction. Recorded at prepare so
+   * submit can tell which proof of presence to insist on without trusting the
+   * client's account of the route it was given.
+   */
+  needsApprovalSignature: boolean;
+  /** Unix millis */
+  createdAt: number;
+  /** Unix millis */
+  expiresAt: number;
+}
+
+/**
+ * Whether `address` occupies a filled signature slot on this transaction.
+ *
+ * Signature slots are positional: slot i belongs to static account key i, for
+ * the first `numRequiredSignatures` keys. An all-zero slot is the placeholder
+ * a serialized-but-unsigned transaction carries.
+ */
+function hasSignatureFrom(tx: VersionedTransaction, address: string): boolean {
+  const index = tx.message.staticAccountKeys.findIndex(
+    (key) => key.toBase58() === address,
+  );
+  if (index < 0 || index >= tx.message.header.numRequiredSignatures) {
+    return false;
+  }
+  const slot = tx.signatures[index];
+  return slot !== undefined && slot.some((byte) => byte !== 0);
+}
+
+const INTENT_TTL_MS = 5 * 60 * 1000;
+/** Approximate slot duration; 150 slots * 400ms ~= 60s blockhash lifetime. */
+const SLOT_MS = 400;
+const BLOCKHASH_LIFETIME_SLOTS = 150;
+
+@Injectable()
+export class TransferService {
+  private readonly logger = new Logger(TransferService.name);
+  /** Set of mint pubkeys we accept for /transfers/prepare in v1. */
+  private readonly mintAllowlist = new Set<string>();
+
+  constructor(
+    private readonly db: DbService,
+    private readonly config: ConfigService,
+    @Inject(SOLANA_RPC) private readonly solana: SolanaRpc,
+    private readonly accounts: AccountService,
+    private readonly spends: SpendService,
+    @Inject(TOKEN_METADATA_PROVIDER)
+    private readonly tokens: TokenMetadataProvider,
+    private readonly events: AccountEventsService,
+    @Inject(APPROVAL_SIGNER_STORE)
+    private readonly approvalSigners: ApprovalSignerStore,
+    @Inject(PREPARED_TX_STORE) private readonly prepared: PreparedTxStore,
+  ) {
+    // Pull the stablecoin mint allowlist from env so devnet vs mainnet
+    // mints can swap without code changes.
+    const usdc = this.config.get<string>('EXPO_PUBLIC_USDC_MINT_ADDRESS');
+    const usdt = this.config.get<string>('EXPO_PUBLIC_USDT_MINT_ADDRESS');
+    if (usdc) this.mintAllowlist.add(usdc);
+    if (usdt) this.mintAllowlist.add(usdt);
+  }
+
+  // ── prepare ────────────────────────────────────────────────────────
+
+  async prepare(
+    userId: string,
+    req: {
+      toAddress: string;
+      mint: string;
+      amountRaw: string;
+      memo?: string;
+    },
+  ): Promise<PrepareResponse> {
+    const [account] = await this.db.client
+      .select()
+      .from(smartAccounts)
+      .where(eq(smartAccounts.userId, userId))
+      .limit(1);
+    if (!account) throw new NotFoundException('Wallet not found');
+
+    // Once an Account exists the money is in its vault, not in the Privy
+    // wallet, so building a transfer from the Privy wallet would produce a
+    // transaction that cannot be funded. The vault is a PDA with no key, so it
+    // cannot be a plain SPL transfer either: it has to go through the Squads
+    // spend path, which is what SpendService builds.
+    const squads = await this.accounts.findByUserId(userId);
+    // Sending to their own vault is the sweep, and it is the one transfer that
+    // must not take the Spend path: the vault paying itself moves nothing, and
+    // the balance being rescued is the one still sitting in the Privy wallet.
+    const isSweepToVault = squads?.vaultAddress === req.toAddress;
+    if (squads && !isSweepToVault) {
+      return this.prepareVaultSpend(userId, account.id, req);
+    }
+
+    const fromAddress = account.walletAddress;
+
+    // 1. Validate the recipient pubkey.
+    let toPk: PublicKey;
+    try {
+      toPk = new PublicKey(req.toAddress);
+    } catch {
+      throw new InvalidRecipientError('toAddress is not a valid Solana pubkey');
+    }
+    let fromPk: PublicKey;
+    try {
+      fromPk = new PublicKey(fromAddress);
+    } catch {
+      // Should not happen — we stored the address ourselves — but
+      // defensive: surface as an internal data error.
+      throw new InvalidRecipientError('sender wallet address malformed');
+    }
+    if (toPk.equals(fromPk)) {
+      throw new InvalidRecipientError('self-send not allowed');
+    }
+
+    // 2. Validate the mint against the allowlist.
+    if (!this.mintAllowlist.has(req.mint)) {
+      throw new UnsupportedMintError(
+        `mint ${req.mint} not in supported set for v1`,
+      );
+    }
+    let mintPk: PublicKey;
+    try {
+      mintPk = new PublicKey(req.mint);
+    } catch {
+      throw new UnsupportedMintError(`mint ${req.mint} not a valid pubkey`);
+    }
+
+    // 3. Decimals — both USDC and USDT use 6 decimals on Solana. The
+    //    allowlist is closed in v1; if we later open it to arbitrary
+    //    mints we will need an on-chain getMint fetch. Pinning here
+    //    keeps the prepare path 1 RPC round-trip (just the blockhash)
+    //    plus 1 cheap getAccountInfo for ATA existence.
+    const decimals = 6;
+
+    // 4. Recent blockhash. Wrapped in try/catch so an RPC outage maps
+    //    cleanly to RPC_UNAVAILABLE.
+    let blockhashInfo: { blockhash: string; lastValidBlockHeight: number };
+    try {
+      blockhashInfo = await this.solana.getRecentBlockhash();
+    } catch (err) {
+      throw new RpcUnavailableError('failed to fetch recent blockhash', err);
+    }
+
+    // 5. Derive ATAs. We use the classic SPL Token program (USDC and
+    //    USDT mainnet mints both live under TOKEN_PROGRAM_ID, not
+    //    Token-2022). If we ever add a Token-2022 mint to the
+    //    allowlist we will need to branch here.
+    const fromAta = getAssociatedTokenAddressSync(
+      mintPk,
+      fromPk,
+      false,
+      TOKEN_PROGRAM_ID,
+    );
+    const toAta = getAssociatedTokenAddressSync(
+      mintPk,
+      toPk,
+      false,
+      TOKEN_PROGRAM_ID,
+    );
+
+    // 6. Check recipient ATA existence; if missing, we prepend a
+    //    createAssociatedTokenAccount instruction so the sender pays
+    //    the rent (small SOL cost).
+    let recipientAtaExists: boolean;
+    try {
+      recipientAtaExists = await this.solana.accountExists(toAta.toBase58());
+    } catch (err) {
+      throw new RpcUnavailableError(
+        'failed to check recipient ATA existence',
+        err,
+      );
+    }
+
+    const instructions: TransactionInstruction[] = [];
+    if (!recipientAtaExists) {
+      instructions.push(
+        createAssociatedTokenAccountInstruction(
+          fromPk, // payer
+          toAta, // associated token account to create
+          toPk, // owner of new ATA
+          mintPk,
+          TOKEN_PROGRAM_ID,
+        ),
+      );
+    }
+    let amountBig: bigint;
+    try {
+      amountBig = BigInt(req.amountRaw);
+    } catch {
+      throw new InvalidRecipientError(
+        `amountRaw must be a non-negative integer string`,
+      );
+    }
+    instructions.push(
+      createTransferCheckedInstruction(
+        fromAta,
+        mintPk,
+        toAta,
+        fromPk,
+        amountBig,
+        decimals,
+        [],
+        TOKEN_PROGRAM_ID,
+      ),
+    );
+
+    // 7. Build v0 transaction message.
+    const messageV0 = new TransactionMessage({
+      payerKey: fromPk,
+      recentBlockhash: blockhashInfo.blockhash,
+      instructions,
+    }).compileToV0Message();
+    const tx = new VersionedTransaction(messageV0);
+    const unsignedTxBase64 = Buffer.from(tx.serialize()).toString('base64');
+    const messageBase64 = Buffer.from(messageV0.serialize()).toString('base64');
+
+    // 8. Persist the intent with a TTL.
+    const intentId = createId();
+    const now = Date.now();
+    // expiresAt: blockhash lifetime upper bound. lastValidBlockHeight is
+    // a slot height that cannot be translated directly to wall time
+    // without a current-slot read, so use the conservative upper bound
+    // BLOCKHASH_LIFETIME_SLOTS * SLOT_MS = 60_000 ms from now.
+    const expiresAt =
+      now + Math.min(BLOCKHASH_LIFETIME_SLOTS * SLOT_MS, INTENT_TTL_MS);
+
+    await this.storeIntent({
+      intentId,
+      smartAccountId: account.id,
+      walletAddress: fromAddress,
+      toAddress: req.toAddress,
+      mint: req.mint,
+      amountRaw: req.amountRaw,
+      memo: req.memo,
+      blockhash: blockhashInfo.blockhash,
+      lastValidBlockHeight: blockhashInfo.lastValidBlockHeight,
+      messageBase64,
+      vaultSpend: false,
+      needsApprovalSignature: false,
+      createdAt: now,
+      expiresAt,
+    });
+
+    return {
+      intentId,
+      unsignedTxBase64,
+      // feeLamports is the transaction fee, not total cost. Estimating
+      // the actual fee requires a simulateTransaction round-trip; the
+      // fixed base fee is 5000 lamports per signature, and with a single
+      // signer (the sender) the floor is 5000. ATA-create rent
+      // (~2_039_280 lamports) is deliberately excluded here.
+      feeLamports: 5000,
+      expiresAt: new Date(expiresAt).toISOString(),
+    };
+  }
+
+  /**
+   * Builds a Spend out of the Squads vault.
+   *
+   * The returned transaction may still need the approval signer, which the
+   * caller learns from `needsApprovalSignature`. Submitting it with only the
+   * primary signature is rejected on chain rather than politely refused, so
+   * that flag is not advisory.
+   */
+  private async prepareVaultSpend(
+    userId: string,
+    smartAccountId: string,
+    req: { toAddress: string; mint: string; amountRaw: string; memo?: string },
+  ): Promise<PrepareResponse> {
+    try {
+      new PublicKey(req.toAddress);
+    } catch {
+      throw new InvalidRecipientError('toAddress is not a valid Solana pubkey');
+    }
+    if (!this.mintAllowlist.has(req.mint)) {
+      throw new UnsupportedMintError(
+        `mint ${req.mint} not in supported set for v1`,
+      );
+    }
+
+    const spend = await this.spends.prepare({
+      userId,
+      destination: req.toAddress,
+      mint: req.mint,
+      amountRaw: req.amountRaw,
+      // Both allowlisted stablecoins are 6 decimals on Solana; the allowlist
+      // check above is what keeps that true.
+      decimals: 6,
+    });
+
+    const intentId = createId();
+    const now = Date.now();
+    const expiresAt =
+      now + Math.min(BLOCKHASH_LIFETIME_SLOTS * SLOT_MS, INTENT_TTL_MS);
+
+    await this.storeIntent({
+      intentId,
+      smartAccountId,
+      walletAddress: spend.vaultAddress,
+      toAddress: req.toAddress,
+      mint: req.mint,
+      amountRaw: req.amountRaw,
+      memo: req.memo,
+      blockhash: spend.blockhash,
+      lastValidBlockHeight: spend.lastValidBlockHeight,
+      messageBase64: spend.messageBase64,
+      vaultSpend: true,
+      needsApprovalSignature: spend.needsApprovalSignature,
+      createdAt: now,
+      expiresAt,
+    });
+
+    return {
+      intentId,
+      unsignedTxBase64: spend.unsignedTxBase64,
+      // What the Consumer pays, which is nothing: the settlement authority is
+      // the fee payer on a vault Spend. The transaction still costs 5000
+      // lamports a signature, but quoting that here would bill them for
+      // somebody else's lamports.
+      feeLamports: 0,
+      expiresAt: new Date(expiresAt).toISOString(),
+      needsApprovalSignature: spend.needsApprovalSignature,
+    };
+  }
+
+  // ── submit ─────────────────────────────────────────────────────────
+
+  async submit(
+    userId: string,
+    req: { intentId: string; signedTxBase64: string; presenceProof?: string },
+  ): Promise<SubmitResponse> {
+    // 1. Idempotency: if a transfer row already exists for this
+    //    intentId, return it directly. transfers.intent_id is UNIQUE
+    //    so the lookup is cheap. Done BEFORE intent-TTL check so a
+    //    successful submit followed by an expired-intent replay still
+    //    returns the existing row.
+    const [existing] = await this.db.client
+      .select()
+      .from(transfers)
+      .where(eq(transfers.intentId, req.intentId))
+      .limit(1);
+    if (existing) {
+      return {
+        transferId: existing.id,
+        signature: existing.signature ?? '',
+        status: 'PENDING',
+      };
+    }
+
+    // 2. Look up the intent.
+    const intent = await this.prepared.get<IntentRecord>(
+      intentKey(req.intentId),
+    );
+    if (!intent || intent.expiresAt < Date.now()) {
+      if (intent) await this.prepared.delete(intentKey(req.intentId));
+      throw new IntentExpiredError(
+        'intent not found or blockhash past lifetime; reissue /transfers/prepare',
+      );
+    }
+
+    // Confirm the intent belongs to the calling user. We do not
+    // implement cross-user lookup elsewhere, but a defensive check
+    // here means a stolen intentId from another session cannot be
+    // submitted under the wrong JWT.
+    const [account] = await this.db.client
+      .select()
+      .from(smartAccounts)
+      .where(eq(smartAccounts.userId, userId))
+      .limit(1);
+    if (!account || account.id !== intent.smartAccountId) {
+      throw new IntentExpiredError('intent does not match authenticated user');
+    }
+
+    // 3. Bind the signed transaction to the prepared intent. Signing only
+    //    adds signatures, so the message must byte-match the one we built;
+    //    any difference means the client signed a different transfer (other
+    //    recipient/mint/amount) and the recorded row would not reflect the
+    //    on-chain effect.
+    let signedTx: VersionedTransaction;
+    try {
+      signedTx = VersionedTransaction.deserialize(
+        Buffer.from(req.signedTxBase64, 'base64'),
+      );
+    } catch {
+      throw new IntentMismatchError(
+        'signedTxBase64 is not a valid transaction',
+      );
+    }
+    const submittedMessage = Buffer.from(signedTx.message.serialize()).toString(
+      'base64',
+    );
+    if (submittedMessage !== intent.messageBase64) {
+      throw new IntentMismatchError(
+        'signed transaction does not match the prepared intent',
+      );
+    }
+    // Require a real signature so we never broadcast an unsigned transaction
+    // (which fails on-chain yet would still write a bogus PENDING row).
+    const isSigned = signedTx.signatures.some((sig) =>
+      sig.some((b) => b !== 0),
+    );
+    if (!isSigned) {
+      throw new IntentMismatchError(
+        'signed transaction is missing a signature',
+      );
+    }
+
+    // 3b. Establish that the Consumer was actually there.
+    //
+    //     Only for a vault Spend: the pre-multisig path has no device key
+    //     enrolled to prove anything with, and the sweep it also covers moves
+    //     the Consumer's own balance into their own vault.
+    if (intent.vaultSpend) {
+      await this.requirePresence(userId, intent, signedTx, req.presenceProof);
+    }
+
+    // 4. Broadcast. RPC failure -> RPC_UNAVAILABLE (502) with NO DB write, so
+    //    prepare/submit stays atomic.
+    //
+    //    A vault Spend goes out through SpendService, which adds the settlement
+    //    authority's fee-payer signature first. Sending it raw would broadcast a
+    //    transaction whose first signature slot is still empty.
+    let signature: string;
+    try {
+      signature = intent.vaultSpend
+        ? await this.spends.submit(req.signedTxBase64)
+        : await this.solana.sendRawTransaction(req.signedTxBase64);
+    } catch (err) {
+      // The response carries a code and nothing else, deliberately: a Consumer
+      // has no use for an RPC's wording and it may name our infrastructure. But
+      // the reason has to survive somewhere, or a refused send reads as nothing
+      // more than "the network is down" to everyone looking at it.
+      this.logger.error(
+        `transfer.submit.rpc_failed intent_id=${req.intentId} vault_spend=${intent.vaultSpend}`,
+        err instanceof Error ? (err.stack ?? err.message) : String(err),
+      );
+      throw new RpcUnavailableError(
+        'sendRawTransaction failed; no transfer row written',
+        err,
+      );
+    }
+
+    // 5. Write the canonical row. Always inserted PENDING; the RPC tailer
+    //    flips it to CONFIRMED or FAILED later.
+    //
+    //    The wallet's webhook subscription is already live, so between
+    //    sendRawTransaction resolving above and this write, Helius may have
+    //    delivered the confirmed transfer and TailerService may have already
+    //    INSERTed a CONFIRMED row for this signature. A plain insert would
+    //    violate UNIQUE(signature) and surface a 500 for a transfer that
+    //    actually succeeded. Upsert on signature instead: adopt the
+    //    webhook-created row by backfilling the submit-owned columns
+    //    (intent_id, submitted_at) while preserving the status guard — a
+    //    CONFIRMED/FAILED row must never regress to PENDING.
+    const now = new Date();
+    const [row] = await this.db.client
+      .insert(transfers)
+      .values({
+        smartAccountId: intent.smartAccountId,
+        intentId: intent.intentId,
+        signature,
+        direction: 'SEND',
+        mint: intent.mint,
+        amountRaw: intent.amountRaw,
+        fromAddress: intent.walletAddress,
+        toAddress: intent.toAddress,
+        status: 'PENDING',
+        submittedAt: now,
+      })
+      .onConflictDoUpdate({
+        // The whole leg, matching the unique index: a signature alone is not a
+        // unique movement.
+        target: [
+          transfers.signature,
+          transfers.mint,
+          transfers.fromAddress,
+          transfers.toAddress,
+          transfers.amountRaw,
+          transfers.legIndex,
+        ],
+        set: {
+          intentId: sql`COALESCE(${transfers.intentId}, excluded.intent_id)`,
+          submittedAt: sql`COALESCE(${transfers.submittedAt}, excluded.submitted_at)`,
+          status: sql`CASE
+            WHEN ${transfers.status} IN ('CONFIRMED', 'FAILED')
+              THEN ${transfers.status}
+            ELSE excluded.status
+          END`,
+        },
+      })
+      .returning();
+
+    // 6. Erase the intent: it has served its purpose.
+    await this.prepared.delete(intentKey(req.intentId));
+
+    return {
+      transferId: row.id,
+      signature,
+      status: 'PENDING',
+    };
+  }
+
+  /**
+   * Refuses to broadcast a Spend nobody proved they were present for.
+   *
+   * Which proof depends on the route, and the route is read from the intent
+   * this backend prepared rather than from anything the client says about it:
+   *
+   *  - Two signatures. S2 is on the transaction, and S2 cannot be produced
+   *    without the device biometric, so the transaction is its own proof. Only
+   *    its presence is checked, which also catches a client that would
+   *    otherwise have the transaction rejected on chain after the Consumer had
+   *    already confirmed it.
+   *  - One signature. Nothing on the transaction says the Consumer was there,
+   *    because the Privy signature comes from a session. The device key signs
+   *    the message separately and that signature is verified here.
+   *
+   * A Consumer with no enrolled device is refused rather than waved through.
+   * Enrolment happens during Account setup, so an Account with a vault and no
+   * device key is a broken state, and the safe reading of it is that the phone
+   * asking is not one that ever proved it holds S2.
+   *
+   * Only the device behind the Account's live approval signer counts. A
+   * rotation leaves the old phone's row in place, and a key that has been
+   * rotated out of the signer set must not go on proving presence for it.
+   */
+  private async requirePresence(
+    userId: string,
+    intent: IntentRecord,
+    signedTx: VersionedTransaction,
+    presenceProof: string | undefined,
+  ): Promise<void> {
+    const account = await this.accounts.findByUserId(userId);
+    const enrolled = (await this.approvalSigners.listByUser(userId)).filter(
+      (row) => row.address === account?.approvalSigner,
+    );
+    if (enrolled.length === 0) {
+      this.logger.error(
+        `transfer.presence.not_enrolled user_id=${userId} intent_id=${intent.intentId}`,
+      );
+      throw new PresenceProofInvalidError(
+        'no device key is enrolled for this Consumer',
+      );
+    }
+
+    if (intent.needsApprovalSignature) {
+      const signed = enrolled.some((row) =>
+        hasSignatureFrom(signedTx, row.address),
+      );
+      if (!signed) {
+        throw new PresenceProofInvalidError(
+          'transaction is missing the approval signature this route requires',
+        );
+      }
+      return;
+    }
+
+    if (!presenceProof) {
+      throw new PresenceProofRequiredError(
+        'this send needs a signature from the device key',
+      );
+    }
+    const verified = verifyPresenceProof({
+      messageBase64: intent.messageBase64,
+      signatureHex: presenceProof,
+      enrolledKeys: enrolled.map((row) => row.hardwarePublicKey),
+    });
+    if (!verified) {
+      // Worth a log line: a proof that does not verify is either an attacker or
+      // a device whose key has drifted from what was enrolled, and the second
+      // one is indistinguishable from the first without this.
+      this.logger.warn(
+        `transfer.presence.rejected user_id=${userId} intent_id=${intent.intentId} keys=${enrolled.length}`,
+      );
+      throw new PresenceProofInvalidError(
+        'device signature does not match any enrolled key',
+      );
+    }
+  }
+
+  // ── list ───────────────────────────────────────────────────────────
+
+  async list(
+    userId: string,
+    opts: { cursor?: string; limit?: number } = {},
+  ): Promise<ListTransfersResponse> {
+    const limit = Math.min(opts.limit ?? 20, 100);
+
+    const [account] = await this.db.client
+      .select()
+      .from(smartAccounts)
+      .where(eq(smartAccounts.userId, userId))
+      .limit(1);
+    if (!account) throw new NotFoundException('Wallet not found');
+
+    // Opaque cursor: base64({ createdAt: ISO, id: text }), paired with an
+    // ORDER BY (createdAt DESC, id DESC) for stable reverse-chrono paging.
+    let cursorWhere: SQL | undefined = undefined;
+    let cursorDate: Date | undefined = undefined;
+    if (opts.cursor) {
+      try {
+        const decoded = JSON.parse(
+          Buffer.from(opts.cursor, 'base64').toString('utf-8'),
+        ) as { createdAt: string; id: string };
+        cursorDate = new Date(decoded.createdAt);
+        cursorWhere = or(
+          lt(transfers.createdAt, cursorDate),
+          and(
+            eq(transfers.createdAt, cursorDate),
+            lt(transfers.id, decoded.id),
+          ),
+        );
+      } catch {
+        // Bad cursor — treat as no cursor.
+        this.logger.warn(`Invalid cursor; ignoring: ${opts.cursor}`);
+      }
+    }
+
+    // LEFT JOIN payments -> merchants so a settlement transfer (kind='payment',
+    // payment_id set by the tailer at confirmation) surfaces the merchant
+    // display name. Plain transfers have a null payment_id and map to
+    // kind='transfer'/merchantName=null. The join adds display columns only;
+    // ordering columns (createdAt, id) are unchanged so the cursor still holds.
+    const rows = await this.db.client
+      .select({
+        id: transfers.id,
+        direction: transfers.direction,
+        mint: transfers.mint,
+        amountRaw: transfers.amountRaw,
+        fromAddress: transfers.fromAddress,
+        toAddress: transfers.toAddress,
+        status: transfers.status,
+        signature: transfers.signature,
+        kind: transfers.kind,
+        merchantName: merchants.displayName,
+        usdValue: transfers.usdValue,
+        decimals: transfers.decimals,
+        createdAt: transfers.createdAt,
+        confirmedAt: transfers.confirmedAt,
+      })
+      .from(transfers)
+      .leftJoin(payments, eq(transfers.paymentId, payments.id))
+      .leftJoin(merchants, eq(payments.merchantId, merchants.id))
+      .where(
+        cursorWhere
+          ? and(eq(transfers.smartAccountId, account.id), cursorWhere)
+          : eq(transfers.smartAccountId, account.id),
+      )
+      .orderBy(desc(transfers.createdAt), desc(transfers.id))
+      .limit(limit + 1); // fetch +1 to know if there's a next page
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+
+    // Named per page rather than per holding, so a row keeps its identity
+    // after the Consumer has sold the token. Cheap: the provider caches, and
+    // a page rarely spans more than a handful of mints.
+    const metadata = await this.tokenMetadataFor(page.map((r) => r.mint));
+
+    const nextCursor = hasMore
+      ? Buffer.from(
+          JSON.stringify({
+            createdAt: page[page.length - 1].createdAt.toISOString(),
+            id: page[page.length - 1].id,
+          }),
+        ).toString('base64')
+      : null;
+
+    // Bounded to the span this page covers. Asking only for "older than the
+    // cursor" would pull events that belong further down the feed and show
+    // them above transfers that predate them; the last page has no floor
+    // because there is nothing after it to belong to.
+    const events = await this.events.list(userId, {
+      limit,
+      before: cursorDate,
+      after: hasMore ? page[page.length - 1].createdAt : undefined,
+    });
+
+    return {
+      transfers: page.map(
+        (r): TransferRow => ({
+          id: r.id,
+          direction: r.direction,
+          mint: r.mint,
+          amountRaw: r.amountRaw,
+          fromAddress: r.fromAddress,
+          toAddress: r.toAddress,
+          status: r.status,
+          signature: r.signature ?? null,
+          // The transfers schema has no `memo` column yet, so expose null
+          // until one is added and backfilled.
+          memo: null,
+          // Defensive default: the column is notNull default 'transfer'.
+          kind: r.kind ?? 'transfer',
+          merchantName: r.merchantName ?? null,
+          usdValue: r.usdValue ?? null,
+          decimals: r.decimals ?? null,
+          tokenName: metadata.get(r.mint)?.name ?? null,
+          tokenSymbol: metadata.get(r.mint)?.symbol ?? null,
+          tokenIconUrl: metadata.get(r.mint)?.iconUrl ?? null,
+          createdAt: r.createdAt.toISOString(),
+          confirmedAt: r.confirmedAt ? r.confirmedAt.toISOString() : null,
+        }),
+      ),
+      events: events.map((event) => ({
+        id: event.id,
+        kind: event.kind,
+        subject: event.subject,
+        previousSubject: event.previousSubject,
+        signature: event.signature,
+        occurredAt: event.occurredAt.toISOString(),
+      })),
+      nextCursor,
+    };
+  }
+
+  // ── internals ──────────────────────────────────────────────────────
+
+  private storeIntent(intent: IntentRecord): Promise<void> {
+    const ttlSeconds = Math.max(
+      1,
+      Math.ceil((intent.expiresAt - Date.now()) / 1000),
+    );
+    return this.prepared.set(intentKey(intent.intentId), intent, ttlSeconds);
+  }
+
+  /**
+   * Names and logos for the mints on this page.
+   *
+   * Decoration on a list of money movements: if the token index is unreachable
+   * the rows still render, unnamed, rather than the request failing.
+   */
+  private async tokenMetadataFor(
+    mints: string[],
+  ): Promise<Map<string, TokenMetadata>> {
+    const distinct = [...new Set(mints)];
+    if (distinct.length === 0) return new Map();
+    try {
+      return await this.tokens.getMetadata(distinct);
+    } catch (err) {
+      this.logger.warn('tokens.metadata.failed; activity renders unnamed', err);
+      return new Map();
+    }
+  }
+}
+
+function intentKey(intentId: string): string {
+  return `transfer-intent:${intentId}`;
+}

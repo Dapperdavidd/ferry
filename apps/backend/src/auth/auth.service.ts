@@ -1,0 +1,415 @@
+import {
+  Injectable,
+  HttpException,
+  HttpStatus,
+  Logger,
+  Inject,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { DbService } from '../db/db.service';
+import {
+  users,
+  smartAccounts,
+  passkeyCredentials,
+  squadsAccounts,
+} from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { WALLET_PROVIDER } from '../wallet/wallet-provider.interface';
+import type { WalletProvider } from '../wallet/wallet-provider.interface';
+import {
+  InvalidPrivyTokenError,
+  PrivyUnavailableError,
+  PrivyUserShapeError,
+} from '../wallet/privy.errors';
+import { SOLANA_RPC } from '../solana/solana-rpc.interface';
+import type { SolanaRpc } from '../solana/solana-rpc.interface';
+import type { ExchangeResponse, MirrorPasskeyCredentialRequest } from './dtos';
+
+import {
+  CredentialConflictError,
+  EmailInUseError,
+  EmailRotationRequiredError,
+} from './auth.errors';
+import { SignupService } from './signup.service';
+import { AccountEventsService } from '../activity/account-events.service';
+import { SignupTokenInvalidError } from './signup.errors';
+
+export { CredentialConflictError, EmailInUseError, EmailRotationRequiredError };
+
+/** Postgres unique-violation SQLSTATE, surfaced by node-postgres. */
+function pgErrorCode(err: unknown): string | undefined {
+  const e = err as { code?: string; cause?: { code?: string } };
+  return e?.code ?? e?.cause?.code;
+}
+
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
+  constructor(
+    private jwt: JwtService,
+    private db: DbService,
+    @Inject(WALLET_PROVIDER) private wallet: WalletProvider,
+    @Inject(SOLANA_RPC) private solana: SolanaRpc,
+    private signup: SignupService,
+    private events: AccountEventsService,
+  ) {}
+
+  /**
+   * Turns a Privy identity into a Xend session.
+   *
+   * With a sign-up token, the Privy user is bound to the users row whose
+   * address the token was issued for. Without one, the only row this can
+   * reach is one the Privy user is already bound to; a passkey nothing knows
+   * is refused rather than given a row. A row waiting to be bound is never
+   * matched by anything else, which is what keeps one Consumer from landing
+   * on an address another Consumer proved.
+   */
+  async exchange(
+    privyIdToken: string,
+    signupToken?: string,
+    expectUserId?: string,
+  ): Promise<ExchangeResponse> {
+    // Verify the Privy ID token. Typed errors from PrivyAdapter map to
+    // HTTP responses:
+    //   InvalidPrivyTokenError -> 401 INVALID_PRIVY_TOKEN
+    //   PrivyUserShapeError    -> 422 EMAIL_MISMATCH (missing email /
+    //                              Solana wallet)
+    //   PrivyUnavailableError  -> 502 PRIVY_UNAVAILABLE
+    let privyUser: Awaited<ReturnType<WalletProvider['verifyIdToken']>>;
+    try {
+      privyUser = await this.wallet.verifyIdToken(privyIdToken);
+    } catch (err) {
+      if (err instanceof InvalidPrivyTokenError) {
+        throw new HttpException(
+          { code: err.code, message: err.message },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      if (err instanceof PrivyUserShapeError) {
+        throw new HttpException(
+          { code: 'EMAIL_MISMATCH', message: err.message },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+      if (err instanceof PrivyUnavailableError) {
+        throw new HttpException(
+          { code: err.code, message: err.message },
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+      this.logger.error('Unexpected error verifying Privy ID token', err);
+      throw new HttpException(
+        { code: 'PRIVY_UNAVAILABLE', message: 'Privy verification failed' },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const { providerUserId, walletAddress, passkeys } = privyUser;
+
+    // Keyed on the Privy DID, never on the email Privy may carry. An address
+    // is only ever on a row because somebody proved it there: adopting a row
+    // by address would hand that proof to whoever Privy says holds the same
+    // one.
+    const [byProvider] = await this.db.client
+      .select({ user: users })
+      .from(smartAccounts)
+      .innerJoin(users, eq(users.id, smartAccounts.userId))
+      .where(eq(smartAccounts.providerUserId, providerUserId))
+      .limit(1);
+
+    let userRow: typeof users.$inferSelect;
+    let isNewUser: boolean;
+
+    if (signupToken) {
+      let pending: typeof users.$inferSelect;
+      try {
+        pending = await this.signup.claimSignupToken(signupToken);
+      } catch (err) {
+        if (err instanceof SignupTokenInvalidError) {
+          throw new HttpException(
+            { code: err.code, message: err.message },
+            HttpStatus.UNAUTHORIZED,
+          );
+        }
+        throw err;
+      }
+      // A Privy user already bound elsewhere cannot also be bound here: the
+      // two rows would share a DID, and the one holding the proved address
+      // would be reachable from a passkey that never proved it.
+      if (byProvider && byProvider.user.id !== pending.id) {
+        throw new HttpException(
+          {
+            code: 'SIGNUP_TOKEN_INVALID',
+            message: 'this passkey already belongs to an account',
+          },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      userRow = pending;
+      isNewUser = true;
+    } else if (byProvider) {
+      const [touched] = await this.db.client
+        .update(users)
+        .set({ updatedAt: new Date() })
+        .where(eq(users.id, byProvider.user.id))
+        .returning();
+      userRow = touched;
+      isNewUser = false;
+    } else {
+      // A passkey no Account knows creates nothing. Every Account starts from
+      // a proved address, and the sign-up token is the only thing that may
+      // attach a passkey to one; a fresh row minted here would be an Account
+      // with no contact address and no recovery signer behind it.
+      this.logger.log('auth.exchange.unknown_passkey');
+      throw new HttpException(
+        {
+          code: 'NO_ACCOUNT_FOR_PASSKEY',
+          message:
+            'this passkey is not on a Xend account yet; continue with your email to create one',
+        },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    // The caller proved an inbox and named its account; a passkey that
+    // resolves anywhere else is refused before it can replace that session.
+    // The platform picker offers every credential for the relying party and
+    // labels them identically, so picking the wrong one is an ordinary
+    // mistake, and the answer is a refusal they can retry rather than a
+    // sign-in to an account they did not ask for.
+    if (expectUserId && userRow.id !== expectUserId) {
+      this.logger.log('auth.exchange.passkey_account_mismatch');
+      throw new HttpException(
+        {
+          code: 'PASSKEY_ACCOUNT_MISMATCH',
+          message: 'that passkey opens a different account',
+          // Masked, and only here: the caller physically holds this passkey
+          // and can read the full address by signing in with it, so naming
+          // which account they picked costs nothing and turns a guessing
+          // game into an answer.
+          maskedEmail: maskEmail(userRow.email),
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // Upsert smart_accounts keyed by user_id (UNIQUE). Matching on
+    // provider_user_id alone would miss when an existing user re-creates
+    // their Privy account (fresh DID + embedded wallet) under the same
+    // email, and the resulting INSERT would violate the user_id unique
+    // constraint and lock the user out. Keying on user_id makes re-auth
+    // idempotent and adopts the new DID/wallet.
+    const [existingAccount] = await this.db.client
+      .select()
+      .from(smartAccounts)
+      .where(eq(smartAccounts.userId, userRow.id))
+      .limit(1);
+    const previousWalletAddress = existingAccount?.walletAddress;
+
+    await this.db.client
+      .insert(smartAccounts)
+      .values({
+        userId: userRow.id,
+        walletAddress,
+        provider: 'privy',
+        providerUserId,
+      })
+      .onConflictDoUpdate({
+        target: smartAccounts.userId,
+        set: {
+          walletAddress,
+          provider: 'privy',
+          providerUserId,
+          updatedAt: new Date(),
+        },
+      });
+
+    // Mirror passkey credential metadata (the vendor hedge). Fire-and-
+    // forget: a failed hedge-write must never break /auth/exchange, and
+    // replays collapse via ON CONFLICT DO NOTHING (same idempotency
+    // posture as the smart_accounts upsert above). public_key is absent on
+    // this server-side path (Privy's SDK drops it); the client backfills
+    // it through POST /auth/passkey-credentials at enrollment.
+    if (passkeys.length > 0) {
+      try {
+        await this.db.client
+          .insert(passkeyCredentials)
+          .values(
+            passkeys.map((passkey) => ({
+              userId: userRow.id,
+              credentialId: passkey.credentialId,
+              publicKey: passkey.publicKey,
+            })),
+          )
+          .onConflictDoNothing({ target: passkeyCredentials.credentialId });
+      } catch (err) {
+        this.logger.error(
+          `Failed to mirror passkey credentials for user ${userRow.id} (continuing; the mirror is a hedge, not auth truth)`,
+          err,
+        );
+      }
+    }
+
+    // Register the webhook whenever this is a new account or the wallet
+    // address changed (e.g. re-auth with a fresh embedded wallet).
+    // Best-effort; the reconciler is the safety net, so failure MUST NOT
+    // break /auth/exchange.
+    if (!existingAccount || previousWalletAddress !== walletAddress) {
+      try {
+        await this.solana.registerWebhookAddress(walletAddress);
+      } catch (err) {
+        this.logger.error(
+          `Failed to register webhook address for ${walletAddress} (continuing; reconciler will catch up)`,
+          err,
+        );
+      }
+    }
+
+    // Mint our JWT. Shape matches jwt.strategy.ts:JwtPayload.
+    const token = this.jwt.sign({
+      sub: userRow.id,
+      walletAddress,
+    });
+
+    return {
+      token,
+      user: {
+        id: userRow.id,
+        // The stored contact address, not Privy's. A Consumer who signed up
+        // with a passkey and gave one afterwards has it here and nowhere in
+        // Privy, and echoing Privy's would tell the app they never gave one.
+        email: userRow.email,
+        walletAddress,
+        isNewUser,
+      },
+    };
+  }
+
+  /**
+   * Whether this Consumer may claim an address, checked before a code is sent.
+   *
+   * Sending first and refusing afterwards would mail a code to somebody else's
+   * inbox to tell the wrong person that an address they own was typed into an
+   * account they do not have.
+   *
+   * Refused outright once an Account exists. From then on the address anchors
+   * a signer in the Account's set, and it moves by rotating that signer, not
+   * by writing here. Gated on the Account rather than on which route called,
+   * so the sign-up write stays open however sign-up is sequenced.
+   */
+  async assertEmailClaimable(userId: string, email: string): Promise<void> {
+    const [account] = await this.db.client
+      .select({ userId: squadsAccounts.userId })
+      .from(squadsAccounts)
+      .where(eq(squadsAccounts.userId, userId))
+      .limit(1);
+    if (account) {
+      throw new EmailRotationRequiredError(
+        'this Account already has an address on file; change it from Keys & Recovery',
+      );
+    }
+
+    const [clash] = await this.db.client
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (clash && clash.id !== userId) {
+      throw new EmailInUseError('that email is already on another account');
+    }
+  }
+
+  /**
+   * Records the contact address during sign-up.
+   *
+   * The initial write only. Once an Account exists the address anchors S3 and
+   * is changed by rotating that signer, which is a settings change with two
+   * approvals and a time lock, never a write here.
+   */
+  async setEmail(userId: string, email: string): Promise<{ email: string }> {
+    return this.db.withAdvisoryLock(`auth:email:${userId}`, () =>
+      this.writeEmail(userId, email),
+    );
+  }
+
+  private async writeEmail(
+    userId: string,
+    email: string,
+  ): Promise<{ email: string }> {
+    await this.assertEmailClaimable(userId, email);
+
+    try {
+      await this.db.client
+        .update(users)
+        .set({ email, updatedAt: new Date() })
+        .where(eq(users.id, userId));
+    } catch (err) {
+      // Two Consumers claiming one address can both read no clash above. The
+      // unique index is what actually settles it, and the one it turns away
+      // has to hear the same refusal as the one who read the clash, not a
+      // 500 that reads like an outage.
+      if (pgErrorCode(err) === '23505') {
+        throw new EmailInUseError('that email is already on another account');
+      }
+      throw err;
+    }
+
+    this.logger.log(`auth.email_set userId=${userId}`);
+    return { email };
+  }
+
+  /**
+   * Backfill or record a mirrored passkey credential for the authenticated
+   * Consumer. Enrollment on the client supplies the public key the
+   * server-side vendor SDK cannot see. Idempotent: re-sending the same
+   * credential is a no-op (or a public-key backfill); a credential already
+   * owned by another Consumer is rejected so one account cannot claim
+   * another's credential.
+   */
+  async mirrorPasskeyCredential(
+    userId: string,
+    dto: MirrorPasskeyCredentialRequest,
+  ): Promise<{ mirrored: true }> {
+    const [existing] = await this.db.client
+      .select()
+      .from(passkeyCredentials)
+      .where(eq(passkeyCredentials.credentialId, dto.credentialId))
+      .limit(1);
+
+    if (existing) {
+      if (existing.userId !== userId) {
+        throw new CredentialConflictError(
+          'Passkey credential already mirrored under a different account',
+        );
+      }
+      // Backfill the public key only when we do not already hold one; the
+      // first captured value wins.
+      if (dto.publicKey && !existing.publicKey) {
+        await this.db.client
+          .update(passkeyCredentials)
+          .set({ publicKey: dto.publicKey, updatedAt: new Date() })
+          .where(eq(passkeyCredentials.id, existing.id));
+      }
+      return { mirrored: true };
+    }
+
+    await this.db.client.insert(passkeyCredentials).values({
+      userId,
+      credentialId: dto.credentialId,
+      publicKey: dto.publicKey,
+    });
+    await this.events.recordPasskeyEnrolled(userId, {
+      credentialId: dto.credentialId,
+    });
+    return { mirrored: true };
+  }
+}
+
+function maskEmail(email: string | null): string | null {
+  if (!email) return null;
+  const at = email.indexOf('@');
+  if (at < 1) return null;
+  return `${email[0]}•••${email.slice(at)}`;
+}
