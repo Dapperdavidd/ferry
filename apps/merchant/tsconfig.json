@@ -1,5 +1,0 @@
-{
-  "extends": "@xend/typescript-config/vite.json",
-  "compilerOptions": { "types": ["vite/client"] },
-  "include": ["src"]
-}

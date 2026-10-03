@@ -1,5 +1,5 @@
 {
-  "name": "@xend/backend",
+  "name": "@ferry/backend",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -46,7 +46,6 @@
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "@turnkey/sdk-server": "^8.1.0",
-    "@xend/smart-account": "*",
     "cbor-x": "^1.6.5",
     "drizzle-orm": "^0.45.1",
     "ioredis": "^5.11.1",

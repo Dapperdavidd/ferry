@@ -1,28 +1,20 @@
 {
-  "name": "xend",
+  "name": "ferry",
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "node scripts/dev.mjs",
-    "dev:mobile": "npm --workspace @xend/mobile run start",
-    "infra": "docker compose up -d --wait redis kafka kafka-topics",
-    "infra:logs": "docker compose logs -f",
-    "infra:down": "docker compose down",
-    "infra:reset": "docker compose down -v && npm run infra",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
-    "db:migrate": "npm --workspace @xend/backend run db:migrate",
-    "db:generate": "npm --workspace @xend/backend run db:generate",
-    "changeset": "changeset",
-    "version-packages": "changeset version",
-    "release": "turbo run build --filter=@xend/checkout-* && changeset publish",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
     "prepare": "husky",
     "postinstall": "patch-package",
-    "dev:ngrok": "node scripts/dev-ngrok.mjs"
+    "dev:mobile": "npm --workspace @ferry/mobile run start",
+    "dev:api": "npm --workspace @ferry/api run dev",
+    "db:up": "docker compose up -d --wait postgres",
+    "db:down": "docker compose down",
+    "db:migrate": "npm --workspace @ferry/api run db:migrate",
+    "db:generate": "npm --workspace @ferry/api run db:generate"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
@@ -38,11 +30,10 @@
   },
   "packageManager": "npm@10.9.2",
   "workspaces": [
-    "apps/*",
+    "apps/mobile",
     "packages/*"
   ],
   "dependencies": {
-    "@bonfida/spl-name-service": "^3.0.16",
     "@tanstack/react-query": "^5.90.20",
     "expo": "~56.0.0",
     "react": "19.2.3",
