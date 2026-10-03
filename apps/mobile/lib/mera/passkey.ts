@@ -58,6 +58,18 @@ export async function signInWithPasskey(
 }
 
 function describe(error: unknown): PasskeyFailure {
+  const failure = classify(error);
+  // A dev build shows what the platform actually said, under the sentence a user sees.
+  if (__DEV__) {
+    const raw = isMeraError(error)
+      ? `${error.code}: ${String((error.cause as { message?: string } | undefined)?.message ?? error.message)}`
+      : String((error as { message?: string })?.message ?? error);
+    return new PasskeyFailure(failure.kind, `${failure.message}\n[dev] ${raw}`);
+  }
+  return failure;
+}
+
+function classify(error: unknown): PasskeyFailure {
   if (isMeraError(error)) {
     if (error.code === "PRF_UNAVAILABLE") {
       return new PasskeyFailure(

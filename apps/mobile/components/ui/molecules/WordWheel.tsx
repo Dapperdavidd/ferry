@@ -23,12 +23,10 @@ const WORDS = [
   { label: "Send", icon: "paper-plane", color: "#38BDF8" },
   { label: "Receive", icon: "arrow-down-circle", color: "#22C55E" },
   { label: "Cash out", icon: "cash", color: "#F97316" },
-  { label: "Invest", icon: "trending-up", color: "#6366F1" },
-  { label: "Pay", icon: "flash", color: "#EF4444" },
 ] as const;
 
 /** The word the wheel opens on, and the one it freezes on for reduced motion. */
-const OPENING_INDEX = 2;
+const OPENING_INDEX = 0;
 
 /**
  * Signed circular distance from a row to the centre, in rows. Zero is the
