@@ -11,15 +11,15 @@ lands in about a second. The app is the consumer shell Xend already has (design 
 send and receive flows, activity, contacts, push), with the account and money layers
 replaced:
 
-| Layer | Xend today | The app |
-| --- | --- | --- |
-| Account | Privy passkey + Turnkey hardware key + server recovery key, 2-of-3 Squads smart account on Solana | One Mera passkey. Face ID is the key. No custody backend. |
-| Identity on the phone | `com.giftedborg.xend`, passkeys at `xend.global` | `money.ferry.app`, passkeys at `ferry.money` |
-| Money | USDC on Solana | AUSD on Monad testnet (6 decimals) |
-| Sending | Squads vault spend, server co-signed | Gasless AUSD transfer: the user signs an EIP-3009 authorization, our relayer pays gas. Users never hold MON. |
-| Cross-border | Blockradar NGN off-ramp (merchant side) | Cash-out through Agora's Instant Settlement pool on Monad testnet, atomically, in one transaction; the fiat payout leg is mocked, as the bounty asks. |
-| Agora API | none | A client built from Agora's OpenAPI spec. Live for public metrics; mock mode for authenticated endpoints, because API keys are KYB-only. |
-| Identity | email + OTP | A handle (`@ada`). No email needed to send or receive. |
+| Layer                 | Xend today                                                                                        | The app                                                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account               | Privy passkey + Turnkey hardware key + server recovery key, 2-of-3 Squads smart account on Solana | One Mera passkey. Face ID is the key. No custody backend.                                                                                             |
+| Identity on the phone | `com.giftedborg.xend`, passkeys at `xend.global`                                                  | `money.ferry.app`, passkeys at `ferry.money`                                                                                                          |
+| Money                 | USDC on Solana                                                                                    | AUSD on Monad testnet (6 decimals)                                                                                                                    |
+| Sending               | Squads vault spend, server co-signed                                                              | Gasless AUSD transfer: the user signs an EIP-3009 authorization, our relayer pays gas. Users never hold MON.                                          |
+| Cross-border          | Blockradar NGN off-ramp (merchant side)                                                           | Cash-out through Agora's Instant Settlement pool on Monad testnet, atomically, in one transaction; the fiat payout leg is mocked, as the bounty asks. |
+| Agora API             | none                                                                                              | A client built from Agora's OpenAPI spec. Live for public metrics; mock mode for authenticated endpoints, because API keys are KYB-only.              |
+| Identity              | email + OTP                                                                                       | A handle (`@ada`). No email needed to send or receive.                                                                                                |
 
 The demo (two minutes, two real iPhones): create an account with Face ID, see an AUSD
 balance, send $50 to a friend who gets a push a second later, then the friend cashes out
@@ -40,16 +40,17 @@ deployed there; on mainnet the same leg is AUSD to USDC on Agora's pool.
 
 ### Verified facts the design rests on (read on chain, 4 Oct 2026)
 
-| | Value |
-| --- | --- |
-| Chain | Monad testnet, id 10143, `https://testnet-rpc.monad.xyz` (25 rps for eth_call; use a provider key from the hackathon perks for the backend) |
-| AUSD | `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`, 6 decimals, EIP-712 domain `{name: "Agora Dollar", version: "1"}`, EIP-3009 live, transfers and signature verification not paused |
-| AUSD faucet | `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`: `requestFunds(address)` drips 10,000 AUSD, max 100,000 per wallet, once per 60 s, ~113k gas |
+|                         | Value                                                                                                                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chain                   | Monad testnet, id 10143, `https://testnet-rpc.monad.xyz` (25 rps for eth_call; use a provider key from the hackathon perks for the backend)                                                           |
+| AUSD                    | `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`, 6 decimals, EIP-712 domain `{name: "Agora Dollar", version: "1"}`, EIP-3009 live, transfers and signature verification not paused                       |
+| AUSD faucet             | `0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`: `requestFunds(address)` drips 10,000 AUSD, max 100,000 per wallet, once per 60 s, ~113k gas                                                             |
 | Instant Settlement pair | `0x1Aa8958Aa34cEC8096EF4381cb335effe977b0ae` ("CTK/AUSD"): token0 CTK (18 dec), token1 AUSD; reserves ~993k CTK / ~1.007M AUSD; price 1:1; both purchase fees 0; not paused. 100 AUSD quotes 100 CTK. |
-| Whitelister | `0x7c10F56d6f04a51376393a1C3670e966863F6BD5`: `setApprovedSwapper(address)` accepts any address, including a contract's (simulated) |
-| CTK | `0x7BEb5D9DB0d85cBEa543C04f0dE8c23c2176cd9D`; no CTK faucet on Monad testnet, so CTK only comes out of the pool |
-| Gas | ~102 gwei; a transfer is ~80k gas, so about 0.008 MON. 10 MON funds roughly 1,200 sends. |
-| Mera | `@category-labs/mera` 0.2.0 (MIT/Apache-2.0), React Native client over `react-native-passkey` pinned 3.6.1; iOS 18.4+ and Android 9+; Expo dev build only |
+| Whitelister             | `0x7c10F56d6f04a51376393a1C3670e966863F6BD5`: `setApprovedSwapper(address)` accepts any address, including a contract's (simulated)                                                                   |
+| FerrySettlement         | `0x7056D0D544b95ff1c004A588C42dE52e22011Da9` on Monad testnet, deployed and whitelisted 4 October; source in `contracts/`                                                                             |
+| CTK                     | `0x7BEb5D9DB0d85cBEa543C04f0dE8c23c2176cd9D`; no CTK faucet on Monad testnet, so CTK only comes out of the pool                                                                                       |
+| Gas                     | ~102 gwei; a transfer is ~80k gas, so about 0.008 MON. 10 MON funds roughly 1,200 sends.                                                                                                              |
+| Mera                    | `@category-labs/mera` 0.2.0 (MIT/Apache-2.0), React Native client over `react-native-passkey` pinned 3.6.1; iOS 18.4+ and Android 9+; Expo dev build only                                             |
 
 ## 2. The account layer: one passkey
 
@@ -148,20 +149,20 @@ The write-up says exactly this: production needs an Agora organisation key; the 
 
 A fresh NestJS app, `apps/api`, replacing `apps/backend`. Reason: the old backend cannot boot without Kafka, half of it is merchant checkout, its 56 migrations are Solana-shaped, and the account, settlement and payment modules import each other. Porting the six modules we want (`config`, `db`, `common`, `health`, `notifications`, `fx`, plus the mailer if we keep it) is cheaper and safer than carving.
 
-| Module | Responsibility |
-| --- | --- |
-| `config` | Joi-validated env: `DATABASE_URL`, `JWT_SECRETS`, `MONAD_RPC_URLS`, `AUSD_ADDRESS`, `CTK_ADDRESS`, `PAIR_ADDRESS`, `WHITELISTER_ADDRESS`, `SETTLEMENT_ADDRESS`, `FAUCET_ADDRESS`, `RELAYER_PRIVATE_KEY`, `RELAYER_CAP_*`, `AGORA_API_MODE`, `AGORA_API_KEY?`, `EXPO_ACCESS_TOKEN`, `FX_*` |
-| `db` | Drizzle over Postgres. Tables: `users` (address unique, handle unique, display name, home currency, country), `transfers`, `transfer_intents` (60 s TTL rows; no Redis), `cashouts`, `payouts`, `push_devices`, `indexer_state`, `agora_mock_*` |
-| `auth` | challenge/verify, JWT guard, `Principal { userId, address }`; rate-limited |
-| `directory` | handle registration (3–20 chars, unique, reserved list), profile, `GET /directory/:handle` → `{ address, displayName }`; no reverse listing |
-| `chain` | viem public client with RPC failover, relayer wallet client, AUSD typed-data builder (domain read once at boot), receipt waiter, explicit gas, MON balance monitor |
-| `transfers` | prepare / submit / list (the HTTP contract the mobile app already speaks, see §7) |
-| `settlement` | quote / prepare / submit for cash-outs; payout mock |
-| `indexer` | AUSD `Transfer` log poller, receipt confirmation, RECEIVE rows, pushes |
-| `agora` | the OpenAPI client, live and mock |
-| `fx` | display rates (ported) |
-| `notifications` | Expo push (ported) |
-| `health`, `metrics` | `/health` with chain, db and relayer-balance checks |
+| Module              | Responsibility                                                                                                                                                                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config`            | Joi-validated env: `DATABASE_URL`, `JWT_SECRETS`, `MONAD_RPC_URLS`, `AUSD_ADDRESS`, `CTK_ADDRESS`, `PAIR_ADDRESS`, `WHITELISTER_ADDRESS`, `SETTLEMENT_ADDRESS`, `FAUCET_ADDRESS`, `RELAYER_PRIVATE_KEY`, `RELAYER_CAP_*`, `AGORA_API_MODE`, `AGORA_API_KEY?`, `EXPO_ACCESS_TOKEN`, `FX_*` |
+| `db`                | Drizzle over Postgres. Tables: `users` (address unique, handle unique, display name, home currency, country), `transfers`, `transfer_intents` (60 s TTL rows; no Redis), `cashouts`, `payouts`, `push_devices`, `indexer_state`, `agora_mock_*`                                           |
+| `auth`              | challenge/verify, JWT guard, `Principal { userId, address }`; rate-limited                                                                                                                                                                                                                |
+| `directory`         | handle registration (3–20 chars, unique, reserved list), profile, `GET /directory/:handle` → `{ address, displayName }`; no reverse listing                                                                                                                                               |
+| `chain`             | viem public client with RPC failover, relayer wallet client, AUSD typed-data builder (domain read once at boot), receipt waiter, explicit gas, MON balance monitor                                                                                                                        |
+| `transfers`         | prepare / submit / list (the HTTP contract the mobile app already speaks, see §7)                                                                                                                                                                                                         |
+| `settlement`        | quote / prepare / submit for cash-outs; payout mock                                                                                                                                                                                                                                       |
+| `indexer`           | AUSD `Transfer` log poller, receipt confirmation, RECEIVE rows, pushes                                                                                                                                                                                                                    |
+| `agora`             | the OpenAPI client, live and mock                                                                                                                                                                                                                                                         |
+| `fx`                | display rates (ported)                                                                                                                                                                                                                                                                    |
+| `notifications`     | Expo push (ported)                                                                                                                                                                                                                                                                        |
+| `health`, `metrics` | `/health` with chain, db and relayer-balance checks                                                                                                                                                                                                                                       |
 
 Infra: Postgres only. No Redis, no Kafka. Deployed on Railway with its Postgres plugin; the relayer key is an env var now (KMS is a follow-up and the signer is behind an interface, Xend's ADR 0010 pattern).
 
@@ -186,15 +187,15 @@ Native config: name "Ferry", slug `ferry`, scheme `ferry`, bundle id and package
 
 ## 9. Plan (today is 4 October; the deadline is the 14th, 03:59 UTC)
 
-| Day | Deliverable |
-| --- | --- |
-| 4–5 | Repo surgery; `apps/api` boots on Postgres with `/health`; association files live on ferry.money; Mera onboarding on a real iPhone; pinned-vector test passes; auth challenge/verify |
-| 6 | Balances; faucet funding; handles; gasless Send end to end with receipt; Activity; indexer and "You received" push |
-| 7 | `Settlement` contract: fork tests, deploy, verify, whitelist; cash-out quote/prepare/submit; payout mock; Agora client (live metrics, mock rest) |
-| 8 | FX display; error states; dev seed; Android build and assetlinks if time |
-| 9 | Full rehearsal on two phones; fixes |
-| 10 | Demo video, README, submission text (candid about the Xend base and the mocks) |
-| 11–13 | Buffer. Desk's deadline is the same day. |
+| Day   | Deliverable                                                                                                                                                                          |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 4–5   | Repo surgery; `apps/api` boots on Postgres with `/health`; association files live on ferry.money; Mera onboarding on a real iPhone; pinned-vector test passes; auth challenge/verify |
+| 6     | Balances; faucet funding; handles; gasless Send end to end with receipt; Activity; indexer and "You received" push                                                                   |
+| 7     | `Settlement` contract: fork tests, deploy, verify, whitelist; cash-out quote/prepare/submit; payout mock; Agora client (live metrics, mock rest)                                     |
+| 8     | FX display; error states; dev seed; Android build and assetlinks if time                                                                                                             |
+| 9     | Full rehearsal on two phones; fixes                                                                                                                                                  |
+| 10    | Demo video, README, submission text (candid about the Xend base and the mocks)                                                                                                       |
+| 11–13 | Buffer. Desk's deadline is the same day.                                                                                                                                             |
 
 ## 10. Decisions needed
 

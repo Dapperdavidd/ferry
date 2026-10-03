@@ -33,13 +33,14 @@ untouched Xend snapshot, so the whole refit is reviewable as a diff from it.
 
 Turborepo over npm workspaces.
 
-| Workspace      | What it is                                                                                                                               |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`  | The Expo React Native app (`@ferry/mobile`). iOS first; Android shares the code.                                                         |
-| `apps/api`     | The NestJS API on Postgres (`@ferry/api`): auth, handles, transfers, cash-outs, the relayer, the indexer, the Agora client. In progress. |
-| `apps/site`    | The static site at `ferry.money`, which also serves the passkey association files.                                                       |
-| `apps/backend` | Xend's old backend, kept only until `apps/api` has ported what it needs, then deleted. Not part of the install.                          |
-| `packages/*`   | Shared ESLint and TypeScript configs.                                                                                                    |
+| Workspace      | What it is                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/mobile`  | The Expo React Native app (`@ferry/mobile`). iOS first; Android shares the code.                                                                                   |
+| `apps/api`     | The NestJS API on Postgres (`@ferry/api`): auth, handles, balances and test funds, gasless transfers, cash-outs, the relayer, the indexer, push, the Agora client. |
+| `apps/site`    | The static site at `ferry.money`, which also serves the passkey association files.                                                                                 |
+| `contracts`    | `FerrySettlement` (Foundry): the one-transaction cash-out through Agora's pool. Deployed on Monad testnet at `0x7056D0D544b95ff1c004A588C42dE52e22011Da9`.         |
+| `apps/backend` | Xend's old backend, kept only until `apps/api` has ported what it needs, then deleted. Not part of the install.                                                    |
+| `packages/*`   | Shared ESLint and TypeScript configs.                                                                                                                              |
 
 ## Prerequisites
 
