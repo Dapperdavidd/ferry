@@ -92,4 +92,28 @@ export class NotificationsService {
       this.logger.warn(`push.arrival_failed ${(err as Error).message}`);
     }
   }
+
+  async notifyCashout(
+    userId: string,
+    params: { amount: string; reference: string },
+  ): Promise<void> {
+    try {
+      if (!(await this.isEnabled(userId))) return;
+      const devices = await this.db.client
+        .select({ token: pushDevices.token })
+        .from(pushDevices)
+        .where(eq(pushDevices.userId, userId));
+      if (devices.length === 0) return;
+      await this.push.send(
+        devices.map((d) => ({
+          token: d.token,
+          title: "Cash-out sent",
+          body: `${params.amount} is on its way (test payout ${params.reference}).`,
+          data: { kind: "arrival" },
+        })),
+      );
+    } catch (err) {
+      this.logger.warn(`push.cashout_failed ${(err as Error).message}`);
+    }
+  }
 }

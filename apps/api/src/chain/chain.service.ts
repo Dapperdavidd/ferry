@@ -17,6 +17,7 @@ import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { ApiError } from "../common/errors";
 import { HealthController } from "../health/health.controller";
 import { ausdAbi, faucetAbi } from "./abi";
+import { settlementAbi } from "../cashout/settlement.abi";
 import { type Authorization, type TokenDomain } from "./authorization";
 
 export interface ChainAddresses {
@@ -271,6 +272,52 @@ export class ChainService implements OnModuleInit {
         abi: faucetAbi,
         functionName: "requestFunds",
         args: [to],
+      });
+      const gas = await this.publicClient.estimateContractGas({
+        ...request,
+        account,
+      });
+      return await wallet.writeContract({
+        ...request,
+        account,
+        chain: wallet.chain,
+        gas: (gas * (100n + GAS_HEADROOM_PERCENT)) / 100n,
+      });
+    } catch (err) {
+      throw this.describe(err);
+    }
+  }
+
+  /** One call into FerrySettlement: pull the user's AUSD, swap on Agora's pool, pay out. */
+  async settle(params: {
+    settlement: Address;
+    auth: Authorization;
+    signature: Hex;
+    payoutTo: Address;
+    minOut: bigint;
+    salt: Hex;
+    deadline: bigint;
+  }): Promise<Hex> {
+    const { account, wallet } = this.requireRelayer();
+    const { auth } = params;
+    try {
+      const { request } = await this.publicClient.simulateContract({
+        account,
+        address: params.settlement,
+        abi: settlementAbi,
+        functionName: "settle",
+        args: [
+          auth.from,
+          auth.value,
+          auth.validAfter,
+          auth.validBefore,
+          auth.nonce,
+          params.signature,
+          params.payoutTo,
+          params.minOut,
+          params.salt,
+          params.deadline,
+        ],
       });
       const gas = await this.publicClient.estimateContractGas({
         ...request,

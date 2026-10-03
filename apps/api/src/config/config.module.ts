@@ -39,6 +39,7 @@ const hexKey = Joi.string().pattern(/^0x[0-9a-fA-F]{64}$/);
         STABLE_SWAP_PAIR_ADDRESS: address.required(),
         STABLE_SWAP_WHITELISTER_ADDRESS: address.required(),
         SETTLEMENT_ADDRESS: address.optional().allow(""),
+        PAYOUT_PARTNER_ADDRESS: address.optional().allow(""),
 
         RELAYER_PRIVATE_KEY: hexKey.optional().allow(""),
         RELAYER_MAX_SENDS_PER_USER_PER_DAY: Joi.number()
