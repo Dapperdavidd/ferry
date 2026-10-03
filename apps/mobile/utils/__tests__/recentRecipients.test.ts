@@ -29,7 +29,12 @@ describe("recentRecipientsFrom", () => {
     ];
 
     expect(recentRecipientsFrom(rows, NONE, 5)).toEqual([
-      { address: "alice", sends: 3, lastSentAt: "2026-08-29T10:00:00.000Z" },
+      {
+        address: "alice",
+        handle: null,
+        sends: 3,
+        lastSentAt: "2026-08-29T10:00:00.000Z",
+      },
     ]);
   });
 
@@ -71,7 +76,7 @@ describe("recentRecipientsFrom", () => {
 
   it("ignores Merchant settlement addresses", () => {
     const rows = [
-      send("merchant", "2026-08-29T10:00:00.000Z", "payment"),
+      send("merchant", "2026-08-29T10:00:00.000Z", "cashout"),
       send("alice", "2026-08-28T10:00:00.000Z"),
     ];
 

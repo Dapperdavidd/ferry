@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Xend",
-    "slug": "xend",
+    "name": "Ferry",
+    "slug": "ferry",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "xend",
+    "scheme": "ferry",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "androidNavigationBar": {
@@ -18,19 +18,14 @@
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["xend"]
+            "CFBundleURLSchemes": ["ferry"]
           }
         ],
-        "NSCameraUsageDescription": "This app requires camera access to verify your identity."
+        "NSCameraUsageDescription": "Ferry uses the camera to scan a recipient's QR code.",
+        "NSFaceIDUsageDescription": "Ferry uses Face ID to unlock the app and confirm payments."
       },
-      "associatedDomains": [
-        "applinks:xend.global",
-        "webcredentials:xend.global"
-      ],
-      "bundleIdentifier": "com.giftedborg.xend",
-      "entitlements": {
-        "com.apple.developer.devicecheck.appattest-environment": "production"
-      }
+      "associatedDomains": ["webcredentials:ferry.money"],
+      "bundleIdentifier": "money.ferry.app"
     },
     "android": {
       "fonts": [
@@ -45,7 +40,7 @@
           "action": "VIEW",
           "data": [
             {
-              "scheme": "xend"
+              "scheme": "ferry"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
@@ -53,8 +48,7 @@
       ],
       "permissions": ["CAMERA"],
       "softwareKeyboardLayoutMode": "pan",
-      "package": "com.giftedborg.xend",
-      "googleServicesFile": "./google-services.json"
+      "package": "money.ferry.app"
     },
     "web": {
       "bundler": "metro",
@@ -63,22 +57,18 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
-      "expo-font",
       [
-        "@sentry/react-native/expo",
+        "expo-secure-store",
         {
-          "url": "https://sentry.io/",
-          "project": "xend-mobile",
-          "organization": "xend"
+          "faceIDPermission": "Allow Ferry to unlock the account this phone already signed in to."
         }
       ],
-      "@sentry/react-native",
+      "expo-font",
       "expo-image",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo/xend-mark-white-2048.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 160,
           "resizeMode": "contain",
           "backgroundColor": "#000000"
@@ -89,7 +79,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Allow Xend to use Face ID to unlock the app."
+          "faceIDPermission": "Allow Ferry to use Face ID to unlock the app."
         }
       ],
       [
@@ -98,6 +88,17 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#0a0a0a"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "18.4"
+          },
+          "android": {
+            "minSdkVersion": 28
+          }
+        }
       ]
     ],
     "experiments": {
@@ -105,10 +106,7 @@
     },
     "extra": {
       "router": {},
-      "eas": {
-        "projectId": "12867b7e-4203-4705-a353-ee1631a0ecda"
-      }
-    },
-    "owner": "gifted-borg"
+      "rpId": "ferry.money"
+    }
   }
 }

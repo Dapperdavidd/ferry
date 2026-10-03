@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { cn } from "@/utils/cn";
-import { apiClient } from "@/utils/apiClient";
+import { apiClient, apiErrorCode } from "@/utils/apiClient";
 import { useToast } from "@/contexts/ToastContext";
 import { ErrorCode, ErrorMessages } from "@/utils/errors";
 
@@ -32,11 +32,11 @@ export function DeleteAccountModal({
     if (!canDelete || isDeleting) return;
     setIsDeleting(true);
     try {
-      await apiClient.deleteAccount();
+      await apiClient.deleteMe();
       onClose();
       await onDeleted();
     } catch (err) {
-      const code = (err as { data?: { code?: string } })?.data?.code;
+      const code = apiErrorCode(err);
       showToast(
         code === "ACCOUNT_HAS_BALANCE"
           ? ErrorMessages[ErrorCode.ACCOUNT_HAS_BALANCE]

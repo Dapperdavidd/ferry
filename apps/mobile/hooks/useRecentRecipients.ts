@@ -36,7 +36,7 @@ export function useRecentRecipients(
   const recipients = useMemo(
     () =>
       recentRecipientsFrom(
-        data?.pages.flatMap((page) => page.transfers) ?? [],
+        data?.pages.flatMap((page) => page.items) ?? [],
         excluded,
         limit
       ),

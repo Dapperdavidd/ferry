@@ -1,80 +1,38 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient } from "@/utils/apiClient";
-import {
-  selectStablecoinTotal,
-  selectUsdc,
-  selectDecimalsByMint,
-  selectPortfolio,
-  selectPricesByMint,
-  selectIconsByMint,
-} from "@/utils/balances";
-import { fetchBalancesFromChain } from "@/utils/chainReads";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserId } from "@/hooks/useUserId";
-import { useWalletAddress } from "@/hooks/useWalletAddress";
+import { apiClient } from "@/utils/apiClient";
+import { formatAmount, selectAusd } from "@/utils/balances";
+import { readAusdBalance } from "@/lib/chain";
 
-export {
-  selectStablecoinTotal,
-  selectUsdc,
-  selectDecimalsByMint,
-  selectPortfolio,
-  selectPricesByMint,
-  selectIconsByMint,
-};
+export const BALANCES_QUERY_KEY = (userId: string | null) =>
+  ["balances", userId] as const;
 
-/**
- * Token balances for the signed-in wallet, plus the derived headline totals the
- * home screen reads. Gated on `isAuthenticated` (the JWT scopes the fetch
- * server-side) rather than on the address, which is null for a beat on cold
- * start.
- */
 export function useBalances() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, address } = useAuth();
   const userId = useUserId();
-  const address = useWalletAddress();
 
   const query = useQuery({
-    queryKey: ["balances", userId],
+    queryKey: BALANCES_QUERY_KEY(userId),
     queryFn: async () => {
       try {
-        // Arrow-wrapped: apiClient methods rely on their receiver.
         return await apiClient.getBalances();
       } catch (error) {
-        // The balance is public on-chain data, so a backend outage should never
-        // blank out the home screen.
+        // The chain is the source of truth; the API is only the faster read.
         if (!address) throw error;
-        return fetchBalancesFromChain(address);
+        return readAusdBalance(address);
       }
     },
     enabled: Boolean(isAuthenticated),
-    staleTime: 30000,
+    staleTime: 15_000,
   });
 
-  const tokens = query.data?.tokens;
-  const total = selectStablecoinTotal(tokens);
-  const usdc = selectUsdc(tokens);
-  const decimalsByMint = selectDecimalsByMint(tokens);
-  const portfolio = selectPortfolio(tokens);
-  const pricesByMint = selectPricesByMint(tokens);
-  const iconsByMint = selectIconsByMint(tokens);
-  const totalDisplay = total.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
+  const total = selectAusd(query.data);
   return {
-    tokens: tokens ?? [],
-    // Spendable cash, NOT net worth: the send flows cap the amount on this and
-    // offer it as Max, so anything a Consumer cannot actually send must stay
-    // out of it. The home screen's headline is `portfolio`.
+    balances: query.data,
     total,
-    totalDisplay,
-    usdc,
-    decimalsByMint,
-    pricesByMint,
-    iconsByMint,
-    portfolio,
+    totalDisplay: formatAmount(total),
     balance: total,
     isLoading: query.isLoading,
     isError: query.isError,

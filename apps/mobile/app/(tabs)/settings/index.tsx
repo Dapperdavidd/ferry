@@ -5,28 +5,31 @@ import {
   SectionList,
   TouchableOpacity,
   Linking,
+  type ImageSourcePropType,
 } from "react-native";
 import Constants from "expo-constants";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+
+import TabHeaderText from "@/components/ui/atoms/TabHeaderText";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { SettingsItem } from "@/components/ui/molecules";
-import { Ionicons } from "@expo/vector-icons";
-import { Spacing } from "@/constants/Spacing";
-import { useAuth } from "@/contexts/AuthContext";
-import TabHeaderText from "@/components/ui/atoms/TabHeaderText";
+import { DeleteAccountModal } from "@/components/ui/organisms/modals/DeleteAccountModal";
 import { EditWalletModal } from "@/components/ui/organisms/modals/EditWalletModal";
 import { NotificationsSheet } from "@/components/ui/organisms/modals/NotificationsSheet";
-import { DeleteAccountModal } from "@/components/ui/organisms/modals/DeleteAccountModal";
-import { useWalletName } from "@/hooks/useWalletName";
-import { useBalances } from "@/hooks/useBalances";
-import { useRouter } from "expo-router";
+import { Spacing } from "@/constants/Spacing";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useBalances } from "@/hooks/useBalances";
 import { useNotificationPreference } from "@/hooks/usePushRegistration";
+import { useWalletName } from "@/hooks/useWalletName";
+import { addressUrl, monad } from "@/lib/chain";
 
-const XEND_TWITTER_URL = "https://twitter.com/xend_global";
-const PRIVACY_POLICY_URL = "https://xend.global/legal/privacy-policy";
-const TERMS_URL = "https://xend.global/legal/terms-of-service";
+const SITE_URL = "https://ferry.money";
+const PRIVACY_POLICY_URL = `${SITE_URL}/privacy`;
+const TERMS_URL = `${SITE_URL}/terms`;
 
 const APP_VERSION = Constants.expoConfig?.version ?? "1.0.0";
 const APP_BUILD =
@@ -35,7 +38,7 @@ const APP_BUILD =
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { logout, user } = useAuth();
+  const { signOut, user, address } = useAuth();
   const { name: walletName, setName: setWalletName } = useWalletName();
   const [showEditWallet, setShowEditWallet] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -44,49 +47,25 @@ export default function SettingsScreen() {
   const { showToast } = useToast();
   const { total: balanceTotal, totalDisplay: balanceDisplay } = useBalances();
 
-  const accountAddress = user?.smart_account_address || user?.address;
-
   const handleAccountDeleted = async () => {
     showToast("Your account has been deleted");
-    await logout();
+    await signOut();
   };
 
-  const sections = [
+  type Item = {
+    label: string;
+    icon: ImageSourcePropType | React.ReactNode;
+    onPress: () => void;
+    color?: string;
+  };
+  const sections: { title: string; data: Item[] }[] = [
     {
-      title: "Security",
+      title: "Account",
       data: [
         {
-          // One row, not two: the Passkey is one of the keys this screen is
-          // about, and a separate shortcut would be a second place to set it up
-          // that could disagree with the first.
-          label: "Keys & Recovery",
-          icon: require("@/assets/icons/keys.png"),
-          onPress: () => router.push("/settings/keys-and-recovery" as never),
-        },
-        {
-          label: "Spending Limits",
-          icon: require("@/assets/icons/spending-limt.png"),
-          onPress: () => router.push("/settings/spending-limits" as never),
-        },
-        {
-          label: "Connected Merchants",
-          icon: require("@/assets/icons/card.png"),
-          onPress: () => router.push("/settings/connected-merchants" as never),
-        },
-      ],
-    },
-    {
-      title: "General",
-      data: [
-        {
-          label: "Edit Account",
+          label: user?.handle ? `@${user.handle}` : "Edit account",
           icon: require("@/assets/icons/edit-wallet.png"),
           onPress: () => setShowEditWallet(true),
-        },
-        {
-          label: "Notifications",
-          icon: require("@/assets/icons/notification.png"),
-          onPress: () => notificationsSheetRef.current?.present(),
         },
         {
           label: "Address book",
@@ -94,9 +73,24 @@ export default function SettingsScreen() {
           onPress: () => router.push("/settings/address-book" as never),
         },
         {
-          label: "NFTs",
-          icon: require("@/assets/icons/nfts.png"),
-          onPress: () => {},
+          label: "Notifications",
+          icon: require("@/assets/icons/notification.png"),
+          onPress: () => notificationsSheetRef.current?.present(),
+        },
+      ],
+    },
+    {
+      title: "Security",
+      data: [
+        {
+          label: "Recovery phrase",
+          icon: require("@/assets/icons/keys.png"),
+          onPress: () => router.push("/settings/recovery-phrase" as never),
+        },
+        {
+          label: `View on ${monad.name}`,
+          icon: require("@/assets/icons/wallet.png"),
+          onPress: () => address && Linking.openURL(addressUrl(address)),
         },
       ],
     },
@@ -104,29 +98,12 @@ export default function SettingsScreen() {
       title: "About",
       data: [
         {
-          label: "Contact support",
-          icon: require("@/assets/icons/support.png"),
-          onPress: () => {},
-        },
-        {
-          label: "Share your feedback",
-          icon: require("@/assets/icons/feedback.png"),
-          onPress: () => {},
-        },
-        {
-          label: "Follow @xend_global",
-          icon: require("@/assets/icons/x.png"),
-          onPress: () => {
-            Linking.openURL(XEND_TWITTER_URL);
-          },
-        },
-        {
-          label: "Logout",
+          label: "Sign out",
           icon: <Ionicons name="log-out-outline" size={22} color="#000000" />,
-          onPress: logout,
+          onPress: signOut,
         },
         {
-          label: "Delete Account",
+          label: "Delete account",
           icon: (
             <Ionicons name="person-remove-outline" size={22} color="#F90101" />
           ),
@@ -141,39 +118,7 @@ export default function SettingsScreen() {
     <ScreenLayout>
       <View className="w-full flex-1">
         <SectionList
-          ListHeaderComponent={
-            <View>
-              <TabHeaderText>Settings</TabHeaderText>
-
-              {/* Xend Plus Banner */}
-              <TouchableOpacity
-                className="flex-row items-center justify-between rounded-3xl bg-black p-4"
-                activeOpacity={0.9}
-                accessibilityRole="button"
-                accessibilityLabel="Learn about Xend Plus"
-                onPress={() =>
-                  router.push("/plus?from=/(tabs)/settings" as never)
-                }
-              >
-                <View className="flex-row items-center">
-                  <View className="mr-3 h-8 w-8 items-center justify-center">
-                    <Ionicons name="sparkles" size={20} color="white" />
-                  </View>
-                  <View>
-                    <Typography weight="700" className="text-sm text-white">
-                      Get Xend Plus
-                    </Typography>
-                    <Typography className="text-xs text-gray-400">
-                      Earn more, pay less
-                    </Typography>
-                  </View>
-                </View>
-                <View className="h-6 w-6 items-center justify-center rounded-full bg-white/20">
-                  <Ionicons name="chevron-forward" size={14} color="white" />
-                </View>
-              </TouchableOpacity>
-            </View>
-          }
+          ListHeaderComponent={<TabHeaderText>Settings</TabHeaderText>}
           sections={sections}
           keyExtractor={(item, index) => item.label + index}
           renderItem={({ item }) => (
@@ -194,20 +139,20 @@ export default function SettingsScreen() {
           ListFooterComponent={
             <View className="mt-8 items-center">
               <Image
-                source={require("@/assets/images/logo/xend-mark-black-2048.png")}
-                className="mb-3 size-8 opacity-40"
+                source={require("@/assets/images/icon.png")}
+                className="mb-3 size-8 rounded-lg opacity-40"
                 resizeMode="contain"
               />
               <Typography weight="500" className="text-sm text-black/40">
-                Version {APP_VERSION}
-                {APP_BUILD ? ` (${APP_BUILD})` : ""}
+                Ferry {APP_VERSION}
+                {APP_BUILD ? ` (${APP_BUILD})` : ""} · {monad.name}
               </Typography>
               <View className="mt-3 flex-row items-center">
                 <TouchableOpacity
                   onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
                 >
                   <Typography weight="500" className="text-xs text-black/40">
-                    Privacy Policy
+                    Privacy
                   </Typography>
                 </TouchableOpacity>
                 <Typography weight="500" className="mx-2 text-xs text-black/40">
@@ -215,7 +160,7 @@ export default function SettingsScreen() {
                 </Typography>
                 <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
                   <Typography weight="500" className="text-xs text-black/40">
-                    Terms & Conditions
+                    Terms
                   </Typography>
                 </TouchableOpacity>
               </View>
@@ -231,7 +176,7 @@ export default function SettingsScreen() {
         visible={showEditWallet}
         onClose={() => setShowEditWallet(false)}
         initialName={walletName}
-        address={accountAddress ?? ""}
+        address={address ?? ""}
         onSave={setWalletName}
       />
       <DeleteAccountModal

@@ -10,8 +10,6 @@ import { apiClient } from "@/utils/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserId } from "@/hooks/useUserId";
 import { getPushToken } from "@/utils/pushDevice";
-import { AWAITING_PAYMENTS_KEY } from "@/hooks/useAwaitingPayments";
-import { requestPendingChangeReview } from "@/hooks/usePendingChangeAcknowledgement";
 
 /**
  * What a notice is about, and where tapping it lands. Mirrors the server's
@@ -25,12 +23,9 @@ import { requestPendingChangeReview } from "@/hooks/usePendingChangeAcknowledgem
 const DESTINATIONS: Record<string, string> = {
   arrival: "/(tabs)/history",
   security_alert: "/(tabs)",
-  pending_change: "/(tabs)",
-  payment_approval: "/settings/finish-payment",
 };
 
-const PAYMENT_APPROVAL_KIND = "payment_approval";
-const PENDING_CHANGE_KIND = "pending_change";
+const ARRIVAL_KIND = "arrival";
 const HOME = "/(tabs)";
 
 function noticeKind(
@@ -54,11 +49,11 @@ function noticeKind(
  */
 Notifications.setNotificationHandler({
   handleNotification: (notification) => {
-    const needsApproval = noticeKind(notification) === PAYMENT_APPROVAL_KIND;
+    const arrival = noticeKind(notification) === ARRIVAL_KIND;
     return Promise.resolve({
-      shouldShowBanner: needsApproval,
+      shouldShowBanner: arrival,
       shouldShowList: true,
-      shouldPlaySound: needsApproval,
+      shouldPlaySound: arrival,
       shouldSetBadge: false,
     });
   },
@@ -81,16 +76,9 @@ export function useNotificationRouting() {
 
     // The list the Payment screen renders was fetched before this Payment
     // existed.
-    if (kind === PAYMENT_APPROVAL_KIND) {
-      void queryClient.invalidateQueries({ queryKey: AWAITING_PAYMENTS_KEY });
-    }
-
-    // The review lives on the home screen and is what a staged change is
-    // about. Asked for, so it opens even on the phone that staged the change
-    // and even after the alarm was swiped away: someone who tapped the notice
-    // wants to see the change, whichever phone they are holding.
-    if (kind === PENDING_CHANGE_KIND) {
-      void requestPendingChangeReview(queryClient);
+    if (kind === ARRIVAL_KIND) {
+      void queryClient.invalidateQueries({ queryKey: ["transfers"] });
+      void queryClient.invalidateQueries({ queryKey: ["balances"] });
     }
 
     router.push(((kind && DESTINATIONS[kind]) ?? HOME) as never);
@@ -99,7 +87,7 @@ export function useNotificationRouting() {
 
 /** The Consumer's own answer about notifications, as the server holds it. */
 export function useNotificationPreference() {
-  const { isAuthenticated, sessionTier } = useAuth();
+  const { isAuthenticated } = useAuth();
   const userId = useUserId();
   const queryClient = useQueryClient();
 
@@ -108,7 +96,7 @@ export function useNotificationPreference() {
     queryFn: () => apiClient.getNotificationPreference(),
     // Where notices go is not something an inbox alone gets to read or set,
     // and with no answer here registration below never runs either.
-    enabled: Boolean(isAuthenticated) && sessionTier === "full",
+    enabled: Boolean(isAuthenticated),
     staleTime: 60_000,
   });
 

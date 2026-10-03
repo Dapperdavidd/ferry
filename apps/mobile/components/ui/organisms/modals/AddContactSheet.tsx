@@ -20,7 +20,7 @@ import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { QRScannerModal } from "@/components/ui/organisms/send/QRScannerModal";
 import { cn } from "@/utils/cn";
-import { isPublicKey } from "@/utils/solana";
+import { isAddress } from "viem";
 
 const ERROR_COLOR = "#F90101";
 
@@ -91,7 +91,7 @@ export const AddContactSheet = forwardRef<
 
   const addressError = useMemo<string | null>(() => {
     if (trimmedAddress.length === 0) return null;
-    if (!isPublicKey(trimmedAddress)) return "Invalid Solana address";
+    if (!isAddress(trimmedAddress)) return "Enter a Monad address (0x…)";
     if (existingAddresses.includes(trimmedAddress))
       return "Contact already exists";
     return null;

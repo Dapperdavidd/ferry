@@ -4,7 +4,6 @@ import { FrostBlurView } from "@/components/ui/atoms/FrostBlurView";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
 import { Typography } from "../atoms/Typography";
 import { useModalFlow } from "@/contexts/ModalFlowContext";
-import { useSendGate } from "@/hooks/useSendGate";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import HapticPressable from "../atoms/HapticPressable";
 
@@ -15,7 +14,6 @@ interface ActionMenuProps {
 
 export const ActionMenu: React.FC<ActionMenuProps> = ({ visible, onClose }) => {
   const { showSendModal, showReceiveModal } = useModalFlow();
-  const gateSend = useSendGate();
   const insets = useSafeAreaInsets();
 
   const menus = useMemo(() => {
@@ -29,7 +27,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ visible, onClose }) => {
       {
         title: "Send",
         icon: require("@/assets/icons/send.png"),
-        onPress: () => gateSend(showSendModal),
+        onPress: showSendModal,
         disabled: false,
       },
       {
@@ -39,7 +37,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({ visible, onClose }) => {
         disabled: true,
       },
     ] as const;
-  }, [showReceiveModal, showSendModal, gateSend]);
+  }, [showReceiveModal, showSendModal]);
 
   return (
     <Modal

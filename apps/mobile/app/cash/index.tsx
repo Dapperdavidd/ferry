@@ -16,7 +16,6 @@ import { useModalFlow } from "@/contexts/ModalFlowContext";
 import { useToast } from "@/contexts/ToastContext";
 import BalanceView from "@/components/BalanceView";
 import { useBalances } from "@/hooks/useBalances";
-import { useSendGate } from "@/hooks/useSendGate";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
 
 export default function CashScreen() {
@@ -25,12 +24,11 @@ export default function CashScreen() {
   const { showToast } = useToast();
   const {
     totalDisplay,
-    usdc,
+    total,
     isError: isBalanceError,
     refetch: refetchBalances,
   } = useBalances();
   const address = useWalletAddress();
-  const gateSend = useSendGate();
 
   // Modal State
   const [isSendModalVisible, setIsSendModalVisible] = useState(false);
@@ -43,10 +41,10 @@ export default function CashScreen() {
   // total is likewise 0, so show a neutral placeholder rather than a bogus zero.
   const usdcLabel = isBalanceError
     ? "USDC"
-    : `${usdc.toLocaleString("en-US", {
+    : `${total.toLocaleString("en-US", {
         maximumFractionDigits: 4,
       })} USDC`;
-  const usdcAmount = usdc.toFixed(2);
+  const usdcAmount = total.toFixed(2);
 
   // Null until the backend has answered with the Account; never a blank QR.
   const handleOpenQRCode = () => {
@@ -82,11 +80,11 @@ export default function CashScreen() {
             </Typography>
           </View>
         ),
-        onPress: () => gateSend(() => setIsSendModalVisible(true)),
+        onPress: () => setIsSendModalVisible(true),
         label: "Send",
       },
     ],
-    [gateSend]
+    []
   );
 
   return (
@@ -95,7 +93,7 @@ export default function CashScreen() {
         {/* Header */}
         <View className="mb-6 flex-row items-center">
           <Image
-            source={require("@/assets/icons/usdc.png")}
+            source={require("@/assets/images/tokens/ausd.png")}
             className="mr-2.5 size-9"
             resizeMode="contain"
           />
@@ -136,7 +134,7 @@ export default function CashScreen() {
           <View className="mb-8 rounded-[24px] border border-[#A3A3A3]/20 bg-white p-5">
             <View className="mb-4 flex-row items-start justify-between">
               <Image
-                source={require("@/assets/icons/usdc.png")}
+                source={require("@/assets/images/tokens/ausd.png")}
                 className="h-10 w-10"
                 resizeMode="contain"
               />

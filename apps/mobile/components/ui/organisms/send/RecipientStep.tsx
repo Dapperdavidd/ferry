@@ -21,19 +21,35 @@ import {
 } from "@gorhom/bottom-sheet";
 import { truncateAddress } from "@/utils/helper";
 import { TextInput } from "react-native-gesture-handler";
-import { isPublicKey, isSnsName, resolveSnsName } from "@/utils/solana";
+import { isAddress } from "viem";
 import { cn } from "@/utils/cn";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useContacts } from "@/hooks/useContacts";
 import { useRecentRecipients } from "@/hooks/useRecentRecipients";
+import { apiClient } from "@/utils/apiClient";
 
 interface RecipientStepProps {
   onClose: () => void;
-  onNext: (recipient: string) => void;
+  onNext: (recipient: string, name?: string) => void;
   onScanPress: () => void;
   recipient: string;
   setRecipient: (recipient: string) => void;
+}
+
+const HANDLE = /^@?[a-z0-9_]{3,20}$/i;
+
+/** "@ada", "ada" and "ferry://pay?to=@ada" all mean the handle ada. */
+export function parseRecipient(
+  text: string
+): { kind: "address" | "handle"; value: string } | null {
+  let raw = text.trim();
+  const link = raw.match(/^ferry:\/\/pay\?to=(.+)$/i);
+  if (link) raw = decodeURIComponent(link[1]);
+  if (isAddress(raw)) return { kind: "address", value: raw };
+  if (HANDLE.test(raw))
+    return { kind: "handle", value: raw.replace(/^@/, "").toLowerCase() };
+  return null;
 }
 
 export default memo(function RecipientStep({
@@ -45,101 +61,74 @@ export default memo(function RecipientStep({
   const inputRef = useRef<TextInput | null>(null);
   const debouncedRecipient = useDebounce(recipient, 400);
   const { contacts } = useContacts();
-  // Saved addresses are listed above under their own name, so repeating them
-  // here would put the same wallet on screen twice with two different labels.
   const savedAddresses = useMemo(
     () => contacts.map((c) => c.address),
     [contacts]
   );
   const { recipients } = useRecentRecipients({ exclude: savedAddresses });
   const sendsTo = useMemo(
-    () => new Map(recipients.map((r) => [r.address, r.sends])),
+    () => new Map(recipients.map((r) => [r.address.toLowerCase(), r.sends])),
     [recipients]
   );
 
-  const isSns = debouncedRecipient.includes(".");
+  const parsed = useMemo(
+    () => parseRecipient(debouncedRecipient),
+    [debouncedRecipient]
+  );
+  const isHandle = parsed?.kind === "handle";
 
-  const {
-    data: resolvedAddress,
-    isLoading: isResolving,
-    error: resolveError,
-  } = useQuery({
-    queryKey: ["resolve-solana-name", debouncedRecipient],
-    queryFn: () => resolveSnsName(debouncedRecipient),
-    enabled: Boolean(
-      debouncedRecipient && !isPublicKey(debouncedRecipient) && isSns
-    ),
-    retry: (count, error) => {
-      if (count > 1) return false;
-      if (error?.message === "The name account does not exist") return false;
-      return true;
-    },
-    retryDelay: 2_000,
+  const { data: resolved, isLoading: isResolving } = useQuery({
+    queryKey: ["resolve-handle", parsed?.value],
+    queryFn: () => apiClient.resolveHandle(parsed!.value),
+    enabled: isHandle,
+    retry: 1,
+    staleTime: 60_000,
   });
 
   const handlePaste = async () => {
     const text = await Clipboard.getStringAsync();
-    if (!text) return;
-    if (isPublicKey(text)) {
-      setRecipient(text);
-    }
-    const isSns = await isSnsName(text);
-    if (isSns) {
-      setRecipient(text);
-    }
+    if (text && parseRecipient(text)) setRecipient(text.trim());
   };
 
-  const handleContinue = useCallback(() => {
-    if (isPublicKey(debouncedRecipient)) {
-      onNext(debouncedRecipient);
-    } else if (resolvedAddress) {
-      onNext(resolvedAddress);
-    }
-  }, [debouncedRecipient, resolvedAddress, onNext]);
+  const target = parsed?.kind === "address" ? parsed.value : resolved?.address;
 
-  // Focus input on mount
+  const handleContinue = useCallback(() => {
+    if (!parsed) return;
+    if (parsed.kind === "address") onNext(parsed.value);
+    else if (resolved)
+      onNext(resolved.handle, resolved.displayName ?? undefined);
+  }, [parsed, resolved, onNext]);
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 300);
+    const timer = setTimeout(() => inputRef.current?.focus(), 300);
     return () => clearTimeout(timer);
   }, []);
 
   const { isValid, label, icon } = useMemo(() => {
-    if (debouncedRecipient.length === 0) {
-      return { isValid: true, label: "Enter Solana address or .sol handle" };
-    }
+    if (debouncedRecipient.length === 0)
+      return { isValid: true, label: "Enter a @handle or a Monad address" };
+    if (!parsed)
+      return {
+        isValid: false,
+        label: "That isn't a handle or a Monad address",
+      };
 
-    const target = isPublicKey(debouncedRecipient)
-      ? debouncedRecipient
-      : resolvedAddress;
-    const sends = (target && sendsTo.get(target)) ?? 0;
+    const sends = (target && sendsTo.get(target.toLowerCase())) ?? 0;
     const sendsLabel =
-      sends === 0 ? "New address" : `${sends} send${sends === 1 ? "" : "s"}`;
+      sends === 0 ? "New recipient" : `${sends} send${sends === 1 ? "" : "s"}`;
 
-    if (isSns) {
+    if (parsed.kind === "handle") {
       if (isResolving) {
         return {
           isValid: true,
-          label: "Resolving...",
-          icon: (
-            <FontAwesome5
-              name="spinner"
-              size={14}
-              color="blue"
-              className="animate-spin"
-            />
-          ),
+          label: "Looking up…",
+          icon: <FontAwesome5 name="spinner" size={14} color="blue" />,
         };
       }
-      if (resolveError) {
-        const errLabel =
-          resolveError.message === "The name account does not exist"
-            ? "No matching address found"
-            : resolveError.message;
+      if (resolved === null) {
         return {
           isValid: false,
-          label: errLabel,
+          label: `No one on Ferry is @${parsed.value}`,
           icon: (
             <MaterialCommunityIcons
               name="alert-decagram"
@@ -149,10 +138,10 @@ export default memo(function RecipientStep({
           ),
         };
       }
-      if (resolvedAddress) {
+      if (resolved) {
         return {
           isValid: true,
-          label: `${truncateAddress(resolvedAddress)} • ${sendsLabel}`,
+          label: `${resolved.displayName ?? `@${resolved.handle}`} · ${truncateAddress(resolved.address)} · ${sendsLabel}`,
           icon: (
             <MaterialCommunityIcons
               name="check-decagram"
@@ -162,37 +151,24 @@ export default memo(function RecipientStep({
           ),
         };
       }
-      return { isValid: true, label: "Enter Solana address or .sol handle" };
+      return { isValid: true, label: "Enter a @handle or a Monad address" };
     }
 
-    if (isPublicKey(debouncedRecipient)) {
-      return {
-        isValid: true,
-        label: sendsLabel,
-        icon: (
-          <MaterialCommunityIcons
-            name="clock-time-nine"
-            size={14}
-            color="lightgrey"
-          />
-        ),
-      };
-    }
+    return {
+      isValid: true,
+      label: sendsLabel,
+      icon: (
+        <MaterialCommunityIcons
+          name="clock-time-nine"
+          size={14}
+          color="lightgrey"
+        />
+      ),
+    };
+  }, [debouncedRecipient, parsed, isResolving, resolved, target, sendsTo]);
 
-    return { isValid: false, label: "Invalid Solana address" };
-  }, [
-    debouncedRecipient,
-    isResolving,
-    resolveError,
-    resolvedAddress,
-    isSns,
-    sendsTo,
-  ]);
-
-  const isContinueDisabled = useMemo(() => {
-    if (debouncedRecipient.length === 0 || !isValid) return true;
-    return !isPublicKey(debouncedRecipient) && !resolvedAddress;
-  }, [isValid, debouncedRecipient, resolvedAddress]);
+  const isContinueDisabled =
+    !parsed || !isValid || (parsed.kind === "handle" && !resolved);
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -217,7 +193,7 @@ export default memo(function RecipientStep({
           >
             <BottomSheetTextInput
               className="-ml-1 mb-1.5 w-[235px] py-0 text-base font-medium text-black/90"
-              placeholder="Address or .sol handle"
+              placeholder="@handle or address"
               placeholderTextColor="#0000004D"
               value={recipient}
               onChangeText={setRecipient}
@@ -248,7 +224,7 @@ export default memo(function RecipientStep({
 
             {recipient && (
               <HapticPressable
-                className="absolute -right-5 -top-5 z-10 p-5 transition-all duration-200 ease-in-out"
+                className="absolute -right-5 -top-5 z-10 p-5"
                 onPress={() => setRecipient("")}
               >
                 <Ionicons name="close-circle" size={20} color="lightgrey" />
@@ -282,8 +258,6 @@ export default memo(function RecipientStep({
           </View>
         </View>
 
-        {/* A section with nothing in it is dropped rather than shown empty: a
-            Consumer who has never sent has no use for a heading saying so. */}
         <BottomSheetScrollView showsVerticalScrollIndicator={false}>
           {contacts.length > 0 && (
             <>
@@ -297,7 +271,7 @@ export default memo(function RecipientStep({
                   subtitle={truncateAddress(contact.address)}
                   onPress={() => {
                     setRecipient(contact.address);
-                    onNext(contact.address);
+                    onNext(contact.address, contact.name);
                   }}
                 />
               ))}
@@ -313,16 +287,21 @@ export default memo(function RecipientStep({
                   contacts.length > 0 && "mt-4"
                 )}
               >
-                Recent addresses
+                Recent
               </Typography>
               {recipients.map((entry) => (
                 <RecipientRow
                   key={entry.address}
-                  title={truncateAddress(entry.address)}
+                  title={
+                    entry.handle
+                      ? `@${entry.handle}`
+                      : truncateAddress(entry.address)
+                  }
                   subtitle={`${entry.sends} send${entry.sends === 1 ? "" : "s"}`}
                   onPress={() => {
-                    setRecipient(entry.address);
-                    onNext(entry.address);
+                    const value = entry.handle ?? entry.address;
+                    setRecipient(value);
+                    onNext(value);
                   }}
                 />
               ))}

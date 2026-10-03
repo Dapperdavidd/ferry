@@ -1,25 +1,26 @@
 import React from "react";
-import { View, TouchableOpacity } from "react-native";
-import { ActionModal } from "../ActionModal";
-import { TokenMark } from "@/components/ui/atoms/TokenMark";
-import { describeToken } from "@/utils/tokens";
-import { formatUsdFromString } from "@/utils/balances";
+import { Linking, View, TouchableOpacity } from "react-native";
 import { FontAwesome6, Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { notificationAsync, NotificationFeedbackType } from "expo-haptics";
-import { formatAmount } from "@/utils/solana";
-import { truncateAddress } from "@/utils/helper";
-import { cn } from "@/utils/cn";
-import { Typography } from "../../atoms/Typography";
 import { format } from "date-fns";
+
+import { ActionModal } from "../ActionModal";
+import { TokenMark } from "@/components/ui/atoms/TokenMark";
+import { Typography } from "../../atoms/Typography";
 import HapticPressable from "../../atoms/HapticPressable";
 import { useContacts } from "@/hooks/useContacts";
+import { txUrl } from "@/lib/chain";
 import {
   activityDetailTimestamp,
+  counterpartyLabel,
   statusLabel,
   type ActivityEntry,
 } from "@/utils/activity";
-import { AccountEventMark } from "@/components/ui/organisms/ActivityItem";
+import { formatUsdFromString, rawToNumber } from "@/utils/balances";
+import { cn } from "@/utils/cn";
+import { truncateAddress } from "@/utils/helper";
+import { describeToken, formatTokenAmount } from "@/utils/tokens";
 
 interface TransactionDetailModalProps {
   visible: boolean;
@@ -68,42 +69,22 @@ export function TransactionDetailModal({
     notificationAsync(NotificationFeedbackType.Success);
   };
 
-  // An account event has no amount, token or counterparty. It still has a
-  // transaction behind it, which is the thing a Consumer checking on a key
-  // change actually wants to see.
-  if (item.kind === "security") {
-    return (
-      <AccountEventDetail
-        visible={visible}
-        onClose={onClose}
-        item={item}
-        onCopy={copyToClipboard}
-      />
-    );
-  }
-
   const status = STATUS_META[item.status];
-  const amount = formatAmount(item.amountRaw, item.decimals);
-  // Named from the shared token table rather than a hardcoded USDC check,
-  // which left every other asset showing a bare number with no unit.
-  const { name, symbol } = describeToken(
-    item.mint,
-    item.tokenSymbol,
-    item.tokenName
+  const { symbol } = describeToken(item.token);
+  const amount = formatTokenAmount(
+    rawToNumber(item.amountRaw, item.decimals),
+    item.decimals
   );
-  const usd = item.usdValue ?? null;
   const date = format(
     new Date(activityDetailTimestamp(item)),
     "MMM d, yyyy 'at' h:mma"
   );
-  const signature = item.signature;
-
-  const counterpartyLabel = item.direction === "send" ? "To" : "From";
-  const contact = contacts.find((c) => c.address === item.counterparty);
-  const counterpartyDisplay =
-    contact?.name ?? truncateAddress(item.counterparty);
-
+  const contact = contacts.find(
+    (c) => c.address.toLowerCase() === item.counterparty.toLowerCase()
+  );
+  const who = contact?.name ?? counterpartyLabel(item);
   const rowClass = "flex-row justify-between items-center py-2";
+
   return (
     <ActionModal visible={visible} onClose={onClose}>
       <View className="items-center">
@@ -115,12 +96,7 @@ export function TransactionDetailModal({
         </HapticPressable>
 
         <View className="relative mb-3">
-          <TokenMark
-            mint={item.mint}
-            label={name}
-            iconUrl={item.iconUrl}
-            size={64}
-          />
+          <TokenMark token={item.token} size={64} />
           <View className="absolute right-0 top-0 overflow-hidden rounded-full bg-white">
             <Ionicons name={status.icon} size={16} color={status.color} />
           </View>
@@ -131,15 +107,12 @@ export function TransactionDetailModal({
         </Typography>
 
         <Typography weight="700" className="mb-1 text-3xl">
-          {amount}
-          {symbol ? ` ${symbol}` : ""}
+          {amount} {symbol}
         </Typography>
 
-        {usd !== null && (
-          // What it was worth when it happened, matching the activity row it
-          // was opened from.
+        {item.usdValue !== null && (
           <Typography weight="600" className="mb-1 text-base text-black/30">
-            {formatUsdFromString(usd)}
+            {formatUsdFromString(item.usdValue)}
           </Typography>
         )}
 
@@ -158,34 +131,84 @@ export function TransactionDetailModal({
             </View>
           </View>
 
-          <View className={rowClass}>
-            <Typography weight="600" className="text-black/30">
-              {counterpartyLabel}
-            </Typography>
-            <TouchableOpacity
-              className="flex-row items-center"
-              onPress={() => copyToClipboard(item.counterparty)}
-            >
-              <Typography weight="600" className="mr-1">
-                {counterpartyDisplay}
+          {item.kind !== "cashout" && item.kind !== "funding" && (
+            <View className={rowClass}>
+              <Typography weight="600" className="text-black/30">
+                {item.direction === "send" ? "To" : "From"}
               </Typography>
-              <Ionicons name="copy-outline" size={14} color={copyIconColor} />
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                className="flex-row items-center"
+                onPress={() => copyToClipboard(item.counterparty)}
+              >
+                <Typography weight="600" className="mr-1">
+                  {who}
+                </Typography>
+                <Ionicons name="copy-outline" size={14} color={copyIconColor} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {item.cashout && (
+            <>
+              <View className={rowClass}>
+                <Typography weight="600" className="text-black/30">
+                  Settled through
+                </Typography>
+                <Typography weight="600">Agora Instant Settlement</Typography>
+              </View>
+              <View className={rowClass}>
+                <Typography weight="600" className="text-black/30">
+                  Received
+                </Typography>
+                <Typography weight="600">
+                  {formatTokenAmount(
+                    rawToNumber(
+                      item.cashout.outAmountRaw,
+                      item.cashout.outDecimals
+                    ),
+                    item.cashout.outDecimals
+                  )}{" "}
+                  {item.cashout.outToken}
+                </Typography>
+              </View>
+              {item.cashout.localAmount && item.cashout.localCurrency && (
+                <View className={rowClass}>
+                  <Typography weight="600" className="text-black/30">
+                    Payout (test)
+                  </Typography>
+                  <Typography weight="600">
+                    {item.cashout.localCurrency} {item.cashout.localAmount} ·{" "}
+                    {item.cashout.payoutStatus === "SENT"
+                      ? "sent"
+                      : item.cashout.payoutStatus.toLowerCase()}
+                  </Typography>
+                </View>
+              )}
+            </>
+          )}
+
+          {item.memo ? (
+            <View className={rowClass}>
+              <Typography weight="600" className="text-black/30">
+                Note
+              </Typography>
+              <Typography weight="600">{item.memo}</Typography>
+            </View>
+          ) : null}
 
           <View className={rowClass}>
             <Typography weight="600" className="text-black/30">
-              Onchain transaction
+              On Monad
             </Typography>
-            {signature ? (
+            {item.txHash ? (
               <TouchableOpacity
                 className="flex-row items-center"
-                onPress={() => copyToClipboard(signature)}
+                onPress={() => Linking.openURL(txUrl(item.txHash as string))}
               >
                 <Typography weight="600" className="mr-1">
-                  {truncateAddress(signature)}
+                  {truncateAddress(item.txHash, 6, 4)}
                 </Typography>
-                <Ionicons name="copy-outline" size={14} color={copyIconColor} />
+                <Ionicons name="open-outline" size={14} color={copyIconColor} />
               </TouchableOpacity>
             ) : (
               <Typography weight="600" className="text-black/30">
@@ -196,96 +219,12 @@ export function TransactionDetailModal({
 
           <View className={rowClass}>
             <Typography weight="600" className="text-black/30">
-              Onchain fees
+              Network fee
             </Typography>
-            <View className="flex-row items-center">
-              <Typography
-                weight="500"
-                className="mr-1 text-[13px] text-black/30"
-              >
-                Xend⁺
-              </Typography>
-              <Typography weight="500" className="text-success">
-                Covered
-              </Typography>
-            </View>
+            <Typography weight="500" className="text-success">
+              Covered by Ferry
+            </Typography>
           </View>
-        </View>
-      </View>
-    </ActionModal>
-  );
-}
-
-/**
- * The detail behind an account event.
- *
- * Leads with the subject rather than an amount, because "which key" is the
- * question this sheet exists to answer.
- */
-function AccountEventDetail({
-  visible,
-  onClose,
-  item,
-  onCopy,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  item: ActivityEntry;
-  onCopy: (text: string) => Promise<void>;
-}) {
-  const copyIconColor = "rgba(0,0,0,0.3)";
-  const date = format(new Date(item.createdAt), "MMM d, yyyy 'at' h:mma");
-  const rowClass = "flex-row justify-between items-center py-2";
-
-  return (
-    <ActionModal visible={visible} onClose={onClose}>
-      <View className="items-center">
-        <HapticPressable
-          onPress={onClose}
-          className="absolute -right-4 -top-4 p-4"
-        >
-          <FontAwesome6 name="xmark" size={20} color={copyIconColor} />
-        </HapticPressable>
-
-        <View className="mb-3">
-          <AccountEventMark kind={item.securityKind} size={64} />
-        </View>
-
-        <Typography weight="600" className="mb-1 text-sm text-black/30">
-          {item.securityLabel ?? "Account updated"}
-        </Typography>
-
-        <Typography weight="700" className="mb-1 text-center text-2xl">
-          {item.securitySubject ?? "Your account"}
-        </Typography>
-
-        <Typography weight="500" className="mb-4 text-sm text-black/30">
-          {date}
-        </Typography>
-      </View>
-
-      <View className="w-full">
-        <View className={rowClass}>
-          <Typography weight="500" className="text-black/40">
-            Onchain transaction
-          </Typography>
-          {item.signature ? (
-            <TouchableOpacity
-              className="flex-row items-center"
-              onPress={() => onCopy(item.signature as string)}
-            >
-              <Typography weight="600" className="mr-1">
-                {truncateAddress(item.signature)}
-              </Typography>
-              <Ionicons name="copy-outline" size={14} color={copyIconColor} />
-            </TouchableOpacity>
-          ) : (
-            // Not every event reaches the chain: renaming a wallet is a local
-            // fact, and saying "pending" would suggest one is coming.
-            <Typography weight="600" className="text-black/30">
-              None
-            </Typography>
-          )}
         </View>
       </View>
     </ActionModal>

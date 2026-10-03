@@ -57,7 +57,7 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
           <View className="mb-5 items-center px-4">
             <TabHeaderText className="text-center">Receive</TabHeaderText>
             <Typography weight="500" className="mt-1 text-sm text-black/30">
-              Only send Solana assets to this address
+              Only send AUSD on Monad to this address
             </Typography>
           </View>
 

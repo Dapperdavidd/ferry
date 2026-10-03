@@ -2,6 +2,7 @@ import type { TransferRow } from "@/utils/apiClient";
 
 export interface RecentRecipient {
   address: string;
+  handle: string | null;
   /** Sends to this address within the history that is loaded, never zero. */
   sends: number;
   /** ISO-8601, the most recent one, which is what the list is ordered by. */
@@ -12,7 +13,8 @@ export interface RecentRecipient {
 export type SendRow = Pick<
   TransferRow,
   "direction" | "kind" | "toAddress" | "createdAt"
->;
+> &
+  Partial<Pick<TransferRow, "counterparty">>;
 
 /**
  * Who the Consumer has been sending to, read back out of their Activity feed.
@@ -36,6 +38,8 @@ export function recentRecipientsFrom(
     const seen = byAddress.get(row.toAddress);
     if (seen) {
       seen.sends += 1;
+      if (!seen.handle && row.counterparty?.handle)
+        seen.handle = row.counterparty.handle;
       // The feed arrives newest first, so the first sighting is usually the
       // latest. Compared rather than assumed, because the chain fallback orders
       // by signature batch, which is close to that but not promised to be.
@@ -44,6 +48,7 @@ export function recentRecipientsFrom(
     }
     byAddress.set(row.toAddress, {
       address: row.toAddress,
+      handle: row.counterparty?.handle ?? null,
       sends: 1,
       lastSentAt: row.createdAt,
     });

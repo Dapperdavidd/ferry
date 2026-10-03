@@ -15,7 +15,7 @@ import {
 import { Typography } from "@/components/ui/atoms/Typography";
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Ionicons } from "@expo/vector-icons";
-import { isPublicKey } from "@/utils/solana";
+import { parseRecipient } from "@/components/ui/organisms/send/RecipientStep";
 
 interface QRScannerModalProps {
   onScan: (address: string) => void;
@@ -46,11 +46,11 @@ export const QRScannerModal = forwardRef<BottomSheetModal, QRScannerModalProps>(
     const handleBarCodeScanned = useCallback(
       (result: BarcodeScanningResult) => {
         if (hasScanned.current) return;
-        if (!isPublicKey(result.data)) return;
+        const parsed = parseRecipient(result.data);
+        if (!parsed) return;
         hasScanned.current = true;
 
-        const address = result.data;
-        onScan(address);
+        onScan(parsed.kind === "handle" ? parsed.value : parsed.value);
         handleClose();
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps

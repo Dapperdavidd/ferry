@@ -19,7 +19,6 @@ import { ActionMenu } from "./ActionMenu";
 
 import { BlurView } from "expo-blur";
 import { useSegments } from "expo-router";
-import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/utils/cn";
 
 const iconMappings = {
@@ -45,12 +44,8 @@ export function CustomTabBar({
   // `.expo/types`, absent in CI; treat segments as a plain string array so
   // depth checks type-check without the generated route types.
   const segments = useSegments() as string[];
-  const { sessionTier } = useAuth();
   const [isActionMenuVisible, setIsActionMenuVisible] = useState(false);
-  // Everything behind the button moves money, and an email-only session
-  // cannot. The home banner says why and offers the passkey; the button just
-  // stops pretending.
-  const readOnly = sessionTier === "entry";
+  const readOnly = false;
 
   const fabScale = useSharedValue(1);
   const fabOpacity = useSharedValue(1);
