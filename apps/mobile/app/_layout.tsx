@@ -161,9 +161,11 @@ function AuthLayout() {
     <>
       {screens}
       {showObscure && (
-        <View style={StyleSheet.absoluteFill}>
-          <LoadingScreen />
-        </View>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[StyleSheet.absoluteFill, { backgroundColor: "#FAFAF8" }]}
+        />
       )}
       {showLock && (
         <View style={StyleSheet.absoluteFill}>

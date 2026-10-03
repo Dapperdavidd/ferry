@@ -1,35 +1,44 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TextInput,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
-import { ThemedButton } from "@/components/ui/molecules/ThemedButton";
-import { ThemedTextInput } from "@/components/ui/molecules/ThemedTextInput";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { apiClient, apiErrorMessage } from "@/utils/apiClient";
-import { cn } from "@/utils/cn";
 
 const HANDLE = /^[a-z0-9_]{3,20}$/;
 
 const HOMES = [
-  { country: "US", currency: "USD", label: "United States" },
-  { country: "NG", currency: "NGN", label: "Nigeria" },
-  { country: "GB", currency: "GBP", label: "United Kingdom" },
-  { country: "KE", currency: "KES", label: "Kenya" },
-  { country: "GH", currency: "GHS", label: "Ghana" },
-  { country: "PH", currency: "PHP", label: "Philippines" },
-  { country: "MX", currency: "MXN", label: "Mexico" },
-  { country: "IN", currency: "INR", label: "India" },
+  { country: "US", currency: "USD" },
+  { country: "NG", currency: "NGN" },
+  { country: "GB", currency: "GBP" },
+  { country: "KE", currency: "KES" },
+  { country: "GH", currency: "GHS" },
+  { country: "PH", currency: "PHP" },
+  { country: "MX", currency: "MXN" },
+  { country: "IN", currency: "INR" },
 ] as const;
 
+type Home = (typeof HOMES)[number];
+
 export default function OnboardingScreen() {
-  const { user, setUser } = useAuth();
+  const { signOut, setUser } = useAuth();
   const [handle, setHandle] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [home, setHome] = useState<(typeof HOMES)[number]>(HOMES[0]);
+  const [home, setHome] = useState<Home | null>(null);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,145 +48,247 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     let cancelled = false;
+
     if (!HANDLE.test(debounced)) {
       setAvailable(null);
+      setChecking(false);
       return;
     }
+
+    setChecking(true);
     apiClient
       .handleAvailable(debounced)
-      .then((r) => !cancelled && setAvailable(r.available))
-      .catch(() => !cancelled && setAvailable(null));
+      .then((result) => {
+        if (!cancelled) setAvailable(result.available);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailable(null);
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+
     return () => {
       cancelled = true;
     };
   }, [debounced]);
 
-  const hint = useMemo(() => {
-    if (!cleaned)
-      return "Letters, numbers and underscores. 3 to 20 characters.";
-    if (!valid)
-      return "Letters, numbers and underscores only, 3 to 20 characters.";
-    if (available === false) return `@${cleaned} is taken.`;
-    if (available === true) return `@${cleaned} is yours.`;
-    return "Checking…";
-  }, [cleaned, valid, available]);
+  const handleHint = useMemo(() => {
+    if (!cleaned) return "3–20 characters";
+    if (!valid) return "Use letters, numbers, or underscores";
+    if (checking || cleaned !== debounced) return "Checking…";
+    if (available === false) return `@${cleaned} is taken`;
+    if (available === true) return "Available";
+    return "Couldn’t check right now";
+  }, [available, checking, cleaned, debounced, valid]);
 
-  const save = async () => {
-    if (!valid || available === false || saving) return;
+  const canContinue = valid && available === true && home !== null && !saving;
+
+  const finishSetup = async () => {
+    if (!canContinue || !home) return;
+
     setSaving(true);
     setError(null);
     try {
       const next = await apiClient.updateMe({
         handle: cleaned,
-        displayName: displayName.trim() || undefined,
         homeCurrency: home.currency,
         country: home.country,
       });
       setUser(next);
-    } catch (e) {
-      setError(apiErrorMessage(e) ?? "Couldn't save. Try again.");
+    } catch (reason) {
+      setError(apiErrorMessage(reason) ?? "Couldn’t finish setup. Try again.");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <ScreenLayout>
+    <ScreenLayout className="bg-[#FAFAF8] p-0" lightColor="#FAFAF8">
+      <StatusBar style="dark" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
       >
         <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24 }}
           keyboardShouldPersistTaps="handled"
-          contentContainerClassName="flex-grow px-6 pb-8 pt-4"
+          showsVerticalScrollIndicator={false}
         >
-          <Typography weight="700" className="text-3xl text-foreground">
-            Pick your handle
-          </Typography>
-          <Typography className="mt-2 text-base text-foreground/60">
-            People send you money by handle, so it&apos;s yours for good. Your
-            account is{" "}
-            {user?.address
-              ? `${user.address.slice(0, 6)}…${user.address.slice(-4)}`
-              : "ready"}
-            .
-          </Typography>
-
-          <View className="mt-8">
-            <ThemedTextInput
-              value={handle}
-              onChangeText={setHandle}
-              placeholder="@handle"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              maxLength={20}
+          <View className="flex-row items-center justify-between pt-4">
+            <Image
+              source={require("@/assets/images/logo/ferry-mark-black-2048.png")}
+              style={{ width: 38, height: 38 }}
+              resizeMode="contain"
             />
-            <Typography
-              className={cn(
-                "mt-2 text-sm",
-                available === false ? "text-destructive" : "text-foreground/60"
-              )}
+            <HapticPressable
+              feedback="none"
+              onPress={() => void signOut()}
+              style={{ paddingHorizontal: 4, paddingVertical: 10 }}
             >
-              {hint}
+              <Typography weight="500" className="text-sm text-black/45">
+                Sign out
+              </Typography>
+            </HapticPressable>
+          </View>
+
+          <View className="pb-5 pt-8">
+            <Typography
+              weight="600"
+              className="max-w-[320px] text-[34px] leading-[39px] tracking-[-1.2px] text-[#111111]"
+            >
+              Finish your setup
+            </Typography>
+            <Typography
+              weight="400"
+              className="mt-3 max-w-[330px] text-base leading-6 text-black/50"
+            >
+              Pick how people find you and the currency you use at home.
+            </Typography>
+          </View>
+
+          <View>
+            <Typography weight="600" className="mb-2.5 text-sm text-black/70">
+              Your handle
+            </Typography>
+            <View
+              className="flex-row items-center rounded-[20px] border bg-white px-5"
+              style={{
+                height: 62,
+                borderColor:
+                  available === false || (!!handle && !valid)
+                    ? "#DC2626"
+                    : "rgba(17,17,17,0.10)",
+              }}
+            >
+              <Typography weight="600" className="mr-1 text-xl text-black/35">
+                @
+              </Typography>
+              <TextInput
+                value={handle}
+                onChangeText={(value) => {
+                  setHandle(value.replace(/^@/, "").toLowerCase());
+                  setAvailable(null);
+                  setError(null);
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="username"
+                maxLength={20}
+                placeholder="yourname"
+                placeholderTextColor="rgba(17,17,17,0.26)"
+                className="h-full flex-1 text-xl text-[#111111]"
+                style={{ fontFamily: "Inter_600SemiBold" }}
+              />
+              {checking || (valid && cleaned !== debounced) ? (
+                <ActivityIndicator size="small" color="rgba(17,17,17,0.35)" />
+              ) : available === true ? (
+                <Ionicons name="checkmark-circle" size={22} color="#111111" />
+              ) : null}
+            </View>
+            <Typography
+              weight="500"
+              className={`mt-2.5 text-xs ${
+                available === false || (!!handle && !valid)
+                  ? "text-red-600"
+                  : "text-black/40"
+              }`}
+            >
+              {handleHint}
             </Typography>
           </View>
 
           <View className="mt-6">
-            <ThemedTextInput
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Your name (optional)"
-              maxLength={40}
-            />
-          </View>
-
-          <Typography weight="600" className="mt-8 text-base text-foreground">
-            Where&apos;s home?
-          </Typography>
-          <Typography className="mt-1 text-sm text-foreground/60">
-            Amounts show in your currency. Cash-outs land there.
-          </Typography>
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            {HOMES.map((option) => {
-              const selected = option.country === home.country;
-              return (
-                <HapticPressable
-                  key={option.country}
-                  onPress={() => setHome(option)}
-                  className={cn(
-                    "rounded-full border px-4 py-2",
-                    selected
-                      ? "border-primary bg-primary"
-                      : "border-border bg-card"
-                  )}
-                >
-                  <Typography
-                    weight="500"
-                    className={cn(
-                      "text-sm",
-                      selected ? "text-white" : "text-foreground"
-                    )}
-                  >
-                    {option.label} · {option.currency}
-                  </Typography>
-                </HapticPressable>
-              );
-            })}
-          </View>
-
-          {error ? (
-            <Typography className="mt-6 text-sm text-destructive">
-              {error}
+            <Typography weight="600" className="mb-2.5 text-sm text-black/70">
+              Home currency
             </Typography>
-          ) : null}
+            <View className="flex-row flex-wrap justify-between gap-y-2">
+              {HOMES.map((option) => {
+                const selected = option.currency === home?.currency;
+                return (
+                  <HapticPressable
+                    key={option.currency}
+                    feedback="selection"
+                    onPress={() => {
+                      setHome(option);
+                      setError(null);
+                    }}
+                    style={{
+                      alignItems: "center",
+                      backgroundColor: selected ? "#111111" : "#FFFFFF",
+                      borderColor: selected ? "#111111" : "rgba(17,17,17,0.10)",
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      flexDirection: "row",
+                      height: 50,
+                      justifyContent: "space-between",
+                      paddingHorizontal: 16,
+                      width: "48.5%",
+                    }}
+                  >
+                    <View>
+                      <Typography
+                        weight="600"
+                        className={selected ? "text-white" : "text-[#111111]"}
+                      >
+                        {option.currency}
+                      </Typography>
+                      <Typography
+                        weight="500"
+                        className={
+                          selected
+                            ? "text-[10px] text-white/50"
+                            : "text-[10px] text-black/35"
+                        }
+                      >
+                        {option.country}
+                      </Typography>
+                    </View>
+                    {selected ? (
+                      <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                    ) : null}
+                  </HapticPressable>
+                );
+              })}
+            </View>
+          </View>
 
-          <View className="mt-auto pt-8">
-            <ThemedButton
-              title={saving ? "Saving…" : "Continue"}
-              onPress={save}
-              disabled={!valid || available === false || saving}
-            />
+          <View className="mt-auto pb-5 pt-5">
+            {error ? (
+              <Typography
+                weight="500"
+                className="mb-3 text-center text-sm text-red-600"
+              >
+                {error}
+              </Typography>
+            ) : null}
+            <HapticPressable
+              disabled={!canContinue}
+              onPress={() => void finishSetup()}
+              style={{
+                alignItems: "center",
+                backgroundColor: canContinue
+                  ? "#111111"
+                  : "rgba(17,17,17,0.10)",
+                borderRadius: 22,
+                height: 60,
+                justifyContent: "center",
+              }}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Typography
+                  weight="600"
+                  className={
+                    canContinue ? "text-lg text-white" : "text-lg text-black/30"
+                  }
+                >
+                  Continue to Ferry
+                </Typography>
+              )}
+            </HapticPressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
