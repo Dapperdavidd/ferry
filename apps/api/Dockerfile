@@ -6,7 +6,7 @@ COPY apps/api/package.json apps/api/package.json
 # The lockfile covers every workspace, so npm ci needs the mobile manifest to validate it; nothing of it is installed.
 COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages packages
-RUN npm ci --workspace @ferry/api --no-audit --no-fund --ignore-scripts
+RUN npm ci --workspace @ferry/api --legacy-peer-deps --no-audit --no-fund --ignore-scripts
 COPY apps/api apps/api
 RUN npm --workspace @ferry/api run build
 
