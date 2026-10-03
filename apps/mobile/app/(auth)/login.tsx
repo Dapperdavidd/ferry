@@ -35,7 +35,7 @@ function WelcomeScreen() {
 
   return (
     <View className="flex-1">
-      <GradientBackground />
+      <CharcoalBackground />
 
       <View className="flex-1 justify-between px-8 py-16">
         <View className="h-full flex-1 justify-center">
@@ -43,9 +43,11 @@ function WelcomeScreen() {
         </View>
 
         <View className="h-full flex-1 justify-end">
-          <Typography weight="700" className="text-5xl text-white">
-            Ferry
-          </Typography>
+          <Image
+            source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
+            className="h-16 w-20"
+            resizeMode="contain"
+          />
           <Typography
             weight="500"
             className="my-[18px] w-full max-w-[300px] text-3xl text-white"
@@ -55,13 +57,13 @@ function WelcomeScreen() {
           <View className="mb-10">
             <Typography
               weight="500"
-              className="w-full max-w-[311px] text-lg text-[#8FE5F6]"
+              className="w-full max-w-[311px] text-lg text-white/55"
             >
               Settled in a second, on Monad.
             </Typography>
             <Typography
               weight="500"
-              className="w-full max-w-[311px] text-lg text-[#8FE5F6]"
+              className="w-full max-w-[311px] text-lg text-white/55"
             >
               Your face is the only key.
             </Typography>
@@ -107,22 +109,25 @@ function WelcomeScreen() {
   );
 }
 
-const GradientBackground = () => (
+const CharcoalBackground = () => (
   <>
     <Image
       source={require("@/assets/images/onboarding/blue-blur-1.png")}
       className="absolute bottom-[58px] left-0 h-[468px] w-full"
       resizeMode="stretch"
+      tintColor="#303030"
     />
     <Image
       source={require("@/assets/images/onboarding/blue-blur-2.png")}
       className="absolute bottom-[-17px] left-0 h-[468px] w-full"
       resizeMode="cover"
+      tintColor="#181818"
     />
     <Image
       source={require("@/assets/images/onboarding/blue-blur-3.png")}
       className="absolute bottom-[-134px] left-0 h-[468px] w-full"
       resizeMode="cover"
+      tintColor="#080808"
     />
   </>
 );
