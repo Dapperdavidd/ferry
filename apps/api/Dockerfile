@@ -17,9 +17,8 @@ COPY --from=build /repo/node_modules node_modules
 COPY --from=build /repo/apps/api/node_modules apps/api/node_modules
 COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY --from=build /repo/apps/api/drizzle apps/api/drizzle
-COPY apps/api/drizzle.config.ts apps/api/package.json apps/api/
-COPY apps/api/src/db/schema.ts apps/api/src/db/schema.ts
+COPY apps/api/package.json apps/api/
 WORKDIR /repo/apps/api
 EXPOSE 8000
-# Migrations run on every start; drizzle-kit skips the ones already applied.
-CMD ["sh", "-c", "npx drizzle-kit migrate && node dist/main"]
+# Migrations run on every start through drizzle-orm's migrator (plain JS); applied ones are skipped.
+CMD ["sh", "-c", "node dist/migrate && node dist/main"]
