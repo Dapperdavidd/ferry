@@ -31,6 +31,7 @@
   "packageManager": "npm@10.9.2",
   "workspaces": [
     "apps/mobile",
+    "apps/api",
     "packages/*"
   ],
   "dependencies": {

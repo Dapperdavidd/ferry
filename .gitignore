@@ -98,3 +98,4 @@ packages/smart-account/test/fixtures/program-config.json
 *.orig
 *.rej
 *.bak
+apps/api/.relayer-address
