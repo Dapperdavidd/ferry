@@ -25,6 +25,7 @@ import {
   type TypedData,
 } from "@/utils/apiClient";
 import { AppError } from "@/utils/errors";
+import { toSignable } from "@/utils/typedData";
 import { formatAmount, truncateAddress } from "@/utils/helper";
 import { numberToRaw, AUSD_DECIMALS } from "@/utils/balances";
 import { PasskeyFailure } from "@/lib/mera";
@@ -154,7 +155,7 @@ export default function ConfirmScreen() {
         try {
           show("identity");
           signature = await authorize((signer) =>
-            signer.signTypedData(prep.typedData as never)
+            signer.signTypedData(toSignable(prep.typedData) as never)
           );
         } catch (err) {
           if (err instanceof PasskeyFailure && err.kind === "cancelled") {

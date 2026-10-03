@@ -25,6 +25,7 @@ import {
   rawToNumber,
 } from "@/utils/balances";
 import { AppError } from "@/utils/errors";
+import { toSignable } from "@/utils/typedData";
 
 /**
  * Cash out: AUSD → the recipient currency through Agora's Instant Settlement
@@ -102,7 +103,7 @@ export default function CashoutScreen() {
         quoteId: quote.quoteId,
       });
       const signature = await authorize((signer) =>
-        signer.signTypedData(prepared.typedData as never)
+        signer.signTypedData(toSignable(prepared.typedData) as never)
       );
       const submitted = await apiClient.submitCashout({
         intentId: prepared.intentId,
