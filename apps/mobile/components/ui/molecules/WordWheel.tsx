@@ -20,9 +20,9 @@ const MOVE_MS = 500;
 const MOVE_EASING = Easing.bezier(0.77, 0, 0.175, 1);
 
 const WORDS = [
-  { label: "Save", icon: "shield-checkmark", color: "#38BDF8" },
-  { label: "Earn", icon: "bar-chart", color: "#F97316" },
-  { label: "Spend", icon: "card", color: "#8B5CF6" },
+  { label: "Send", icon: "paper-plane", color: "#38BDF8" },
+  { label: "Receive", icon: "arrow-down-circle", color: "#22C55E" },
+  { label: "Cash out", icon: "cash", color: "#F97316" },
   { label: "Invest", icon: "trending-up", color: "#6366F1" },
   { label: "Pay", icon: "flash", color: "#EF4444" },
 ] as const;

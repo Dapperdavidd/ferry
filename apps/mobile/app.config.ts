@@ -10,9 +10,16 @@ import base from "./app.json";
 export default (): ExpoConfig => {
   const expo = base.expo as unknown as ExpoConfig;
   const rpId = process.env.FERRY_RP_ID ?? "ferry.money";
+  // A development-signed build fetches the association file from the domain itself instead of
+  // Apple's CDN, which can lag hours. Store builds ignore the flag. The phone must have
+  // Settings > Developer > Associated Domains Development on.
+  const production = process.env.EAS_BUILD_PROFILE === "production";
+  const domain = production
+    ? `webcredentials:${rpId}`
+    : `webcredentials:${rpId}?mode=developer`;
   return {
     ...expo,
-    ios: { ...expo.ios, associatedDomains: [`webcredentials:${rpId}`] },
+    ios: { ...expo.ios, associatedDomains: [domain] },
     extra: { ...expo.extra, rpId },
   };
 };
