@@ -99,3 +99,7 @@ packages/smart-account/test/fixtures/program-config.json
 *.rej
 *.bak
 apps/api/.relayer-address
+contracts/lib/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
