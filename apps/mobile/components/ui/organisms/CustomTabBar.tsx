@@ -1,38 +1,27 @@
-import React, { useState } from "react";
+import React from "react";
 import { View } from "react-native";
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import HapticPressable from "../atoms/HapticPressable";
 import History from "../atoms/icons/history";
 import Home from "../atoms/icons/home";
 import Settings from "../atoms/icons/settings";
-import { ActionPill } from "../molecules";
-import HapticPressable from "../atoms/HapticPressable";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
-import { ActionMenu } from "./ActionMenu";
-
-import { BlurView } from "expo-blur";
-import { useSegments } from "expo-router";
-import { cn } from "@/utils/cn";
+import { Typography } from "../atoms/Typography";
 
 const iconMappings = {
   index: Home,
-  settings: Settings,
   history: History,
-} as Record<string, React.FC<{ isActive?: boolean }>>;
+  settings: Settings,
+} as Record<string, React.FC<{ isActive?: boolean; size?: number }>>;
 
-const fabShadow = {
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.3,
-  shadowRadius: 4.65,
-  elevation: 8,
+const shadowStyle = {
+  shadowColor: "#000000",
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.08,
+  shadowRadius: 18,
+  elevation: 7,
 };
 
 export function CustomTabBar({
@@ -40,174 +29,85 @@ export function CustomTabBar({
   descriptors,
   navigation,
 }: BottomTabBarProps) {
-  // Expo Router's typed-route segment tuple comes from the gitignored
-  // `.expo/types`, absent in CI; treat segments as a plain string array so
-  // depth checks type-check without the generated route types.
   const segments = useSegments() as string[];
-  const [isActionMenuVisible, setIsActionMenuVisible] = useState(false);
-  const readOnly = false;
-
-  const fabScale = useSharedValue(1);
-  const fabOpacity = useSharedValue(1);
-
-  const isHome = segments[0] === "(tabs)" && segments[1] === undefined;
+  const insets = useSafeAreaInsets();
   const isSettingsSubPage =
     segments[0] === "(tabs)" &&
     segments[1] === "settings" &&
     segments[2] !== undefined;
 
-  React.useEffect(() => {
-    fabOpacity.value = withTiming(isActionMenuVisible ? 0 : 1, {
-      duration: 200,
-    });
-  }, [isActionMenuVisible, fabOpacity]);
-
-  const fabStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: fabScale.value }],
-      opacity: fabOpacity.value,
-    };
-  });
-
-  if (isSettingsSubPage) {
-    return null;
-  }
-
-  const handleFabPress = () => {
-    fabScale.value = withSequence(
-      withTiming(0.9, { duration: 100 }),
-      withSpring(1, { damping: 15, stiffness: 200 })
-    );
-
-    setIsActionMenuVisible(true);
-  };
+  if (isSettingsSubPage) return null;
 
   return (
-    <>
-      <ContainerWrapper withBlur={!isHome}>
-        <ActionPill
-          items={state.routes.map((route, index) => {
-            const { options } = descriptors[route.key];
-            const isFocused = state.index === index;
+    <View
+      className="absolute left-4 right-4 z-[2] flex-row rounded-[30px] border border-black/[0.06] bg-white p-1.5"
+      style={[shadowStyle, { bottom: insets.bottom + 8 }]}
+    >
+      {state.routes.map((route, index) => {
+        const { options } = descriptors[route.key];
+        const isFocused = state.index === index;
+        const Icon = iconMappings[route.name];
+        const label = options.title ?? route.name;
 
-            const onPress = () => {
-              const event = navigation.emit({
-                type: "tabPress",
-                target: route.key,
-                canPreventDefault: true,
-              });
+        const onPress = () => {
+          const event = navigation.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
 
-              if (event.defaultPrevented) return;
+          if (event.defaultPrevented) return;
 
-              // A tab lands on the tab, not on wherever it was left. Settings
-              // is the only one with a stack under it, and something that deep
-              // links into that stack (the home banner does) otherwise leaves
-              // the tab pointing at a sub-screen with no way back to the list.
-              if (route.name === "settings") {
-                (
-                  navigation.navigate as unknown as (
-                    name: string,
-                    params: { screen: string }
-                  ) => void
-                )(route.name, { screen: "index" });
-                return;
-              }
-              if (!isFocused) navigation.navigate(route.name);
-            };
+          if (route.name === "settings") {
+            (
+              navigation.navigate as unknown as (
+                name: string,
+                params: { screen: string }
+              ) => void
+            )(route.name, { screen: "index" });
+            return;
+          }
+          if (!isFocused) navigation.navigate(route.name);
+        };
 
-            const onLongPress = () => {
+        return (
+          <HapticPressable
+            key={route.key}
+            accessibilityRole="button"
+            accessibilityState={isFocused ? { selected: true } : {}}
+            accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
+            feedback="selection"
+            onPress={onPress}
+            onLongPress={() =>
               navigation.emit({
                 type: "tabLongPress",
                 target: route.key,
-              });
-            };
-
-            return {
-              icon: iconMappings[route.name],
-              onPress,
-              onLongPress,
-              isActive: isFocused,
-              accessibilityLabel: options.tabBarAccessibilityLabel,
-              testID: options.title,
-            };
-          })}
-          containerStyle={
-            isHome
-              ? {
-                  backgroundColor: "transparent",
-                  borderWidth: 1,
-                  borderColor: "#fff",
-                  shadowColor: "transparent",
-                }
-              : {}
-          }
-        />
-
-        {isHome && (
-          // REANIMATED-EXCEPTION
-          <Animated.View
-            className="absolute right-4 top-3 z-[2]"
-            style={fabStyle}
+              })
+            }
+            style={{
+              alignItems: "center",
+              backgroundColor: isFocused ? "#F2F2EF" : "transparent",
+              borderRadius: 24,
+              flex: 1,
+              gap: 2,
+              height: 50,
+              justifyContent: "center",
+            }}
           >
-            <HapticPressable
-              className={cn(
-                "h-[50px] w-[50px] items-center justify-center rounded-[28px] bg-black",
-                readOnly && "opacity-30"
-              )}
-              // PLATFORM-SHADOW
-              style={fabShadow}
-              onPress={handleFabPress}
-              disabled={readOnly}
-              accessibilityLabel={
-                readOnly ? "Sign in with your passkey to send" : "Actions"
+            {Icon ? <Icon isActive={isFocused} size={20} /> : null}
+            <Typography
+              weight="600"
+              className={
+                isFocused
+                  ? "text-[10px] text-black"
+                  : "text-[10px] text-black/35"
               }
             >
-              <Ionicons name="add" size={28} color="white" />
-            </HapticPressable>
-          </Animated.View>
-        )}
-      </ContainerWrapper>
-
-      <ActionMenu
-        visible={isActionMenuVisible}
-        onClose={() => setIsActionMenuVisible(false)}
-      />
-    </>
+              {label}
+            </Typography>
+          </HapticPressable>
+        );
+      })}
+    </View>
   );
 }
-
-const ContainerWrapper = ({
-  children,
-  withBlur,
-}: {
-  children: React.ReactNode;
-  withBlur?: boolean;
-}) => {
-  const insets = useSafeAreaInsets();
-  const bottom = insets.bottom + 8;
-  if (!withBlur) {
-    return (
-      <View
-        className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
-        // MEASURED-LAYOUT (safe-area inset)
-        style={{ bottom }}
-      >
-        {children}
-      </View>
-    );
-  }
-  // No `blurMethod` here on purpose: this BlurView has no blurTarget, so
-  // Android has always fallen back to no blur, and naming the method only
-  // earned a warning on every mount. iOS blurs natively either way.
-  return (
-    <BlurView
-      intensity={10}
-      tint="light"
-      className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
-      // MEASURED-LAYOUT (safe-area inset)
-      style={{ bottom }}
-    >
-      {children}
-    </BlurView>
-  );
-};
