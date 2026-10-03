@@ -8,7 +8,9 @@ import { ErrorEnvelopeFilter } from "./common/errors";
 import { ConfigModule } from "./config/config.module";
 import { DbModule } from "./db/db.module";
 import { HealthModule } from "./health/health.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 import { UsersModule } from "./users/users.module";
+import { WalletModule } from "./wallet/wallet.module";
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { UsersModule } from "./users/users.module";
     ChainModule,
     AuthModule,
     UsersModule,
+    NotificationsModule,
+    WalletModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
