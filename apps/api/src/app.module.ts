@@ -8,7 +8,9 @@ import { ErrorEnvelopeFilter } from "./common/errors";
 import { ConfigModule } from "./config/config.module";
 import { DbModule } from "./db/db.module";
 import { HealthModule } from "./health/health.module";
+import { IndexerModule } from "./indexer/indexer.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { TransfersModule } from "./transfers/transfers.module";
 import { UsersModule } from "./users/users.module";
 import { WalletModule } from "./wallet/wallet.module";
 
@@ -24,6 +26,8 @@ import { WalletModule } from "./wallet/wallet.module";
     UsersModule,
     NotificationsModule,
     WalletModule,
+    TransfersModule,
+    IndexerModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
