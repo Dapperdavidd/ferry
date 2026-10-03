@@ -115,19 +115,19 @@ const CharcoalBackground = () => (
       source={require("@/assets/images/onboarding/blue-blur-1.png")}
       className="absolute bottom-[58px] left-0 h-[468px] w-full"
       resizeMode="stretch"
-      tintColor="#303030"
+      tintColor="#626262"
     />
     <Image
       source={require("@/assets/images/onboarding/blue-blur-2.png")}
       className="absolute bottom-[-17px] left-0 h-[468px] w-full"
       resizeMode="cover"
-      tintColor="#181818"
+      tintColor="#474747"
     />
     <Image
       source={require("@/assets/images/onboarding/blue-blur-3.png")}
       className="absolute bottom-[-134px] left-0 h-[468px] w-full"
       resizeMode="cover"
-      tintColor="#080808"
+      tintColor="#303030"
     />
   </>
 );
