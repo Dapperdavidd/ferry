@@ -1,193 +1,84 @@
-# xend
+# Ferry
 
-The Xend monorepo: the consumer app, the NestJS backend behind it, the fee-payer relayer, the hosted Pay with Xend checkout, and the packages they share. Turborepo over npm workspaces (`apps/*`, `packages/*`; root package name `xend`).
+Send dollars across borders from your phone, settled in a second.
 
-What Xend is, and the vocabulary the code uses, is in [`CONTEXT.md`](./CONTEXT.md). Decisions are in [`docs/adr/`](./docs/adr/README.md).
+Ferry is a native mobile app on **Monad**. The money is **AUSD**, Agora's dollar. The
+account is one **Mera passkey**: Face ID creates it and signs every payment, with no seed
+phrase, no wallet app and no custody server. Sends are gasless (the user signs an
+authorization, Ferry's relayer pays), and cash-outs settle atomically through **Agora's
+Instant Settlement** pool.
 
-## Workspaces
+Built for Agora's "Best Cross-Border Payments App on Monad" bounty at Monad Metropolis,
+October 2026. The design is in
+[`docs/specs/cross-border-ausd-design.md`](docs/specs/cross-border-ausd-design.md).
 
-| Workspace                    | Package                   | What it is                                                                                                                                                     |
-| ---------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/mobile`                | `@xend/mobile`            | Expo React Native app for Android and iOS. See [`apps/mobile/README.md`](./apps/mobile/README.md).                                                             |
-| `apps/backend`               | `@xend/backend`           | NestJS API. Consumer auth, Accounts, Spends, recovery, Pay with Xend (merchants, intents, settlement, webhooks), console. Drizzle over Postgres, Redis, Kafka. |
-| `apps/relayer`               | `@xend/relayer`           | Fee-payer relayer. A separate NestJS deployable holding only the fee-payer key, its own RPC access and an internal-auth secret (ADR 0012).                     |
-| `apps/checkout`              | `@xend/checkout`          | The hosted checkout popup at pay.xend.global. Vite and React.                                                                                                  |
-| `packages/smart-account`     | `@xend/smart-account`     | Owned adapter over the Squads Smart Account Program: address derivation and unsigned transaction builders for the 2-of-3 signer set (ADR 0025).                |
-| `packages/checkout-core`     | `@xend/checkout-core`     | Pay with Xend button and result relay. Framework-agnostic, zero runtime dependencies, size-gated.                                                              |
-| `packages/checkout-react`    | `@xend/checkout-react`    | React wrapper for the button.                                                                                                                                  |
-| `packages/checkout-protocol` | `@xend/checkout-protocol` | The versioned postMessage protocol between button and popup (ADR 0016).                                                                                        |
-| `packages/ui`                | `@xend/ui`                | Shared React component library.                                                                                                                                |
-| `packages/eslint-config`     | `@xend/eslint-config`     | Shared ESLint configs.                                                                                                                                         |
-| `packages/typescript-config` | `@xend/typescript-config` | Shared tsconfigs.                                                                                                                                              |
+## Where it comes from
+
+Ferry starts from [Xend](https://github.com/EntrypointLabs/xend-global), a consumer
+payments app on Solana: its Expo shell, design system, send/receive/activity flows and
+backend patterns. Everything that touched money or identity is new: Mera passkeys replace
+Privy, Turnkey and a 2-of-3 Squads account; Monad and AUSD replace Solana and USDC;
+Agora's Instant Settlement and API replace merchant checkout. The first commit is the
+untouched Xend snapshot, so the whole refit is reviewable as a diff from it.
+
+## What is real and what is mocked
+
+|                                                                 |                                                                                                                                                                                                    |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                               |
+| Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live; accounts, routes and transactions run in mock mode because Agora issues API keys only to KYB'd institutions and has no sandbox. |
+| Fiat payout after the pool                                      | Mocked and labelled as such. On testnet the pool's other side is Agora's test token CTK; on mainnet the same leg is AUSD to USDC.                                                                  |
+
+## Layout
+
+Turborepo over npm workspaces.
+
+| Workspace      | What it is                                                                                                                               |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/mobile`  | The Expo React Native app (`@ferry/mobile`). iOS first; Android shares the code.                                                         |
+| `apps/api`     | The NestJS API on Postgres (`@ferry/api`): auth, handles, transfers, cash-outs, the relayer, the indexer, the Agora client. In progress. |
+| `apps/site`    | The static site at `ferry.money`, which also serves the passkey association files.                                                       |
+| `apps/backend` | Xend's old backend, kept only until `apps/api` has ported what it needs, then deleted. Not part of the install.                          |
+| `packages/*`   | Shared ESLint and TypeScript configs.                                                                                                    |
 
 ## Prerequisites
 
-- Node `>=18`, npm 10 (`packageManager` is pinned in `package.json`)
-- Docker, for Redis and Kafka
-- Postgres 17, either natively installed or through the optional compose profile
-- Mobile: Android Studio and a JDK for `android`, Xcode for `ios`
+- Node 24 or newer (Mera requires it), npm 10
+- Docker, for Postgres (`npm run db:up`)
+- For the app: Xcode and a real iPhone on iOS 18.4 or newer. Passkeys with PRF do not run in
+  the simulator, and Expo Go cannot load the native modules; use a development build.
 
 ## Setup
 
-```
+```sh
 npm install
-cp apps/backend/.env.example apps/backend/.env
-cp apps/relayer/.env.example apps/relayer/.env
 cp apps/mobile/example.env apps/mobile/.env
 ```
 
-Fill in the secrets each file marks as blank. `postinstall` runs `patch-package`.
+Fill in `EXPO_PUBLIC_BACKEND_URL` once the API is running.
 
-## Running everything
+## Running
 
-```
-npm run dev
-```
-
-`scripts/dev.mjs` checks the app ports, starts Docker Desktop on macOS if needed,
-starts Redis and Kafka (including topic seeding), checks Postgres, and builds the
-shared packages. It then launches every app with a `dev` script: backend, relayer,
-checkout, merchant portal, and mobile (Expo Metro).
-
-The combined launch sets the backend to **8000** and routes the merchant and
-checkout development proxies to that port. Once `GET /health` reports healthy,
-it starts **`ngrok http 8000`**. Install the ngrok CLI and configure your authtoken
-once before running this command. Existing app environment files and secrets
-must be configured first; include `apps/merchant/.env.example` in your setup.
-
-Use the URL printed by ngrok for clients that need a public backend URL (including
-`EXPO_PUBLIC_BACKEND_URL` in the mobile environment if applicable); the launcher does
-not rewrite environment files. Open the mobile development build on a device or
-simulator after Metro starts.
-
-The default interactive terminal opens **Turbo's TUI**, with a pane for each app
-and `//#dev:ngrok`. Select an app with the arrow keys; use Turbo's on-screen
-interaction controls to send keyboard input to Expo. Ctrl+C stops the suite.
-An app or ngrok failure stays visible in its pane while the other apps keep
-running. The ngrok pane waits up to three minutes for backend health before
-opening the tunnel. Docker infrastructure remains running.
-
-The launcher explicitly selects your **system ngrok** from PATH, skipping npm's
-`node_modules/.bin` directories. Expo bundles an older ngrok v2 there; it does
-not use the same configuration as the ngrok v3 installed in your terminal.
-Your system ngrok retains its normal home directory, configuration, and token.
-Use `NGROK_BIN=/absolute/path/to/ngrok` to override the binary, and `NGROK_CONFIG`
-for a non-default configuration file. The selected binary is printed at startup;
-credentials are never printed by the launcher.
-
-Add `--log` to use plain streaming output and tee it to `/tmp/xend-dev.log`, or
-use `npm run dev -- --log /tmp/my-xend-dev.log` for a custom path. Non-interactive
-terminals also use streaming output. Interactive runs keep the TUI attached to
-the terminal; use `--log` when you need a combined log file.
-
-Infra on its own:
-
-```
-npm run infra         # redis + kafka + topic seeding
-npm run infra:logs
-npm run infra:down
-npm run infra:reset   # wipe volumes and start clean
+```sh
+npm run db:up                     # Postgres in Docker
+npm run dev:api                   # the API, once apps/api exists
+npm run dev:mobile                # Metro
+npm --workspace @ferry/mobile run ios   # a development build on the connected iPhone
 ```
 
-Postgres is not part of `npm run infra` because a native install usually already holds 5432. `docker compose --profile postgres up -d --wait postgres` runs the bundled one; its `DATABASE_URL` is `postgresql://postgres:postgres@localhost:5432/fuse`.
+## Checks
 
-One service at a time, with infra already up:
-
-```
-npx turbo run dev --filter=@xend/backend
-npx turbo run dev --filter=@xend/relayer
-npx turbo run dev --filter=@xend/checkout
-npx turbo run dev --filter=@xend/merchant
-npm run dev:mobile    # expo start in its own terminal, so the keyboard shortcuts work
-```
-
-## Ports
-
-| Service          | Port                                       | Where it is set                                                                                                                        |
-| ---------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend          | 8000 in the suite; 8008 standalone         | `PORT` in `apps/backend/.env.example`, and what `apps/checkout/vite.config.ts` proxies to                                              |
-| Relayer          | 8787                                       | `PORT` in `apps/relayer/.env.example`, the Joi default in `apps/relayer/src/config/config.module.ts`, `docker-compose.yml`             |
-| Checkout         | 5173, or 443 with a `www.xend.global` cert | `apps/checkout/vite.config.ts` serves on whichever mkcert cert is present under `apps/checkout/certs/`; with none, Vite's default 5173 |
-| Merchant         | 5174                                       | `apps/merchant/vite.config.ts`                                                                                                         |
-| ngrok inspector  | 4040                                       | ngrok default; tunnel forwards to backend port 8000                                                                                    |
-| Metro            | 8081                                       | Expo default; `scripts/dev.mjs` refuses to start if it is taken                                                                        |
-| Redis            | 6379                                       | `docker-compose.yml`                                                                                                                   |
-| Kafka            | 9092                                       | `docker-compose.yml`                                                                                                                   |
-| Postgres         | 5432                                       | `docker-compose.yml` (profile `postgres`)                                                                                              |
-| Backend debugger | 9229                                       | `nest start --debug`                                                                                                                   |
-| Relayer debugger | 9230                                       | `nest start --debug=9230`                                                                                                              |
-
-Two committed values disagree with this table and are worth knowing about: `apps/backend/.env.example` sets `RELAYER_URL=http://localhost:8080`, and `apps/checkout/vite.config.ts` proxies `/checkout` and `/v1` to `http://localhost:8008` when serving over TLS. Set `RELAYER_URL` to port 8787 and set `XEND_BACKEND_URL` to the backend URL when running standalone apps on another port. The combined launcher sets it automatically.
-
-The backend tees its own output to `/tmp/xend-backend.log`, colour-free.
-
-## Build, check, test
-
-```
-npm run build          # turbo run build
+```sh
 npm run check-types
 npm run lint
 npm run test
-npm run format
 ```
 
-Filter any task with `--filter`, for example `npx turbo run test --filter=@xend/backend`. The checkout packages are released with changesets: `npm run changeset`, `npm run version-packages`, `npm run release`.
-
-## Running in production
-
-The backend ships as a container built from the repo root, because it imports
-`@xend/smart-account` from the workspace:
-
-```
-docker build -f apps/backend/Dockerfile -t xend-backend .
-```
-
-It runs as `node`, listens on `PORT` (8008 in the example env), and answers
-`GET /health` with the state of Postgres and Redis. The image carries its own
-migrations, so apply them before the first request reaches a new release:
-
-```
-npm --workspace @xend/backend run db:migrate
-```
-
-### Environment
-
-`NODE_ENV` has no default and the process refuses to boot without it. Nine more
-values are required everywhere:
-
-`DATABASE_URL`, `KAFKA_BROKERS`, `PRIVY_APP_ID`, `PRIVY_APP_SECRET`,
-`HELIUS_API_KEY`, `HELIUS_RPC_URL`, `HELIUS_WEBHOOK_SECRET`,
-`INTERNAL_API_SECRET`, `CHECKOUT_RETURN_URL_SECRET`.
-
-Set these for a real deployment as well:
-
-| Key                                                              | Why                                                                                                                                                                |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `TRUST_PROXY`                                                    | Defaults to 1 in production. Without it every caller behind the load balancer shares one address and the per-address limits stop meaning anything.                 |
-| `SOLANA_CLUSTER` and `EXPO_PUBLIC_USDC_MINT_ADDRESS`             | Checked against each other at boot. A cluster and a mint from different networks refuse to start.                                                                  |
-| `RECOVERY_VAULT_PROVIDER`                                        | `env` or `aws-kms`. Under `aws-kms` the sealed recovery keys are wrapped by a data key from `RECOVERY_VAULT_KMS_KEY_ID`.                                           |
-| `RECOVERY_VAULT_KEYS`                                            | The key ring, current key first, as `id:base64`. Rows sealed under an older id keep opening. `RECOVERY_VAULT_KEY` remains the single-key form.                     |
-| `SETTLEMENT_AUTHORITY_PROVIDER` and `RELAYER_FEE_PAYER_PROVIDER` | Same switch for the two signing keys. Under `aws-kms` each reads a KMS ciphertext rather than a raw secret.                                                        |
-| `JWT_SECRETS`                                                    | A comma list where the first signs and every entry verifies, so the signing key can rotate without ending live sessions. `JWT_SECRET` remains the single-key form. |
-| `METRICS_SECRET`                                                 | Required in production. `GET /metrics` is refused without it.                                                                                                      |
-| `TEST_DASHBOARD_SECRET`                                          | The test dashboard is never registered in production, and needs this header elsewhere.                                                                             |
-| `CHECKOUT_DEV_FORCE_SETTLE`                                      | Must be false in production; the process refuses to boot otherwise. Test-mode intents settle through the sandbox instead.                                          |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`                                    | Turns tracing on. Absent, the tracer never starts.                                                                                                                 |
-
-`apps/backend/.env.example` carries every key the configuration validates,
-including the ones with defaults.
-
-Use an operator script to produce a KMS ciphertext for a secret:
-
-```
-npm --workspace @xend/backend exec tsx scripts/kms-encrypt-secret.ts
-```
+The one test that must never be allowed to fail is
+`apps/mobile/lib/mera/__tests__/derive.test.ts`: it pins the key derivation to Mera's
+published vector. If it fails, addresses have changed and users cannot reach their money.
 
 ## Docs
 
-- `CONTEXT.md`: the domain glossary
-- `docs/adr/`: architectural decision records
-- `docs/specs/`: specs, runbooks and handoffs; each carries a status line at the top
-- `docs/xend-master-context.md`: the briefing for outward-facing material
-- `docs/agents/`: how agents use the issue tracker, triage labels and domain docs
-- `apps/mobile/STYLE.md`: the mobile styling rules
+- [`docs/specs/cross-border-ausd-design.md`](docs/specs/cross-border-ausd-design.md): the system design, the on-chain facts it rests on, and the open decisions.
+- [`docs/adr/`](docs/adr/README.md): Xend's architecture decisions. Those about styling and the Expo setup still apply; those about Solana, Squads, Privy and Pay with Xend are history.

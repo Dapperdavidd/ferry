@@ -1,15 +1,18 @@
-# xend
+# Ferry
 
-## Agent skills
+Read `README.md` first, then `docs/specs/cross-border-ausd-design.md`. The design doc is the
+source of truth for the architecture and the API contract; `apps/mobile/utils/apiClient.ts`
+is that contract in code.
 
-### Issue tracker
+Conventions:
 
-Issues live in Linear, team **XEND** (key `XEN`) at https://linear.app/entrypoint/team/XEN/active. Use the Linear MCP tools (`mcp__claude_ai_Linear__*`). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Category labels reuse existing Linear labels (`Bug`, `Feature`). State labels use canonical names (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). Create them in Linear on first use. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context. The domain glossary is `CONTEXT.md` at the repo root, and decisions are ADRs under `docs/adr/` (index in `docs/adr/README.md`). `docs/xend-master-context.md` is the briefing for outward-facing material. See `docs/agents/domain.md`.
+- Commit messages are detailed and in plain prose: what changed and why, no bullet lists of
+  files, no attribution trailers.
+- Keep comments sparse. A comment explains a non-obvious invariant or a choice that looks
+  like a bug; it never restates the code.
+- Never change the passkey relying party (`ferry.money`) or the key derivation in
+  `apps/mobile/lib/mera/derive.ts`. The pinned-vector test guards the second.
+- Secrets never enter the repo or a public env var. The relayer key lives in the API's
+  environment only.
+- `apps/backend` is Xend's old backend, kept for porting only. Do not build on it.
+- The ADRs under `docs/adr/` are Xend's; the styling and Expo ones still apply.
