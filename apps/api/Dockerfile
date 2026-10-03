@@ -4,7 +4,7 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages packages
-RUN npm ci --workspace @ferry/api --include-workspace-root=false --no-audit --no-fund --ignore-scripts
+RUN npm ci --workspace @ferry/api --no-audit --no-fund --ignore-scripts
 COPY apps/api apps/api
 RUN npm --workspace @ferry/api run build
 
