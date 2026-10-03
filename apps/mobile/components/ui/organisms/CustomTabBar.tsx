@@ -1,6 +1,12 @@
-import React from "react";
-import { View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  type LayoutChangeEvent,
+  StyleSheet,
+  View,
+} from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { BlurView } from "expo-blur";
 import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,12 +22,12 @@ const iconMappings = {
   settings: Settings,
 } as Record<string, React.FC<{ isActive?: boolean; size?: number }>>;
 
-const shadowStyle = {
+const activeShadow = {
   shadowColor: "#000000",
-  shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: 0.08,
-  shadowRadius: 18,
-  elevation: 7,
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.06,
+  shadowRadius: 16,
+  elevation: 4,
 };
 
 export function CustomTabBar({
@@ -31,83 +37,148 @@ export function CustomTabBar({
 }: BottomTabBarProps) {
   const segments = useSegments() as string[];
   const insets = useSafeAreaInsets();
+  const [barWidth, setBarWidth] = useState(0);
+  const position = useRef(new Animated.Value(state.index)).current;
   const isSettingsSubPage =
     segments[0] === "(tabs)" &&
     segments[1] === "settings" &&
     segments[2] !== undefined;
 
+  useEffect(() => {
+    Animated.spring(position, {
+      toValue: state.index,
+      speed: 18,
+      bounciness: 2,
+      useNativeDriver: true,
+    }).start();
+  }, [position, state.index]);
+
   if (isSettingsSubPage) return null;
 
+  const tabWidth = barWidth / state.routes.length;
+
   return (
-    <View
-      className="absolute left-4 right-4 z-[2] flex-row rounded-[30px] border border-black/[0.06] bg-white p-1.5"
-      style={[shadowStyle, { bottom: insets.bottom + 8 }]}
+    <BlurView
+      intensity={26}
+      tint="light"
+      style={[
+        styles.chrome,
+        {
+          paddingBottom: Math.max(insets.bottom, 8),
+        },
+      ]}
     >
-      {state.routes.map((route, index) => {
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
-        const Icon = iconMappings[route.name];
-        const label = options.title ?? route.name;
+      <View
+        className="relative flex-row"
+        style={{ height: 68 }}
+        onLayout={(event: LayoutChangeEvent) =>
+          setBarWidth(event.nativeEvent.layout.width)
+        }
+      >
+        {tabWidth > 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              activeShadow,
+              styles.activeTab,
+              {
+                width: tabWidth,
+                transform: [
+                  {
+                    translateX: Animated.multiply(position, tabWidth),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
 
-        const onPress = () => {
-          const event = navigation.emit({
-            type: "tabPress",
-            target: route.key,
-            canPreventDefault: true,
-          });
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const isFocused = state.index === index;
+          const Icon = iconMappings[route.name];
+          const label = options.title ?? route.name;
 
-          if (event.defaultPrevented) return;
+          const onPress = () => {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
 
-          if (route.name === "settings") {
-            (
-              navigation.navigate as unknown as (
-                name: string,
-                params: { screen: string }
-              ) => void
-            )(route.name, { screen: "index" });
-            return;
-          }
-          if (!isFocused) navigation.navigate(route.name);
-        };
+            if (event.defaultPrevented) return;
 
-        return (
-          <HapticPressable
-            key={route.key}
-            accessibilityRole="button"
-            accessibilityState={isFocused ? { selected: true } : {}}
-            accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
-            feedback="selection"
-            onPress={onPress}
-            onLongPress={() =>
-              navigation.emit({
-                type: "tabLongPress",
-                target: route.key,
-              })
+            if (route.name === "settings") {
+              (
+                navigation.navigate as unknown as (
+                  name: string,
+                  params: { screen: string }
+                ) => void
+              )(route.name, { screen: "index" });
+              return;
             }
-            style={{
-              alignItems: "center",
-              backgroundColor: isFocused ? "#F2F2EF" : "transparent",
-              borderRadius: 24,
-              flex: 1,
-              gap: 2,
-              height: 50,
-              justifyContent: "center",
-            }}
-          >
-            {Icon ? <Icon isActive={isFocused} size={20} /> : null}
-            <Typography
-              weight="600"
-              className={
-                isFocused
-                  ? "text-[10px] text-black"
-                  : "text-[10px] text-black/35"
+            if (!isFocused) navigation.navigate(route.name);
+          };
+
+          return (
+            <HapticPressable
+              key={route.key}
+              accessibilityRole="button"
+              accessibilityState={isFocused ? { selected: true } : {}}
+              accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
+              feedback="selection"
+              scaleOnPress={false}
+              onPress={onPress}
+              onLongPress={() =>
+                navigation.emit({
+                  type: "tabLongPress",
+                  target: route.key,
+                })
               }
+              style={{
+                alignItems: "center",
+                flex: 1,
+                gap: 4,
+                height: 68,
+                justifyContent: "center",
+              }}
             >
-              {label}
-            </Typography>
-          </HapticPressable>
-        );
-      })}
-    </View>
+              {Icon ? <Icon isActive={isFocused} size={24} /> : null}
+              <Typography
+                weight={isFocused ? "700" : "600"}
+                className={
+                  isFocused
+                    ? "text-[13px] text-black"
+                    : "text-[13px] text-black/35"
+                }
+              >
+                {label}
+              </Typography>
+            </HapticPressable>
+          );
+        })}
+      </View>
+    </BlurView>
   );
 }
+
+const styles = StyleSheet.create({
+  chrome: {
+    backgroundColor: "rgba(247,247,244,0.88)",
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    position: "absolute",
+    right: 0,
+    zIndex: 2,
+  },
+  activeTab: {
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 34,
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    top: 0,
+  },
+});

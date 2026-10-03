@@ -30,7 +30,7 @@ import {
 } from "@/utils/activity";
 import { apiClient, apiErrorMessage } from "@/utils/apiClient";
 
-const HOME_CHROME_SPACE = 88;
+const HOME_CHROME_SPACE = 116;
 
 function HomeScreenContent() {
   const router = useRouter();
@@ -106,11 +106,11 @@ function HomeScreenContent() {
         className="flex-1"
         contentContainerStyle={{
           paddingBottom: HOME_CHROME_SPACE,
-          paddingHorizontal: 20,
+          paddingHorizontal: 22,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="flex-row items-center justify-between pb-4 pt-2">
+        <View className="flex-row items-center justify-between pb-5 pt-2">
           <HapticPressable
             feedback="selection"
             accessibilityLabel="Open settings"
@@ -124,7 +124,7 @@ function HomeScreenContent() {
               width: 42,
             }}
           >
-            <Typography weight="600" className="text-base text-[#111111]">
+            <Typography weight="700" className="text-base text-[#111111]">
               {initial}
             </Typography>
           </HapticPressable>
@@ -146,8 +146,8 @@ function HomeScreenContent() {
           </HapticPressable>
         </View>
 
-        <View className="items-center pb-5 pt-2">
-          <Typography weight="500" className="text-sm text-black/45">
+        <View className="items-center pb-8 pt-3">
+          <Typography weight="600" className="text-[15px] text-black/45">
             Spendable
           </Typography>
           {isBalanceError ? (
@@ -170,20 +170,20 @@ function HomeScreenContent() {
           ) : (
             <BalanceView
               amount={isBalanceLoading ? "…" : totalDisplay}
-              weight="600"
-              className="tracking-[-2px] text-[#111111]"
-              style={{ fontSize: size(44), lineHeight: size(53) }}
+              weight="700"
+              className="tracking-[-2.3px] text-[#111111]"
+              style={{ fontSize: size(50), lineHeight: size(59) }}
             />
           )}
           <View className="mt-1 flex-row items-center gap-2 rounded-full bg-black/[0.04] py-2 pl-2 pr-3">
             <TokenMark token="AUSD" size={22} />
-            <Typography weight="600" className="text-sm text-black/55">
+            <Typography weight="700" className="text-sm text-black/55">
               {testnet ? "AUSD · Testnet" : "AUSD"}
             </Typography>
           </View>
         </View>
 
-        <View className="mb-4 flex-row gap-3">
+        <View className="mb-6 flex-row gap-3">
           <HomeAction
             label={testnet ? "Add funds" : "Receive"}
             icon={funding ? undefined : testnet ? "add" : "arrow-down"}
@@ -203,9 +203,9 @@ function HomeScreenContent() {
           style={{
             backgroundColor: "#191A18",
             borderRadius: 28,
-            height: compact ? 142 : 156,
+            height: compact ? 150 : 166,
             justifyContent: "space-between",
-            marginBottom: 22,
+            marginBottom: 30,
             overflow: "hidden",
             padding: 20,
           }}
@@ -216,7 +216,7 @@ function HomeScreenContent() {
               <View className="size-8 items-center justify-center rounded-full bg-white/10">
                 <Ionicons name="globe-outline" size={17} color="#FFFFFF" />
               </View>
-              <Typography weight="600" className="text-sm text-white/70">
+              <Typography weight="700" className="text-sm text-white/70">
                 Cash out
               </Typography>
             </View>
@@ -226,19 +226,19 @@ function HomeScreenContent() {
           </View>
           <View>
             <Typography
-              weight="600"
-              className="text-[25px] tracking-[-0.8px] text-white"
+              weight="700"
+              className="text-[26px] tracking-[-0.8px] text-white"
             >
               Cash out to {homeCurrency}
             </Typography>
-            <Typography weight="500" className="mt-1 text-xs text-white/45">
+            <Typography weight="600" className="mt-1 text-xs text-white/45">
               AUSD settled instantly on Monad
             </Typography>
           </View>
         </HapticPressable>
 
         <View className="mb-1 flex-row items-center justify-between">
-          <Typography weight="600" className="text-lg text-[#111111]">
+          <Typography weight="700" className="text-xl text-[#111111]">
             Recent activity
           </Typography>
           <HapticPressable
@@ -329,7 +329,7 @@ function HomeAction({
         flex: 1,
         flexDirection: "row",
         gap: 8,
-        height: 58,
+        height: 62,
         justifyContent: "center",
       }}
     >
@@ -345,7 +345,7 @@ function HomeAction({
             />
           ) : null}
           <Typography
-            weight="600"
+            weight="700"
             className={
               primary ? "text-base text-white" : "text-base text-[#111111]"
             }
