@@ -116,3 +116,51 @@ export function arrivalLabel(row: TransferRow): string {
     : "";
   return `Received ${amount} ${symbol}${from}`;
 }
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function pad(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/**
+ * When a row happened, the way a person says it: "Today, 13:37",
+ * "Yesterday, 09:12", "Sep 30, 14:02", and once it is from another year the
+ * year takes the place of the time.
+ */
+export function formatActivityTime(
+  iso: string,
+  now: Date = new Date()
+): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+  if (sameDay(at, now)) return `Today, ${time}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(at, yesterday)) return `Yesterday, ${time}`;
+  const day = `${MONTHS[at.getMonth()]} ${at.getDate()}`;
+  if (at.getFullYear() === now.getFullYear()) return `${day}, ${time}`;
+  return `${day}, ${at.getFullYear()}`;
+}

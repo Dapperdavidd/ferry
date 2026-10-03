@@ -42,3 +42,33 @@ export function formatAmount(value: number, maxDecimals = 2): string {
     maximumFractionDigits: maxDecimals,
   });
 }
+
+/**
+ * A balance in a home currency, whole units by default: "₦39,500". The code
+ * stands in for the symbol when the engine has none for it.
+ */
+export function formatLocalMoney(
+  value: number,
+  currency: string,
+  maxDecimals = 0
+): string {
+  try {
+    return value.toLocaleString("en-US", {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxDecimals,
+    });
+  } catch {
+    return `${currency} ${value.toLocaleString("en-US", {
+      maximumFractionDigits: maxDecimals,
+    })}`;
+  }
+}
+
+/** The symbol alone ("₦", "$"), or the code when there is no symbol. */
+export function currencySymbol(currency: string): string {
+  const symbol = formatLocalMoney(0, currency).replace(/[\d.,\s]/g, "");
+  return symbol || currency;
+}

@@ -136,6 +136,15 @@ export const TransferListResponseSchema = z.object({
 });
 export type TransferListResponse = z.infer<typeof TransferListResponseSchema>;
 
+export const FxQuoteSchema = z.object({
+  currency: z.string(),
+  /** Units of the currency per US dollar, as a decimal string. */
+  rate: z.string(),
+  source: z.string(),
+  asOf: z.string(),
+});
+export type FxQuote = z.infer<typeof FxQuoteSchema>;
+
 export const CashoutQuoteSchema = z.object({
   quoteId: z.string(),
   amountInRaw: rawAmount,
@@ -358,6 +367,23 @@ class BackendClient {
         status: z.enum(["PENDING", "CONFIRMED"]),
       }),
       body
+    );
+  }
+
+  // FX
+  getFxQuote(currency: string) {
+    if (SEED_DEMO) {
+      return Promise.resolve({
+        currency,
+        rate: currency === "NGN" ? "1580.00" : "1",
+        source: "seed",
+        asOf: new Date().toISOString(),
+      });
+    }
+    return this.request(
+      "GET",
+      `/fx/quote?currency=${encodeURIComponent(currency)}`,
+      FxQuoteSchema
     );
   }
 
