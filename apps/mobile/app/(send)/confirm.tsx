@@ -18,11 +18,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { AUSD_ADDRESS, monad } from "@/lib/chain";
+import { checkAuthorization } from "@/utils/authorization";
 import {
   apiClient,
   apiErrorCode,
   type PrepareTransferResponse,
-  type TypedData,
 } from "@/utils/apiClient";
 import { AppError } from "@/utils/errors";
 import { toSignable } from "@/utils/typedData";
@@ -40,32 +40,6 @@ type SendFlow = {
 
 const SENT_DWELL_MS = 700;
 const NETWORK_BUSY = "The network is busy. Nothing has been sent.";
-
-/**
- * The typed data the API hands back must say exactly what the ticket showed.
- * A mismatch is never signed, whatever the server says.
- */
-export function checkAuthorization(
-  typedData: TypedData,
-  expected: { from: string; to: string; amountRaw: string }
-): string | null {
-  const message = typedData.message as Record<string, unknown>;
-  const domain = typedData.domain as Record<string, unknown>;
-  if (typedData.primaryType !== "TransferWithAuthorization")
-    return "wrong message type";
-  if (
-    String(domain.verifyingContract ?? "").toLowerCase() !==
-    AUSD_ADDRESS.toLowerCase()
-  )
-    return "wrong token";
-  if (Number(domain.chainId) !== monad.id) return "wrong chain";
-  if (String(message.from ?? "").toLowerCase() !== expected.from.toLowerCase())
-    return "wrong sender";
-  if (String(message.to ?? "").toLowerCase() !== expected.to.toLowerCase())
-    return "wrong recipient";
-  if (String(message.value ?? "") !== expected.amountRaw) return "wrong amount";
-  return null;
-}
 
 export default function ConfirmScreen() {
   const textColor = useThemeColor({}, "text");
@@ -135,6 +109,8 @@ export default function ConfirmScreen() {
           from: address,
           to: prep.recipient.address,
           amountRaw,
+          token: AUSD_ADDRESS,
+          chainId: monad.id,
         });
         if (
           mismatch ||
