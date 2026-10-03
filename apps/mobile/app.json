@@ -25,7 +25,8 @@
         "NSFaceIDUsageDescription": "Ferry uses Face ID to unlock the app and confirm payments."
       },
       "associatedDomains": ["webcredentials:ferry.money"],
-      "bundleIdentifier": "money.ferry.app"
+      "bundleIdentifier": "money.ferry.app",
+      "appleTeamId": "YCKKUWB4WD"
     },
     "android": {
       "fonts": [
