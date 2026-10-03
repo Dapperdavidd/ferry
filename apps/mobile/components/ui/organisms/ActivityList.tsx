@@ -85,7 +85,7 @@ export const ActivityList = memo(
             </View>
           ) : null
         }
-        contentContainerClassName="pb-[70px]"
+        contentContainerClassName="pb-[112px]"
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
         windowSize={10}
