@@ -15,7 +15,7 @@ import {
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { ApiError } from "../common/errors";
-import { HealthController } from "../health/health.controller";
+import { HealthService } from "../health/health.service";
 import { ausdAbi, faucetAbi } from "./abi";
 import { settlementAbi } from "../cashout/settlement.abi";
 import { type Authorization, type TokenDomain } from "./authorization";
@@ -48,7 +48,7 @@ export class ChainService implements OnModuleInit {
 
   constructor(
     config: ConfigService,
-    private readonly health: HealthController,
+    private readonly health: HealthService,
   ) {
     this.chainId = config.getOrThrow<number>("MONAD_CHAIN_ID");
     const urls = config
