@@ -14,7 +14,7 @@ import { UsersService } from "../users/users.service";
 
 const TICK_MS = 2_000;
 const CURSOR_KEY = "indexer:ausd_cursor";
-const MAX_BLOCKS_PER_TICK = 200n;
+const MAX_BLOCKS_PER_TICK = 100n;
 const START_BEHIND = 20n;
 const PENDING_TIMEOUT_MS = 10 * 60_000;
 
