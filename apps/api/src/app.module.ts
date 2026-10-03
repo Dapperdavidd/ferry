@@ -6,6 +6,8 @@ import { ErrorEnvelopeFilter } from "./common/errors";
 import { ConfigModule } from "./config/config.module";
 import { DbModule } from "./db/db.module";
 import { HealthModule } from "./health/health.module";
+import { AuthModule } from "./auth/auth.module";
+import { UsersModule } from "./users/users.module";
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { HealthModule } from "./health/health.module";
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     HealthModule,
+    AuthModule,
+    UsersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
