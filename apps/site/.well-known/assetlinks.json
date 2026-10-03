@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "money.ferry.app",
+      "sha256_cert_fingerprints": [
+        "A6:1F:8E:05:F6:10:C2:6E:D9:03:18:11:B7:A2:87:26:B5:60:40:81:87:99:10:CF:CA:AD:A5:B3:FC:49:8E:45"
+      ]
+    }
+  }
+]
