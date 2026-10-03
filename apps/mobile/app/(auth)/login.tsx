@@ -4,13 +4,15 @@ import { Ionicons } from "@expo/vector-icons";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
-import { WordWheel } from "@/components/ui/molecules/WordWheel";
 import { WithScreenTheme } from "@/components/WithScreenTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/utils/toast";
 
+type Stage = "welcome" | "security";
+
 function WelcomeScreen() {
   const { createAccount, signIn, account, authError } = useAuth();
+  const [stage, setStage] = useState<Stage>("welcome");
   const [busy, setBusy] = useState<"create" | "signIn" | null>(null);
 
   const run = async (which: "create" | "signIn") => {
@@ -27,108 +29,146 @@ function WelcomeScreen() {
           );
       }
     } catch {
-      // The context keeps the message; a cancelled Face ID is not an error.
+      // The auth context owns errors; cancelling Face ID is intentionally silent.
     } finally {
       setBusy(null);
     }
   };
 
-  return (
-    <View className="flex-1">
-      <GradientBackground />
+  if (stage === "security" && !account) {
+    return (
+      <View className="flex-1 bg-[#F6F5F1] px-6 pb-8 pt-16">
+        <HapticPressable
+          onPress={() => setStage("welcome")}
+          className="size-11 items-center justify-center rounded-full border border-black/10"
+        >
+          <Ionicons name="arrow-back" size={20} color="#050505" />
+        </HapticPressable>
 
-      <View className="flex-1 justify-between px-8 py-16">
-        <View className="h-full flex-1 justify-center">
-          <WordWheel />
+        <View className="mt-14 size-20 items-center justify-center rounded-[24px] bg-black">
+          <Ionicons name="scan-outline" size={34} color="#FFFFFF" />
         </View>
 
-        <View className="h-full flex-1 justify-end">
-          <Typography weight="700" className="text-5xl text-white">
-            Ferry
-          </Typography>
-          <Typography
-            weight="500"
-            className="my-[18px] w-full max-w-[300px] text-3xl text-white"
-          >
-            Send dollars across borders
-          </Typography>
-          <View className="mb-10">
-            <Typography
-              weight="500"
-              className="w-full max-w-[311px] text-lg text-[#8FE5F6]"
-            >
-              Settled in a second, on Monad.
-            </Typography>
-            <Typography
-              weight="500"
-              className="w-full max-w-[311px] text-lg text-[#8FE5F6]"
-            >
-              Your face is the only key.
-            </Typography>
-          </View>
+        <Typography
+          weight="700"
+          className="mt-8 max-w-[340px] text-[46px] leading-[49px] text-black"
+        >
+          Your face is your key.
+        </Typography>
+        <Typography
+          weight="500"
+          className="mt-5 max-w-[330px] text-[17px] leading-6 text-black/50"
+        >
+          Ferry creates a private account secured by your device. No password,
+          no seed phrase, and no one else can move your money.
+        </Typography>
+
+        <View className="mt-auto">
           {authError ? (
-            <Typography weight="500" className="mb-4 text-base text-[#FFB4B4]">
+            <Typography weight="500" className="mb-4 text-sm text-red-600">
               {authError}
             </Typography>
           ) : null}
-          <View className="gap-2.5">
-            <HapticPressable
-              onPress={() => run(account ? "signIn" : "create")}
-              disabled={busy !== null}
-              className="w-full flex-row items-center justify-center gap-3 rounded-full border border-white bg-white p-4"
-            >
-              {busy ? (
-                <ActivityIndicator color="#000000" />
-              ) : (
-                <Ionicons name="scan-outline" size={22} color="#000000" />
-              )}
-              <Typography weight="600" className="text-lg text-black">
-                {account
-                  ? "Unlock with Face ID"
-                  : "Create account with Face ID"}
-              </Typography>
-            </HapticPressable>
-
-            <HapticPressable
-              onPress={() => run(account ? "create" : "signIn")}
-              disabled={busy !== null}
-              className="w-full flex-row items-center justify-center gap-3 rounded-full border border-white/20 bg-white/20 p-4"
-            >
-              <Typography weight="600" className="text-lg text-white">
-                {account
-                  ? "Use a different account"
-                  : "I already have an account"}
-              </Typography>
-            </HapticPressable>
-          </View>
+          <PrimaryButton
+            label="Create with Face ID"
+            busy={busy === "create"}
+            onPress={() => run("create")}
+          />
+          <Typography className="mt-4 text-center text-xs leading-5 text-black/40">
+            Your account stays yours. Ferry never receives your private key.
+          </Typography>
         </View>
       </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-[#F6F5F1] px-6 pb-8 pt-16">
+      <View className="flex-row items-center gap-3">
+        <Image
+          source={require("@/assets/images/logo/ferry-mark-black-2048.png")}
+          className="size-9"
+          resizeMode="contain"
+        />
+        <Typography weight="700" className="text-xl text-black">
+          Ferry
+        </Typography>
+      </View>
+
+      <View className="flex-1 justify-center pb-8">
+        <View className="mb-12 h-52 items-center justify-center rounded-[36px] bg-black">
+          <Image
+            source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
+            className="size-36"
+            resizeMode="contain"
+          />
+        </View>
+        <Typography
+          weight="700"
+          className="max-w-[350px] text-[48px] leading-[50px] tracking-[-1.5px] text-black"
+        >
+          Dollars cross borders here.
+        </Typography>
+        <Typography
+          weight="500"
+          className="mt-5 max-w-[330px] text-[17px] leading-6 text-black/50"
+        >
+          Send and receive digital dollars in seconds. No bank delays. No wallet
+          setup.
+        </Typography>
+      </View>
+
+      {authError ? (
+        <Typography weight="500" className="mb-4 text-sm text-red-600">
+          {authError}
+        </Typography>
+      ) : null}
+      <PrimaryButton
+        label={account ? "Unlock with Face ID" : "Get started"}
+        busy={busy !== null}
+        onPress={() => (account ? void run("signIn") : setStage("security"))}
+      />
+      <HapticPressable
+        onPress={() => void run(account ? "create" : "signIn")}
+        disabled={busy !== null}
+        className="mt-2.5 items-center justify-center rounded-full py-4"
+      >
+        <Typography weight="600" className="text-base text-black/50">
+          {account ? "Use a different account" : "I already have an account"}
+        </Typography>
+      </HapticPressable>
     </View>
   );
 }
 
-const GradientBackground = () => (
-  <>
-    <Image
-      source={require("@/assets/images/onboarding/blue-blur-1.png")}
-      className="absolute bottom-[58px] left-0 h-[468px] w-full"
-      resizeMode="stretch"
-    />
-    <Image
-      source={require("@/assets/images/onboarding/blue-blur-2.png")}
-      className="absolute bottom-[-17px] left-0 h-[468px] w-full"
-      resizeMode="cover"
-    />
-    <Image
-      source={require("@/assets/images/onboarding/blue-blur-3.png")}
-      className="absolute bottom-[-134px] left-0 h-[468px] w-full"
-      resizeMode="cover"
-    />
-  </>
-);
+function PrimaryButton({
+  label,
+  busy,
+  onPress,
+}: {
+  label: string;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <HapticPressable
+      onPress={onPress}
+      disabled={busy}
+      className="h-16 w-full flex-row items-center justify-center rounded-full bg-black"
+    >
+      {busy ? (
+        <ActivityIndicator color="#FFFFFF" />
+      ) : (
+        <Typography weight="600" className="text-[17px] text-white">
+          {label}
+        </Typography>
+      )}
+    </HapticPressable>
+  );
+}
 
 export default WithScreenTheme(WelcomeScreen, {
-  backgroundColor: "#FFFFFF",
-  textColor: "#000000",
-  primaryColor: "#000000",
+  backgroundColor: "#F6F5F1",
+  textColor: "#050505",
+  primaryColor: "#050505",
 });
