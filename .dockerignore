@@ -4,6 +4,7 @@
 **/.env.*
 !**/.env.example
 apps/mobile
+!apps/mobile/package.json
 apps/backend
 apps/site
 contracts
