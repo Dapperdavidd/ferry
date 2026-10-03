@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtModule, type JwtSignOptions } from "@nestjs/jwt";
+import { AgoraModule } from "../agora/agora.module";
 import { UsersModule } from "../users/users.module";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
@@ -9,6 +10,7 @@ import { AuthService } from "./auth.service";
 @Module({
   imports: [
     UsersModule,
+    AgoraModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

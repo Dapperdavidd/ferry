@@ -19,10 +19,11 @@ import {
 } from "../chain/authorization";
 import { stableSwapPairAbi } from "../chain/abi";
 import { ChainService } from "../chain/chain.service";
+import { AgoraService } from "../agora/agora.service";
 import { ApiError } from "../common/errors";
 import { AUSD_DECIMALS, ausdToUsd, formatUnits } from "../common/money";
 import { DbService } from "../db/db.service";
-import { cashouts, intents, transfers } from "../db/schema";
+import { cashouts, intents, transfers, users } from "../db/schema";
 import { FxService } from "../fx/fx.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { decodeQuote, encodeQuote, type QuoteTerms } from "./quote";
@@ -50,6 +51,7 @@ export class CashoutService {
     private readonly chain: ChainService,
     private readonly fx: FxService,
     private readonly notifications: NotificationsService,
+    private readonly agora: AgoraService,
     config: ConfigService,
   ) {
     this.quoteSecret = config
@@ -355,6 +357,19 @@ export class CashoutService {
         amount,
         reference: payoutRef,
       });
+      const [owner] = await this.db.client
+        .select({ address: users.address })
+        .from(users)
+        .where(eq(users.id, row.userId))
+        .limit(1);
+      if (owner) {
+        void this.agora.recordRedeem({
+          address: owner.address as Address,
+          amountAusd: ausdToUsd(row.amountInRaw),
+          reference: payoutRef,
+          txHash: row.txHash ?? undefined,
+        });
+      }
       this.logger.log(`cashout.paid_out id=${row.id} ref=${payoutRef}`);
     }
   }

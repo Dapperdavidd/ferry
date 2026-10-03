@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { AgoraModule } from "./agora/agora.module";
 import { AuthModule } from "./auth/auth.module";
 import { CashoutModule } from "./cashout/cashout.module";
 import { FxModule } from "./fx/fx.module";
@@ -32,6 +33,7 @@ import { WalletModule } from "./wallet/wallet.module";
     IndexerModule,
     FxModule,
     CashoutModule,
+    AgoraModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

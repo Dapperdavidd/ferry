@@ -7,6 +7,7 @@ import { getAddress, type Address } from "viem";
 import { ApiError } from "../common/errors";
 import { DbService } from "../db/db.service";
 import { authChallenges } from "../db/schema";
+import { AgoraService } from "../agora/agora.service";
 import { UsersService } from "../users/users.service";
 import {
   buildChallengeMessage,
@@ -28,6 +29,7 @@ export class AuthService {
     private readonly db: DbService,
     private readonly jwt: JwtService,
     private readonly users: UsersService,
+    private readonly agora: AgoraService,
     config: ConfigService,
   ) {
     this.secrets = config
@@ -106,6 +108,8 @@ export class AuthService {
       );
 
     const { user, isNew } = await this.users.findOrCreateByAddress(address);
+    // Agora learns about the wallet in the background; sign-in never waits on it.
+    if (isNew) void this.agora.onboardWallet(user.address);
     const token = await this.jwt.signAsync(
       { sub: user.id, address: user.address as Address } satisfies TokenClaims,
       { secret: this.secrets[0] },
