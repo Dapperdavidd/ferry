@@ -15,7 +15,14 @@ export function Keypad({ onKeyPress }: KeypadProps) {
   const renderKey = (key: string) => (
     <HapticPressable
       key={key}
-      className="m-0.5 flex-1 items-center justify-evenly py-2"
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={
+        key === "backspace" ? "Delete" : key === "." ? "Decimal point" : key
+      }
+      feedback="selection"
+      pressedScale={0.94}
+      className="m-0.5 min-h-11 flex-1 items-center justify-evenly py-2"
       onPress={() => onKeyPress(key)}
     >
       {key === "backspace" ? (

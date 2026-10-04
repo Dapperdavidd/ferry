@@ -9,6 +9,7 @@ import { noStoreMiddleware, securityHeadersMiddleware } from "./common/headers";
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
+    rawBody: true,
   });
   app.useBodyParser("json", { limit: "256kb" });
   const config = app.get(ConfigService);

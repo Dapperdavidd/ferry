@@ -1,6 +1,6 @@
 # Ferry
 
-Send dollars across borders from your phone, settled in a second.
+Send dollars from your phone and receive them in a wallet or local bank.
 
 Ferry is a native mobile app on **Monad**. The money is **AUSD**, Agora's dollar. The
 account is one **Mera passkey**: Face ID creates it and signs every payment, with no seed
@@ -23,11 +23,11 @@ untouched Xend snapshot, so the whole refit is reviewable as a diff from it.
 
 ## What is real and what is mocked
 
-|                                                                 |                                                                                                                                                                                                    |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                               |
-| Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live; accounts, routes and transactions run in mock mode because Agora issues API keys only to KYB'd institutions and has no sandbox. |
-| Fiat payout after the pool                                      | Mocked and labelled as such. On testnet the pool's other side is Agora's test token CTK; on mainnet the same leg is AUSD to USDC.                                                                  |
+|                                                                 |                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                                                                                                                             |
+| Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live. USDC deposit routes, accounts and transactions switch from a clearly labelled safe preview to the real API when Ferry has an approved Agora organisation key.                                                                 |
+| Fiat payout after the pool                                      | A production Yellow Card adapter now resolves bank accounts, prices the local payout, creates idempotent bank sends and consumes signed webhooks. It is disabled until Ferry has KYB credentials and a funded partner balance. Monad testnet still settles to CTK; mainnet settles AUSD to USDC. |
 
 ## Layout
 
@@ -41,6 +41,16 @@ Turborepo over npm workspaces.
 | `contracts`    | `FerrySettlement` (Foundry): the one-transaction cash-out through Agora's pool. Deployed on Monad testnet at `0x7056D0D544b95ff1c004A588C42dE52e22011Da9`.         |
 | `apps/backend` | Xend's old backend, kept only until `apps/api` has ported what it needs, then deleted. Not part of the install.                                                    |
 | `packages/*`   | Shared ESLint and TypeScript configs.                                                                                                                              |
+
+## Funding
+
+Testnet builds can request test AUSD from Agora's faucet. Production builds expose a
+reusable USDC → AUSD route for each Ferry wallet: the API registers the wallet with
+Agora, creates or retrieves its stablecoin mint route, and the app renders only the
+deposit networks and addresses Agora returns. Mock mode shows the complete flow but
+disables address copy and sharing so nobody can mistake a generated address for a live
+deposit. USD bank funding remains marked **Coming soon** until Ferry completes the
+additional banking and verification work.
 
 ## Prerequisites
 

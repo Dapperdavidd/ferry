@@ -1,7 +1,6 @@
-import { View } from "react-native";
+import { Text } from "react-native";
 import React from "react";
 import { Typography, TypographyProps } from "./ui/atoms/Typography";
-import { cn } from "@/utils/class";
 
 type BalanceViewProps = TypographyProps & {
   amount: string;
@@ -9,13 +8,19 @@ type BalanceViewProps = TypographyProps & {
 
 const BalanceView = ({ amount, ...props }: BalanceViewProps) => {
   const [integerPart, decimalPart] = amount.split(".");
+
   return (
-    <View className="flex-row items-baseline">
-      <Typography {...props}>${integerPart}.</Typography>
-      <Typography {...props} className={cn(props.className, "text-black/30")}>
-        {decimalPart || "00"}
-      </Typography>
-    </View>
+    <Typography
+      {...props}
+      adjustsFontSizeToFit
+      minimumFontScale={0.72}
+      numberOfLines={1}
+    >
+      ${integerPart}
+      {decimalPart !== undefined ? (
+        <Text className="text-black/30">.{decimalPart || "00"}</Text>
+      ) : null}
+    </Typography>
   );
 };
 

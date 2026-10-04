@@ -107,8 +107,8 @@ export class NotificationsService {
       await this.push.send(
         devices.map((d) => ({
           token: d.token,
-          title: "Cash-out sent",
-          body: `${params.amount} is on its way (test payout ${params.reference}).`,
+          title: "Money delivered",
+          body: `${params.amount} was sent to your bank · ${params.reference}`,
           data: { kind: "arrival" },
         })),
       );

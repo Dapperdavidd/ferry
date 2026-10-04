@@ -16,6 +16,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { TransfersModule } from "./transfers/transfers.module";
 import { UsersModule } from "./users/users.module";
 import { WalletModule } from "./wallet/wallet.module";
+import { PayoutModule } from "./payout/payout.module";
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { WalletModule } from "./wallet/wallet.module";
     IndexerModule,
     FxModule,
     CashoutModule,
+    PayoutModule,
     AgoraModule,
   ],
   providers: [

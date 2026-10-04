@@ -4,7 +4,6 @@ import {
   ModalOptionsList,
   ActionOption,
 } from "../../molecules/ModalOptionsList";
-import { useModalFlow } from "@/contexts/ModalFlowContext";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
 import { Image, View } from "react-native";
 import { Typography } from "@/components/ui/atoms/Typography";
@@ -22,14 +21,13 @@ export function ReceiveModal({
   onClose,
   onOpenQRCode,
 }: ReceiveModalProps) {
-  const { hideAllModals } = useModalFlow();
   // Null until the backend has answered with the Account. The option waits
   // rather than falling back to a signer's address, which is not where the
   // Consumer's money belongs.
   const address = useWalletAddress();
 
   const handleReceiveToWallet = () => {
-    hideAllModals();
+    onClose();
     onOpenQRCode();
   };
 

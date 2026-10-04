@@ -5,7 +5,6 @@ import {
   SectionList,
   TouchableOpacity,
   Linking,
-  type ImageSourcePropType,
 } from "react-native";
 import Constants from "expo-constants";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
@@ -26,6 +25,7 @@ import { useBalances } from "@/hooks/useBalances";
 import { useNotificationPreference } from "@/hooks/usePushRegistration";
 import { useWalletName } from "@/hooks/useWalletName";
 import { addressUrl, monad } from "@/lib/chain";
+import { cn } from "@/utils/cn";
 
 const SITE_URL = "https://ferry.money";
 const PRIVACY_POLICY_URL = `${SITE_URL}/privacy`;
@@ -54,7 +54,7 @@ export default function SettingsScreen() {
 
   type Item = {
     label: string;
-    icon: ImageSourcePropType | React.ReactNode;
+    icon: React.ReactNode;
     onPress: () => void;
     color?: string;
   };
@@ -64,17 +64,24 @@ export default function SettingsScreen() {
       data: [
         {
           label: user?.handle ? `@${user.handle}` : "Edit account",
-          icon: require("@/assets/icons/edit-wallet.png"),
+          icon: <Ionicons name="person-outline" size={19} color="#111111" />,
           onPress: () => setShowEditWallet(true),
         },
         {
           label: "Address book",
-          icon: require("@/assets/icons/address-book.png"),
+          icon: <Ionicons name="people-outline" size={19} color="#111111" />,
           onPress: () => router.push("/settings/address-book" as never),
         },
         {
+          label: user?.payoutReady ? "Bank account" : "Add bank account",
+          icon: <Ionicons name="business-outline" size={19} color="#111111" />,
+          onPress: () => router.push("/settings/payout-account" as never),
+        },
+        {
           label: "Notifications",
-          icon: require("@/assets/icons/notification.png"),
+          icon: (
+            <Ionicons name="notifications-outline" size={19} color="#111111" />
+          ),
           onPress: () => notificationsSheetRef.current?.present(),
         },
       ],
@@ -84,12 +91,12 @@ export default function SettingsScreen() {
       data: [
         {
           label: "Recovery phrase",
-          icon: require("@/assets/icons/keys.png"),
+          icon: <Ionicons name="key-outline" size={19} color="#111111" />,
           onPress: () => router.push("/settings/recovery-phrase" as never),
         },
         {
           label: `View on ${monad.name}`,
-          icon: require("@/assets/icons/wallet.png"),
+          icon: <Ionicons name="open-outline" size={19} color="#111111" />,
           onPress: () => address && Linking.openURL(addressUrl(address)),
         },
       ],
@@ -99,45 +106,60 @@ export default function SettingsScreen() {
       data: [
         {
           label: "Sign out",
-          icon: <Ionicons name="log-out-outline" size={22} color="#000000" />,
+          icon: <Ionicons name="log-out-outline" size={19} color="#111111" />,
           onPress: signOut,
         },
         {
           label: "Delete account",
-          icon: (
-            <Ionicons name="person-remove-outline" size={22} color="#F90101" />
-          ),
+          icon: <Ionicons name="trash-outline" size={19} color="#D14343" />,
           onPress: () => setShowDeleteAccount(true),
-          color: "#F90101",
+          color: "#D14343",
         },
       ],
     },
   ];
 
   return (
-    <ScreenLayout>
+    <ScreenLayout
+      className="bg-[#F7F7F4] px-5 pb-0 pt-0"
+      lightColor="#F7F7F4"
+      darkColor="#F7F7F4"
+    >
       <View className="w-full flex-1">
         <SectionList
-          ListHeaderComponent={<TabHeaderText>Settings</TabHeaderText>}
+          ListHeaderComponent={
+            <TabHeaderText className="pb-3 pt-2 text-[24px] tracking-[-0.7px]">
+              Settings
+            </TabHeaderText>
+          }
           sections={sections}
           keyExtractor={(item, index) => item.label + index}
-          renderItem={({ item }) => (
+          renderItem={({ item, index, section }) => (
             <SettingsItem
               label={item.label}
               icon={item.icon}
               onPress={item.onPress}
               color={item.color}
+              className={cn(
+                index === 0 && "rounded-t-[24px]",
+                index === section.data.length - 1
+                  ? "rounded-b-[24px]"
+                  : "border-b border-black/[0.045]"
+              )}
             />
           )}
           renderSectionHeader={({ section: { title } }) => (
-            <View className="mb-2 mt-6">
-              <Typography weight="500" className="text-lg text-black/40">
+            <View className="mb-2 mt-5 px-1">
+              <Typography
+                weight="700"
+                className="text-[11px] uppercase tracking-[1.25px] text-black/35"
+              >
                 {title}
               </Typography>
             </View>
           )}
           ListFooterComponent={
-            <View className="mt-8 items-center">
+            <View className="mt-7 items-center pb-3">
               <Image
                 source={require("@/assets/images/icon.png")}
                 className="mb-3 size-8 rounded-lg opacity-40"

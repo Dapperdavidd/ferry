@@ -273,13 +273,13 @@ function instructionsFor(
       },
     ];
   if (from === "stablecoin" && to === "ausd")
-    return [
-      {
-        chain: "monad",
-        depositAddress: addressFrom(`mint:${routeId}`),
+    return (["arbitrum", "base", "ethereum", "monad"] as const).map(
+      (chain) => ({
+        chain,
+        depositAddress: addressFrom(`mint:${chain}:${routeId}`),
         supportedCurrencies: ["usdc"],
-      },
-    ];
+      }),
+    );
   return null;
 }
 

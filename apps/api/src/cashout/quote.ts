@@ -1,6 +1,20 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 /** A quote is a signed statement, not a row: the id carries its terms and an HMAC over them. */
+export interface DirectDelivery {
+  kind: "direct";
+  recipientAddress: string;
+  handle: string;
+  displayName: string | null;
+  localCurrency: string;
+  country: string | null;
+  rail: "bank";
+  etaSeconds: number;
+  provider: "yellowcard";
+  bankName: string;
+  accountEnding: string;
+}
+
 export interface QuoteTerms {
   amountInRaw: string;
   outToken: string;
@@ -14,6 +28,7 @@ export interface QuoteTerms {
   fxRate: string | null;
   fxSource: string | null;
   expiresAt: string;
+  delivery?: DirectDelivery | null;
 }
 
 export function encodeQuote(terms: QuoteTerms, secret: string): string {

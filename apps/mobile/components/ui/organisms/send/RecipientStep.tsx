@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo, useCallback, memo } from "react";
 import {
+  Image,
   View,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -27,15 +28,36 @@ import { useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useContacts } from "@/hooks/useContacts";
 import { useRecentRecipients } from "@/hooks/useRecentRecipients";
-import { apiClient } from "@/utils/apiClient";
+import { apiClient, type DirectoryEntry } from "@/utils/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface RecipientStepProps {
   onClose: () => void;
-  onNext: (recipient: string, name?: string) => void;
+  onNext: (recipient: RecipientSelection) => void;
   onScanPress: () => void;
   recipient: string;
   setRecipient: (recipient: string) => void;
 }
+
+export interface RecipientSelection {
+  value: string;
+  address: string;
+  handle: string | null;
+  displayName: string | null;
+  homeCurrency: string | null;
+  country: string | null;
+  payoutReady: boolean;
+}
+
+const selectionFromDirectory = (entry: DirectoryEntry): RecipientSelection => ({
+  value: entry.handle,
+  address: entry.address,
+  handle: entry.handle,
+  displayName: entry.displayName,
+  homeCurrency: entry.homeCurrency,
+  country: entry.country,
+  payoutReady: entry.payoutReady,
+});
 
 const HANDLE = /^@?[a-z0-9_]{3,20}$/i;
 
@@ -60,6 +82,7 @@ export default memo(function RecipientStep({
 }: RecipientStepProps) {
   const inputRef = useRef<TextInput | null>(null);
   const debouncedRecipient = useDebounce(recipient, 400);
+  const { address } = useAuth();
   const { contacts } = useContacts();
   const savedAddresses = useMemo(
     () => contacts.map((c) => c.address),
@@ -71,16 +94,21 @@ export default memo(function RecipientStep({
     [recipients]
   );
 
-  const parsed = useMemo(
+  const parsed = useMemo(() => parseRecipient(recipient), [recipient]);
+  const debouncedParsed = useMemo(
     () => parseRecipient(debouncedRecipient),
     [debouncedRecipient]
   );
   const isHandle = parsed?.kind === "handle";
+  const lookupMatchesCurrent =
+    isHandle &&
+    debouncedParsed?.kind === "handle" &&
+    debouncedParsed.value === parsed.value;
 
   const { data: resolved, isLoading: isResolving } = useQuery({
-    queryKey: ["resolve-handle", parsed?.value],
-    queryFn: () => apiClient.resolveHandle(parsed!.value),
-    enabled: isHandle,
+    queryKey: ["resolve-handle", debouncedParsed?.value],
+    queryFn: () => apiClient.resolveHandle(debouncedParsed!.value),
+    enabled: debouncedParsed?.kind === "handle",
     retry: 1,
     staleTime: 60_000,
   });
@@ -90,14 +118,28 @@ export default memo(function RecipientStep({
     if (text && parseRecipient(text)) setRecipient(text.trim());
   };
 
-  const target = parsed?.kind === "address" ? parsed.value : resolved?.address;
+  const currentResolved = lookupMatchesCurrent ? resolved : undefined;
+  const target =
+    parsed?.kind === "address" ? parsed.value : currentResolved?.address;
+  const isSelf =
+    target !== undefined &&
+    address !== null &&
+    target.toLowerCase() === address.toLowerCase();
 
   const handleContinue = useCallback(() => {
-    if (!parsed) return;
-    if (parsed.kind === "address") onNext(parsed.value);
-    else if (resolved)
-      onNext(resolved.handle, resolved.displayName ?? undefined);
-  }, [parsed, resolved, onNext]);
+    if (!parsed || isSelf) return;
+    if (parsed.kind === "address")
+      onNext({
+        value: parsed.value,
+        address: parsed.value,
+        handle: null,
+        displayName: null,
+        homeCurrency: null,
+        country: null,
+        payoutReady: false,
+      });
+    else if (currentResolved) onNext(selectionFromDirectory(currentResolved));
+  }, [currentResolved, isSelf, onNext, parsed]);
 
   useEffect(() => {
     const timer = setTimeout(() => inputRef.current?.focus(), 300);
@@ -113,19 +155,28 @@ export default memo(function RecipientStep({
         label: "That isn't a handle or a Monad address",
       };
 
+    if (isSelf)
+      return {
+        isValid: false,
+        label: "That's your own Ferry account",
+        icon: (
+          <MaterialCommunityIcons name="alert-decagram" size={14} color="red" />
+        ),
+      };
+
     const sends = (target && sendsTo.get(target.toLowerCase())) ?? 0;
     const sendsLabel =
       sends === 0 ? "New recipient" : `${sends} send${sends === 1 ? "" : "s"}`;
 
     if (parsed.kind === "handle") {
-      if (isResolving) {
+      if (!lookupMatchesCurrent || isResolving) {
         return {
           isValid: true,
           label: "Looking up…",
           icon: <FontAwesome5 name="spinner" size={14} color="blue" />,
         };
       }
-      if (resolved === null) {
+      if (currentResolved === null) {
         return {
           isValid: false,
           label: `No one on Ferry is @${parsed.value}`,
@@ -138,10 +189,12 @@ export default memo(function RecipientStep({
           ),
         };
       }
-      if (resolved) {
+      if (currentResolved) {
         return {
           isValid: true,
-          label: `${resolved.displayName ?? `@${resolved.handle}`} · ${truncateAddress(resolved.address)} · ${sendsLabel}`,
+          label: currentResolved.payoutReady
+            ? `${currentResolved.payoutBank ?? `${currentResolved.homeCurrency} bank`} · •••• ${currentResolved.payoutAccountEnding ?? ""} · ${sendsLabel}`
+            : `Ferry wallet · ${sendsLabel}`,
           icon: (
             <MaterialCommunityIcons
               name="check-decagram"
@@ -165,34 +218,60 @@ export default memo(function RecipientStep({
         />
       ),
     };
-  }, [debouncedRecipient, parsed, isResolving, resolved, target, sendsTo]);
+  }, [
+    currentResolved,
+    debouncedRecipient,
+    isResolving,
+    isSelf,
+    lookupMatchesCurrent,
+    parsed,
+    sendsTo,
+    target,
+  ]);
 
   const isContinueDisabled =
-    !parsed || !isValid || (parsed.kind === "handle" && !resolved);
+    !parsed ||
+    !isValid ||
+    isSelf ||
+    (parsed.kind === "handle" && !currentResolved);
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View className="flex-1 bg-[#F0F0F0]">
-        <View className="mb-8 flex-row items-center justify-between px-4">
-          <View className="h-10 w-10" />
-          <TabHeaderText className="pb-0 text-center font-semibold">
-            Choose recipient
-          </TabHeaderText>
+      <View className="flex-1 bg-[#F7F7F4]">
+        <View className="mb-7 flex-row items-center justify-between px-6">
+          <View className="size-11" />
+          <View className="items-center">
+            <TabHeaderText className="pb-0 text-center font-bold">
+              Send money
+            </TabHeaderText>
+            <Typography weight="500" className="mt-0.5 text-xs text-black/35">
+              Ferry Direct or wallet address
+            </Typography>
+          </View>
           <TouchableOpacity
             onPress={onScanPress}
-            className="h-10 w-10 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Scan a Ferry QR code"
+            className="size-11 items-center justify-center rounded-full bg-white"
           >
-            <Ionicons name="scan-outline" size={24} color="black" />
+            <Ionicons name="scan-outline" size={21} color="#111111" />
           </TouchableOpacity>
         </View>
 
-        <View className="mx-4 mb-8 rounded-[24px] border border-white bg-[#F9F9F9] p-4">
+        <View className="mx-6 mb-9 rounded-[28px] bg-white p-5">
+          <Typography
+            weight="700"
+            className="mb-2 text-[10px] uppercase tracking-[1.5px] text-black/30"
+          >
+            Recipient
+          </Typography>
           <TouchableOpacity
             className="relative bg-transparent"
             onPress={() => inputRef.current?.focus()}
           >
             <BottomSheetTextInput
-              className="-ml-1 mb-1.5 w-[235px] py-0 text-base font-medium text-black/90"
+              accessibilityLabel="Ferry handle or wallet address"
+              className="-ml-1 mb-2 w-full py-0 pr-8 text-[22px] font-bold tracking-[-0.35px] text-black/90"
               placeholder="@handle or address"
               placeholderTextColor="#0000004D"
               value={recipient}
@@ -200,21 +279,20 @@ export default memo(function RecipientStep({
               autoCapitalize="none"
               autoCorrect={false}
               ref={inputRef}
-              style={{ fontFamily: "Inter_500Medium" }}
+              style={{ fontFamily: "Inter_700Bold" }}
               returnKeyType="go"
               onSubmitEditing={handleContinue}
               submitBehavior="blurAndSubmit"
-              multiline
             />
             <TouchableOpacity
               onPress={() => inputRef.current?.focus()}
-              className="mb-2.5 flex-row items-center justify-start gap-1"
+              className="mb-4 flex-row items-center justify-start gap-1.5"
             >
               {icon}
               <Typography
                 weight="600"
                 className={cn(
-                  "text-xs text-black/30",
+                  "text-[12px] text-black/35",
                   !isValid && "text-red-500"
                 )}
               >
@@ -234,9 +312,11 @@ export default memo(function RecipientStep({
 
           <View className="flex-row gap-2.5">
             <HapticPressable
+              accessibilityRole="button"
+              accessibilityLabel="Continue to enter amount"
               className={cn(
-                "rounded-full px-6 py-[8px]",
-                !isContinueDisabled ? "bg-black" : "bg-black/30"
+                "h-12 flex-1 items-center justify-center rounded-full",
+                !isContinueDisabled ? "bg-black" : "bg-black/20"
               )}
               onPress={handleContinue}
               disabled={isContinueDisabled}
@@ -247,13 +327,12 @@ export default memo(function RecipientStep({
             </HapticPressable>
 
             <HapticPressable
-              className="flex-row items-center gap-1 rounded-full bg-black/10 px-6 py-[8px]"
+              accessibilityRole="button"
+              accessibilityLabel="Paste recipient"
+              className="size-12 items-center justify-center rounded-full bg-black/[0.055]"
               onPress={handlePaste}
             >
-              <Ionicons name="document" size={16} color="black" />
-              <Typography weight="600" className="text-black">
-                Paste
-              </Typography>
+              <Ionicons name="document-outline" size={19} color="#111111" />
             </HapticPressable>
           </View>
         </View>
@@ -261,7 +340,10 @@ export default memo(function RecipientStep({
         <BottomSheetScrollView showsVerticalScrollIndicator={false}>
           {contacts.length > 0 && (
             <>
-              <Typography weight="600" className="mb-4 ml-5 text-lg">
+              <Typography
+                weight="700"
+                className="mb-4 ml-6 text-[21px] tracking-[-0.4px] text-black/55"
+              >
                 Address book
               </Typography>
               {contacts.map((contact) => (
@@ -269,9 +351,18 @@ export default memo(function RecipientStep({
                   key={contact.address}
                   title={contact.name}
                   subtitle={truncateAddress(contact.address)}
+                  direct={false}
                   onPress={() => {
                     setRecipient(contact.address);
-                    onNext(contact.address, contact.name);
+                    onNext({
+                      value: contact.address,
+                      address: contact.address,
+                      handle: null,
+                      displayName: contact.name,
+                      homeCurrency: null,
+                      country: null,
+                      payoutReady: false,
+                    });
                   }}
                 />
               ))}
@@ -281,9 +372,9 @@ export default memo(function RecipientStep({
           {recipients.length > 0 && (
             <>
               <Typography
-                weight="600"
+                weight="700"
                 className={cn(
-                  "mb-4 ml-5 text-lg",
+                  "mb-4 ml-6 text-[21px] tracking-[-0.4px] text-black/55",
                   contacts.length > 0 && "mt-4"
                 )}
               >
@@ -298,10 +389,24 @@ export default memo(function RecipientStep({
                       : truncateAddress(entry.address)
                   }
                   subtitle={`${entry.sends} send${entry.sends === 1 ? "" : "s"}`}
-                  onPress={() => {
+                  direct={Boolean(entry.handle)}
+                  onPress={async () => {
                     const value = entry.handle ?? entry.address;
                     setRecipient(value);
-                    onNext(value);
+                    if (entry.handle) {
+                      const found = await apiClient.resolveHandle(entry.handle);
+                      if (found) onNext(selectionFromDirectory(found));
+                      return;
+                    }
+                    onNext({
+                      value,
+                      address: entry.address,
+                      handle: null,
+                      displayName: null,
+                      homeCurrency: null,
+                      country: null,
+                      payoutReady: false,
+                    });
                   }}
                 />
               ))}
@@ -316,30 +421,47 @@ export default memo(function RecipientStep({
 function RecipientRow({
   title,
   subtitle,
+  direct,
   onPress,
 }: {
   title: string;
   subtitle: string;
+  direct: boolean;
   onPress: () => void;
 }) {
   return (
     <TouchableOpacity
-      className="mx-5 mb-4 flex-row items-center"
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${direct ? "Ferry Direct" : "Wallet"}. ${subtitle}`}
+      className="mx-6 mb-3 min-h-[82px] flex-row items-center rounded-[24px] bg-white px-4 py-3.5"
       onPress={onPress}
     >
       <View
-        className="mr-3 h-12 w-12 items-center justify-center rounded-full border bg-gray-200/60"
-        style={{ borderColor: "#F2F4F7" }}
+        className={cn(
+          "mr-3 size-12 items-center justify-center rounded-full",
+          direct ? "bg-[#20211E]" : "bg-black/[0.045]"
+        )}
       >
-        <MaterialIcons name="wallet" size={22} color="black" />
+        {direct ? (
+          <Image
+            source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
+            resizeMode="contain"
+            className="size-6"
+          />
+        ) : (
+          <MaterialIcons name="wallet" size={21} color="#111111" />
+        )}
       </View>
-      <View>
-        <Typography weight="600" className="text-base">
+      <View className="min-w-0 flex-1">
+        <Typography weight="700" className="text-[17px] tracking-[-0.25px]">
           {title}
         </Typography>
-        <Typography weight="500" className="text-sm text-gray-400">
-          {subtitle}
+        <Typography weight="500" className="mt-0.5 text-[12px] text-black/35">
+          {direct ? `Ferry Direct · ${subtitle}` : subtitle}
         </Typography>
+      </View>
+      <View className="size-9 items-center justify-center rounded-full bg-black/[0.035]">
+        <Ionicons name="arrow-forward" size={18} color="#111111" />
       </View>
     </TouchableOpacity>
   );

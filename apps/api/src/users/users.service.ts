@@ -17,6 +17,7 @@ export interface UserView {
   homeCurrency: string;
   country: string | null;
   createdAt: string;
+  payoutReady: boolean;
 }
 
 @Injectable()
@@ -32,6 +33,7 @@ export class UsersService {
       homeCurrency: user.homeCurrency,
       country: user.country,
       createdAt: user.createdAt.toISOString(),
+      payoutReady: Boolean(user.payoutAccount),
     };
   }
 

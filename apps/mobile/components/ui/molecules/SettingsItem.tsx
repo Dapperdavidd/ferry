@@ -3,6 +3,7 @@ import { View, Image, ImageSourcePropType } from "react-native";
 import { Typography } from "../atoms/Typography";
 import { Ionicons } from "@expo/vector-icons";
 import HapticPressable from "../atoms/HapticPressable";
+import { cn } from "@/utils/cn";
 
 interface SettingsItemProps {
   icon: ImageSourcePropType | React.ReactNode;
@@ -10,6 +11,7 @@ interface SettingsItemProps {
   onPress?: () => void;
   showChevron?: boolean;
   color?: string;
+  className?: string;
 }
 
 export function SettingsItem({
@@ -18,19 +20,28 @@ export function SettingsItem({
   onPress,
   showChevron = true,
   color,
+  className,
 }: SettingsItemProps) {
   return (
     <HapticPressable
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      feedback="selection"
+      pressedScale={0.985}
       onPress={onPress}
-      className="flex-row items-center gap-4 bg-transparent py-4"
+      className={cn(
+        "min-h-[60px] flex-row items-center gap-3.5 bg-white px-4 py-3",
+        className
+      )}
     >
-      <View className="size-6 items-center justify-center">
+      <View className="size-9 items-center justify-center rounded-full bg-black/[0.035]">
         {isValidElement(icon) ? (
           icon
         ) : (
           <Image
             source={icon as ImageSourcePropType}
-            className="size-6"
+            className="size-5 opacity-70"
             resizeMode="contain"
           />
         )}
@@ -38,15 +49,15 @@ export function SettingsItem({
 
       <View className="flex-1">
         <Typography
-          weight="500"
-          className="text-lg text-black"
+          weight="600"
+          className="text-[16px] tracking-[-0.2px] text-black"
           style={{ color }}
         >
           {label}
         </Typography>
       </View>
       {showChevron && (
-        <Ionicons name="chevron-forward" size={20} className="!text-black/40" />
+        <Ionicons name="chevron-forward" size={18} color="#A3A3A0" />
       )}
     </HapticPressable>
   );

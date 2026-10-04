@@ -80,6 +80,11 @@ export class DirectoryController {
       address: user.address,
       handle: user.handle,
       displayName: user.displayName,
+      homeCurrency: user.homeCurrency,
+      country: user.country,
+      payoutReady: Boolean(user.payoutAccount),
+      payoutBank: user.payoutAccount?.bankName ?? null,
+      payoutAccountEnding: user.payoutAccount?.accountEnding ?? null,
     };
   }
 }

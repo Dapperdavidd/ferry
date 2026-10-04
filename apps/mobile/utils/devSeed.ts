@@ -17,6 +17,7 @@ export const SEED_USER: User = {
   homeCurrency: "USD",
   country: "US",
   createdAt: "2026-10-01T09:00:00.000Z",
+  payoutReady: false,
 };
 
 export const SEED_BALANCES: BalancesResponse = {

@@ -2,7 +2,7 @@ import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Interval } from "@nestjs/schedule";
 import { createId } from "@paralleldrive/cuid2";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   encodeAbiParameters,
   getAddress,
@@ -24,20 +24,26 @@ import { ApiError } from "../common/errors";
 import { AUSD_DECIMALS, ausdToUsd, formatUnits } from "../common/money";
 import { DbService } from "../db/db.service";
 import { cashouts, intents, transfers, users } from "../db/schema";
-import { FxService } from "../fx/fx.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { decodeQuote, encodeQuote, type QuoteTerms } from "./quote";
+import { PayoutService } from "../payout/payout.service";
+import { UsersService } from "../users/users.service";
+import type { DirectQuoteRequest } from "./dtos";
+import {
+  decodeQuote,
+  encodeQuote,
+  type DirectDelivery,
+  type QuoteTerms,
+} from "./quote";
 
 const QUOTE_TTL_MS = 2 * 60_000;
 const INTENT_TTL_MS = 5 * 60_000;
 const MIN_CASHOUT_RAW = 1_000_000n;
 const SLIPPAGE_BPS = 50n;
 const OUT_DECIMALS = 18;
-const PAYOUT_DELAY_MS = 3_000;
 
 /**
  * Cash out: AUSD → the pool's other token, in one transaction through FerrySettlement, then a
- * mocked payout to the recipient's currency. The quote is a signed statement the user accepts;
+ * real bank payout to the recipient's currency. The quote is a signed statement the user accepts;
  * the nonce the user signs commits to the payout address and minimum output.
  */
 @Injectable()
@@ -49,9 +55,10 @@ export class CashoutService {
   constructor(
     private readonly db: DbService,
     private readonly chain: ChainService,
-    private readonly fx: FxService,
     private readonly notifications: NotificationsService,
     private readonly agora: AgoraService,
+    private readonly usersService: UsersService,
+    private readonly payout: PayoutService,
     config: ConfigService,
   ) {
     this.quoteSecret = config
@@ -78,7 +85,70 @@ export class CashoutService {
   }
 
   /** The pool's own numbers, plus a display conversion to the recipient's currency. */
-  async quote(address: Address, body: { amountRaw: string; currency: string }) {
+  async quote(
+    userId: string,
+    address: Address,
+    body: { amountRaw: string; currency: string },
+  ) {
+    const owner = await this.usersService.findActiveById(userId);
+    if (!owner)
+      throw new ApiError(
+        "NOT_FOUND",
+        "Account not found.",
+        HttpStatus.NOT_FOUND,
+      );
+    return this.buildQuote(address, body, null, owner);
+  }
+
+  /** Ferry Direct binds the settlement quote to a Ferry identity and their local currency. */
+  async directQuote(
+    userId: string,
+    address: Address,
+    body: DirectQuoteRequest,
+  ) {
+    const recipient = await this.usersService.findByHandle(body.to);
+    if (!recipient?.handle)
+      throw new ApiError(
+        "RECIPIENT_NOT_FOUND",
+        `No one on Ferry is @${body.to}.`,
+        HttpStatus.NOT_FOUND,
+      );
+    if (
+      recipient.id === userId ||
+      recipient.address.toLowerCase() === address.toLowerCase()
+    )
+      throw new ApiError("SELF_SEND", "Choose someone else for Ferry Direct.");
+
+    const publicDelivery = this.payout.payoutData(recipient);
+    const delivery: DirectDelivery = {
+      kind: "direct",
+      recipientAddress: recipient.address,
+      handle: recipient.handle,
+      displayName: recipient.displayName,
+      localCurrency: recipient.homeCurrency,
+      country: recipient.country,
+      rail: "bank",
+      etaSeconds: 60,
+      provider: "yellowcard",
+      bankName: publicDelivery.bankName,
+      accountEnding: publicDelivery.accountEnding,
+    };
+    return this.buildQuote(
+      address,
+      { amountRaw: body.amountRaw, currency: recipient.homeCurrency },
+      delivery,
+      recipient,
+    );
+  }
+
+  private async buildQuote(
+    address: Address,
+    body: { amountRaw: string; currency: string },
+    delivery: DirectDelivery | null,
+    payoutUser: NonNullable<
+      Awaited<ReturnType<UsersService["findActiveById"]>>
+    >,
+  ) {
     const amountIn = BigInt(body.amountRaw);
     if (amountIn < MIN_CASHOUT_RAW)
       throw new ApiError("AMOUNT_TOO_SMALL", "The minimum cash-out is $1.00.");
@@ -136,8 +206,7 @@ export class CashoutService {
       6,
     );
     const feeRaw = ((amountIn * feeBps) / 1_000_000n).toString();
-    const fx = body.currency === "USD" ? null : this.fx.quote(body.currency);
-    const usdCents = amountIn / 10_000n;
+    const bankQuote = await this.payout.quote(payoutUser, ausdToUsd(amountIn));
     const terms: QuoteTerms = {
       amountInRaw: amountIn.toString(),
       outToken: "CTK",
@@ -146,11 +215,12 @@ export class CashoutService {
       minOutRaw: minOut.toString(),
       rate,
       feeRaw,
-      localAmount: fx ? this.fx.convert(usdCents, fx.rate) : null,
-      localCurrency: fx ? fx.currency : null,
-      fxRate: fx?.rate ?? null,
-      fxSource: fx?.source ?? null,
+      localAmount: bankQuote.localAmount,
+      localCurrency: bankQuote.localCurrency,
+      fxRate: bankQuote.fxRate,
+      fxSource: bankQuote.fxSource,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS).toISOString(),
+      delivery,
     };
     return { quoteId: encodeQuote(terms, this.quoteSecret), ...terms };
   }
@@ -274,6 +344,28 @@ export class CashoutService {
         salt: Hex;
         quoteId: string;
       };
+      const beneficiary = details.delivery
+        ? await this.usersService.findByAddress(
+            details.delivery.recipientAddress,
+          )
+        : await this.usersService.findActiveById(userId);
+      if (!beneficiary)
+        throw new ApiError(
+          "RECIPIENT_NOT_FOUND",
+          "The recipient is no longer available.",
+          HttpStatus.NOT_FOUND,
+        );
+      const payoutData = this.payout.payoutData(beneficiary);
+      if (
+        details.delivery &&
+        (payoutData.accountEnding !== details.delivery.accountEnding ||
+          payoutData.bankName !== details.delivery.bankName)
+      )
+        throw new ApiError(
+          "PAYOUT_ACCOUNT_CHANGED",
+          "The recipient changed their bank account. Review a fresh quote.",
+          HttpStatus.CONFLICT,
+        );
 
       const txHash = await this.chain.settle({
         settlement: this.settlement,
@@ -302,6 +394,9 @@ export class CashoutService {
         status: "PENDING",
         txHash,
         intentId,
+        memo: details.delivery
+          ? `Ferry Direct to @${details.delivery.handle}`
+          : null,
         usdValue: ausdToUsd(auth.value),
       });
       await this.db.client.insert(cashouts).values({
@@ -322,6 +417,8 @@ export class CashoutService {
         fxSource: details.fxSource,
         payoutTo: details.payoutTo,
         salt: details.salt,
+        payoutProvider: payoutData.provider,
+        payoutData,
         txHash,
       });
       this.logger.log(`cashout.sent id=${cashoutId} tx=${txHash}`);
@@ -329,7 +426,7 @@ export class CashoutService {
     });
   }
 
-  /** The payout leg is a test stand-in: a settled cash-out is marked paid out a few seconds later. */
+  /** Delivers confirmed settlements over the configured bank rail. The provider sequence id is idempotent. */
   @Interval(5_000)
   async settlePayouts(): Promise<void> {
     const due = await this.db.client
@@ -339,38 +436,135 @@ export class CashoutService {
         and(
           eq(cashouts.status, "CONFIRMED"),
           eq(cashouts.payoutStatus, "PENDING"),
-          lt(cashouts.settledAt, new Date(Date.now() - PAYOUT_DELAY_MS)),
         ),
       )
       .limit(20);
     for (const row of due) {
-      const payoutRef = `TEST-${row.id.slice(-8).toUpperCase()}`;
-      await this.db.client
-        .update(cashouts)
-        .set({ payoutStatus: "SENT", payoutRef })
-        .where(eq(cashouts.id, row.id));
-      const amount =
-        row.localAmount && row.localCurrency
-          ? `${row.localCurrency} ${row.localAmount}`
-          : `$${ausdToUsd(row.amountInRaw)}`;
-      void this.notifications.notifyCashout(row.userId, {
-        amount,
-        reference: payoutRef,
-      });
-      const [owner] = await this.db.client
-        .select({ address: users.address })
-        .from(users)
-        .where(eq(users.id, row.userId))
-        .limit(1);
-      if (owner) {
-        void this.agora.recordRedeem({
-          address: owner.address as Address,
-          amountAusd: ausdToUsd(row.amountInRaw),
-          reference: payoutRef,
-          txHash: row.txHash ?? undefined,
-        });
+      if (!row.payoutData || !row.localAmount) {
+        this.logger.error(`cashout.payout_data_missing id=${row.id}`);
+        continue;
       }
-      this.logger.log(`cashout.paid_out id=${row.id} ref=${payoutRef}`);
+      try {
+        const result = await this.payout.deliver({
+          cashoutId: row.id,
+          localAmount: row.localAmount,
+          account: row.payoutData,
+        });
+        const terminal = payoutState(result.status);
+        await this.db.client
+          .update(cashouts)
+          .set({ payoutStatus: terminal, payoutRef: result.reference })
+          .where(eq(cashouts.id, row.id));
+        if (terminal === "PENDING") continue;
+        if (terminal === "FAILED") {
+          this.logger.error(
+            `cashout.payout_failed id=${row.id} ref=${result.reference} status=${result.status}`,
+          );
+          continue;
+        }
+        const amount =
+          row.localAmount && row.localCurrency
+            ? `${row.localCurrency} ${row.localAmount}`
+            : `$${ausdToUsd(row.amountInRaw)}`;
+        void this.notifications.notifyCashout(
+          row.payoutData.beneficiaryUserId,
+          {
+            amount,
+            reference: result.reference,
+          },
+        );
+        const [owner] = await this.db.client
+          .select({ address: users.address })
+          .from(users)
+          .where(eq(users.id, row.userId))
+          .limit(1);
+        if (owner) {
+          void this.agora.recordRedeem({
+            address: owner.address as Address,
+            amountAusd: ausdToUsd(row.amountInRaw),
+            reference: result.reference,
+            txHash: row.txHash ?? undefined,
+          });
+        }
+        this.logger.log(
+          `cashout.paid_out id=${row.id} ref=${result.reference}`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `cashout.payout_retry id=${row.id} error=${(error as Error).message}`,
+        );
+      }
     }
   }
+
+  async handlePayoutWebhook(
+    rawBody: Buffer,
+    signature: string,
+    payload: unknown,
+  ) {
+    if (!this.payout.verifyWebhook(rawBody, signature))
+      throw new ApiError(
+        "WEBHOOK_SIGNATURE_INVALID",
+        "Invalid webhook signature.",
+        HttpStatus.UNAUTHORIZED,
+      );
+    const event = payoutWebhookEvent(payload);
+    if (!event.sequenceId) return { received: true };
+    const terminal = payoutState(event.status);
+    if (terminal === "PENDING") return { received: true };
+    const [updated] = await this.db.client
+      .update(cashouts)
+      .set({ payoutStatus: terminal, payoutRef: event.reference })
+      .where(
+        and(
+          eq(cashouts.id, event.sequenceId),
+          eq(cashouts.payoutStatus, "PENDING"),
+        ),
+      )
+      .returning();
+    if (updated && terminal === "SENT" && updated.payoutData) {
+      const amount =
+        updated.localAmount && updated.localCurrency
+          ? `${updated.localCurrency} ${updated.localAmount}`
+          : `$${ausdToUsd(updated.amountInRaw)}`;
+      void this.notifications.notifyCashout(
+        updated.payoutData.beneficiaryUserId,
+        { amount, reference: event.reference },
+      );
+    }
+    return { received: true };
+  }
+}
+
+function payoutState(status: string): "PENDING" | "SENT" | "FAILED" {
+  if (/COMPLETE|SUCCESS|PAID/.test(status)) return "SENT";
+  if (/FAILED|EXPIRED|CANCELLED|REJECTED/.test(status)) return "FAILED";
+  return "PENDING";
+}
+
+function payoutWebhookEvent(payload: unknown): {
+  sequenceId: string;
+  reference: string;
+  status: string;
+} {
+  const root = asObject(payload);
+  const data = asObject(root.data);
+  const sequenceId = text(
+    data.sequenceId || data.sequence_id || root.sequenceId,
+  );
+  const reference = text(data.id || data.reference || root.id) || sequenceId;
+  const status = text(root.event || root.type || data.status) || "pending";
+  return { sequenceId, reference, status: status.toUpperCase() };
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" || typeof value === "number"
+    ? String(value)
+    : "";
 }

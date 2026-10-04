@@ -1,34 +1,35 @@
 import React, { useRef, useState } from "react";
-import { View } from "react-native";
+import { Image, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { isAddress } from "viem";
 
+import HapticPressable from "@/components/ui/atoms/HapticPressable";
+import { Typography } from "@/components/ui/atoms/Typography";
 import { ThemedScreen } from "@/components/ui/layout";
-import { ThemedText, IconSymbol, LoadingSpinner } from "@/components/ui/atoms";
-import { IconSymbolName } from "@/components/ui/atoms/IconSymbol";
-import { ButtonGroup } from "@/components/ui/molecules";
 import {
   SpendCheckModal,
-  type SpendCheckStep,
   type SpendCheckState,
+  type SpendCheckStep,
 } from "@/components/ui/organisms/modals/SpendCheckModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { useThemeColor } from "@/hooks/useThemeColor";
 import { AUSD_ADDRESS, monad } from "@/lib/chain";
-import { checkAuthorization } from "@/utils/authorization";
+import { PasskeyFailure } from "@/lib/mera";
 import {
   apiClient,
   apiErrorCode,
+  apiErrorMessage,
   type PrepareTransferResponse,
+  type TypedData,
 } from "@/utils/apiClient";
+import { checkAuthorization } from "@/utils/authorization";
+import { AUSD_DECIMALS, formatLocalMoney, numberToRaw } from "@/utils/balances";
 import { AppError } from "@/utils/errors";
-import { toSignable } from "@/utils/typedData";
 import { formatAmount, truncateAddress } from "@/utils/helper";
-import { numberToRaw, AUSD_DECIMALS } from "@/utils/balances";
-import { PasskeyFailure } from "@/lib/mera";
+import { toSignable } from "@/utils/typedData";
 
 type PendingSubmission = { intentId: string; signature: string };
 
@@ -42,7 +43,6 @@ const SENT_DWELL_MS = 700;
 const NETWORK_BUSY = "The network is busy. Nothing has been sent.";
 
 export default function ConfirmScreen() {
-  const textColor = useThemeColor({}, "text");
   const [isLoading, setIsLoading] = useState(false);
   const { showToast } = useToast();
   const { address, authorize } = useAuth();
@@ -51,17 +51,63 @@ export default function ConfirmScreen() {
   const [flow, setFlow] = useState<SendFlow | null>(null);
   const attempt = useRef(0);
 
-  const { amount, recipient, name, type, title } = useLocalSearchParams<{
+  const {
+    amount,
+    recipient,
+    recipientName,
+    type,
+    title,
+    quoteId,
+    localAmount,
+    localCurrency,
+    fxRate,
+  } = useLocalSearchParams<{
     amount: string;
     recipient: string;
-    name: string;
+    recipientName: string;
     type: string;
     title: string;
+    quoteId: string;
+    localAmount: string;
+    localCurrency: string;
+    fxRate: string;
   }>();
 
+  const isDirect = type === "direct" && Boolean(quoteId);
   const recipientLabel = isAddress(recipient ?? "")
     ? truncateAddress(recipient)
     : `@${recipient}`;
+  const localDisplay = formatLocalMoney(
+    Number(localAmount ?? amount),
+    localCurrency || "USD"
+  );
+
+  const holdKnownError = (
+    hold: (state: "paused" | "failed", message: string) => void,
+    error: unknown
+  ) => {
+    const code = apiErrorCode(error);
+    if (code === "RPC_UNAVAILABLE") return hold("failed", NETWORK_BUSY);
+    if (code === "RECIPIENT_NOT_FOUND")
+      return hold(
+        "failed",
+        "That Ferry handle no longer exists. Nothing has been sent."
+      );
+    if (code === "INSUFFICIENT_BALANCE")
+      return hold("failed", "Not enough AUSD. Nothing has been sent.");
+    if (code === "SELF_SEND")
+      return hold("failed", "Choose someone else to send to.");
+    if (code === "AMOUNT_TOO_SMALL")
+      return hold("failed", "The minimum send is $1.00.");
+    if (code === "RELAYER_CAP")
+      return hold(
+        "failed",
+        "You've reached today's $5,000 testnet sending limit. Nothing has been sent."
+      );
+    const message = apiErrorMessage(error);
+    if (message) return hold("failed", message);
+    throw error;
+  };
 
   const handleConfirm = async () => {
     if (!address) {
@@ -89,72 +135,83 @@ export default function ConfirmScreen() {
       let prepared = pendingSubmission.current;
 
       if (!prepared) {
-        let prep: PrepareTransferResponse;
-        try {
-          prep = await apiClient.prepareTransfer({ to: recipient, amountRaw });
-        } catch (err) {
-          const code = apiErrorCode(err);
-          if (code === "RPC_UNAVAILABLE") return hold("failed", NETWORK_BUSY);
-          if (code === "RECIPIENT_NOT_FOUND")
+        let typedData: TypedData;
+        let intentId: string;
+
+        if (isDirect) {
+          try {
+            const prep = await apiClient.prepareCashout({ quoteId });
+            typedData = prep.typedData;
+            intentId = prep.intentId;
+          } catch (error) {
+            return holdKnownError(hold, error);
+          }
+        } else {
+          let prep: PrepareTransferResponse;
+          try {
+            prep = await apiClient.prepareTransfer({
+              to: recipient,
+              amountRaw,
+            });
+          } catch (error) {
+            return holdKnownError(hold, error);
+          }
+
+          const mismatch = checkAuthorization(prep.typedData, {
+            from: address,
+            to: prep.recipient.address,
+            amountRaw,
+            token: AUSD_ADDRESS,
+            chainId: monad.id,
+          });
+          if (
+            mismatch ||
+            (isAddress(recipient) &&
+              prep.recipient.address.toLowerCase() !== recipient.toLowerCase())
+          ) {
+            Sentry.captureException(
+              new Error(`authorization mismatch: ${mismatch ?? "recipient"}`),
+              { tags: { surface: "send.confirm" } }
+            );
             return hold(
               "failed",
-              "That handle doesn't exist. Nothing has been sent."
+              "This payment didn't match what you confirmed. Nothing has been sent."
             );
-          if (code === "INSUFFICIENT_BALANCE")
-            return hold("failed", "Not enough AUSD. Nothing has been sent.");
-          throw err;
-        }
-
-        const mismatch = checkAuthorization(prep.typedData, {
-          from: address,
-          to: prep.recipient.address,
-          amountRaw,
-          token: AUSD_ADDRESS,
-          chainId: monad.id,
-        });
-        if (
-          mismatch ||
-          (isAddress(recipient) &&
-            prep.recipient.address.toLowerCase() !== recipient.toLowerCase())
-        ) {
-          Sentry.captureException(
-            new Error(`authorization mismatch: ${mismatch ?? "recipient"}`),
-            { tags: { surface: "send.confirm" } }
-          );
-          return hold(
-            "failed",
-            "This payment didn't match what you confirmed. Nothing has been sent."
-          );
+          }
+          typedData = prep.typedData;
+          intentId = prep.intentId;
         }
 
         let signature: string;
         try {
           show("identity");
           signature = await authorize((signer) =>
-            signer.signTypedData(toSignable(prep.typedData) as never)
+            signer.signTypedData(toSignable(typedData) as never)
           );
-        } catch (err) {
-          if (err instanceof PasskeyFailure && err.kind === "cancelled") {
+        } catch (error) {
+          if (error instanceof PasskeyFailure && error.kind === "cancelled") {
             return hold(
               "paused",
               "You cancelled Face ID. Nothing has been sent."
             );
           }
-          if (err instanceof AppError || err instanceof PasskeyFailure)
-            return hold("failed", err.message);
-          throw err;
+          if (error instanceof AppError || error instanceof PasskeyFailure)
+            return hold("failed", error.message);
+          throw error;
         }
 
-        prepared = { intentId: prep.intentId, signature };
+        prepared = { intentId, signature };
         pendingSubmission.current = prepared;
       }
 
       show("sending");
       let submitted;
       try {
-        submitted = await apiClient.submitTransfer(prepared);
-      } catch (err) {
-        const code = apiErrorCode(err);
+        submitted = isDirect
+          ? await apiClient.submitCashout(prepared)
+          : await apiClient.submitTransfer(prepared);
+      } catch (error) {
+        const code = apiErrorCode(error);
         if (code === "INTENT_EXPIRED") {
           pendingSubmission.current = null;
           return hold("failed", "This took too long. Nothing has been sent.");
@@ -167,7 +224,7 @@ export default function ConfirmScreen() {
             "You've hit today's sending limit. Nothing has been sent."
           );
         }
-        throw err;
+        throw error;
       }
 
       pendingSubmission.current = null;
@@ -188,6 +245,9 @@ export default function ConfirmScreen() {
           title,
           txHash: submitted.txHash,
           recipient: recipientLabel,
+          recipientName: recipientName || recipientLabel,
+          localAmount: localAmount ?? "",
+          localCurrency: localCurrency ?? "",
         },
       });
     } catch (error) {
@@ -210,58 +270,113 @@ export default function ConfirmScreen() {
     setIsLoading(false);
   };
 
-  const handleCancel = () =>
-    router.push({ pathname: "/(tabs)", params: { amount, type, title } });
-
-  const renderInfo = (icon: IconSymbolName, label: string, value: string) => {
-    const iconColor = textColor + "40";
-    return (
-      <View>
-        <View className="mb-2 flex-row items-center gap-1">
-          <IconSymbol name={icon} size={16} color={iconColor} />
-          <ThemedText type="regular" style={{ color: iconColor }}>
-            {label}
-          </ThemedText>
-        </View>
-        <ThemedText
-          type="defaultSemiBold"
-          className="text-[18px] leading-[23px]"
-        >
-          {value}
-        </ThemedText>
-      </View>
-    );
-  };
-
   return (
     <ThemedScreen
-      useSafeArea={true}
+      className="bg-[#F7F7F4]"
+      useSafeArea
       safeAreaEdges={["bottom", "left", "right"]}
     >
-      {isLoading ? (
-        <LoadingSpinner />
-      ) : (
-        <View className="flex-1 px-6 pb-8 pt-12">
-          <View className="flex-1 gap-6">
-            <View className="gap-2">
-              <ThemedText type="regular">Amount</ThemedText>
-              <ThemedText type="jumbo">${formatAmount({ amount })}</ThemedText>
-            </View>
-            {renderInfo("arrow.forward", "To", recipientLabel)}
-            {name ? renderInfo("person", "Name", name) : null}
-            {renderInfo("checkmark.seal", "Fee", "Covered by Ferry")}
-          </View>
+      <View className="flex-1 px-6 pb-8 pt-6">
+        {isDirect ? (
+          <View className="relative mb-5 min-h-[238px] overflow-hidden rounded-[32px] bg-[#20211E] p-6">
+            <View className="absolute -right-20 -top-24 size-64 rounded-full border border-white/10" />
+            <View className="absolute -right-10 -top-14 size-52 rounded-full border border-[#D1C98E]/20" />
+            <Image
+              source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
+              resizeMode="contain"
+              className="absolute -right-7 top-3 size-40 opacity-10"
+              style={{ transform: [{ rotate: "-12deg" }] }}
+            />
 
-          <ButtonGroup
-            leftTitle="Cancel"
-            leftVariant="quiet"
-            rightTitle="Confirm with Face ID"
-            rightVariant="secondary"
-            leftOnPress={handleCancel}
-            rightOnPress={handleConfirm}
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-2">
+                <View className="size-2 rounded-full bg-[#D1C98E]" />
+                <Typography
+                  weight="700"
+                  className="text-[10px] uppercase tracking-[1.6px] text-white/60"
+                >
+                  Local delivery
+                </Typography>
+              </View>
+              <View className="rounded-full bg-white/10 px-3 py-1.5">
+                <Typography weight="700" className="text-[11px] text-white/70">
+                  Under 1 min
+                </Typography>
+              </View>
+            </View>
+
+            <View className="mt-auto">
+              <Typography weight="600" className="text-sm text-white/45">
+                {recipientName || recipientLabel} receives
+              </Typography>
+              <Typography
+                weight="700"
+                adjustsFontSizeToFit
+                numberOfLines={1}
+                className="mt-1 text-[42px] tracking-[-1.8px] text-white"
+              >
+                {localDisplay}
+              </Typography>
+              <View className="mt-3 flex-row items-center gap-2">
+                <Ionicons name="business-outline" size={15} color="#FFFFFF73" />
+                <Typography weight="600" className="text-xs text-white/45">
+                  {localCurrency} bank via {recipientLabel}
+                </Typography>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View className="mb-5 items-center rounded-[32px] bg-white px-6 py-10">
+            <Typography weight="600" className="text-sm text-black/40">
+              You&apos;re sending
+            </Typography>
+            <Typography
+              weight="700"
+              className="mt-1 text-[50px] tracking-[-2px] text-black"
+            >
+              ${formatAmount({ amount })}
+            </Typography>
+            <Typography weight="600" className="mt-2 text-sm text-black/45">
+              to {recipientLabel}
+            </Typography>
+          </View>
+        )}
+
+        <View className="rounded-[28px] bg-white px-5 py-2">
+          <SummaryRow
+            label="You send"
+            value={`$${formatAmount({ amount })} AUSD`}
           />
+          {isDirect ? (
+            <SummaryRow
+              label="Exchange rate"
+              value={`$1 = ${Number(fxRate || 1).toLocaleString("en-US")} ${localCurrency}`}
+            />
+          ) : null}
+          <SummaryRow label="Ferry fee" value="$0.00" last />
         </View>
-      )}
+
+        <View className="mt-auto pt-6">
+          <HapticPressable
+            disabled={isLoading}
+            onPress={handleConfirm}
+            className="h-[62px] flex-row items-center justify-center gap-2 rounded-full bg-black"
+          >
+            <Ionicons name="finger-print" size={21} color="#FFFFFF" />
+            <Typography weight="700" className="text-base text-white">
+              Confirm with Face ID
+            </Typography>
+          </HapticPressable>
+          <Typography
+            weight="600"
+            className="mt-3 text-center text-[11px] text-black/30"
+          >
+            {isDirect
+              ? "Recipient and live rate verified by Ferry"
+              : "Secured by your Ferry passkey"}
+          </Typography>
+        </View>
+      </View>
 
       <SpendCheckModal
         visible={flow !== null}
@@ -269,12 +384,35 @@ export default function ConfirmScreen() {
         state={flow?.state ?? "working"}
         message={flow?.message ?? null}
         aboveDailyLimit={false}
-        heading="Sending"
-        amount={`$${formatAmount({ amount })}`}
+        heading={isDirect ? "Sending with Ferry Direct" : "Sending"}
+        amount={isDirect ? localDisplay : `$${formatAmount({ amount })}`}
         counterparty={recipientLabel}
         onRetry={handleConfirm}
         onDismiss={handleDismissFlow}
       />
     </ThemedScreen>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  last = false,
+}: {
+  label: string;
+  value: string;
+  last?: boolean;
+}) {
+  return (
+    <View
+      className={`flex-row items-center justify-between py-4 ${last ? "" : "border-b border-black/[0.06]"}`}
+    >
+      <Typography weight="600" className="text-sm text-black/40">
+        {label}
+      </Typography>
+      <Typography weight="700" className="text-sm text-[#111111]">
+        {value}
+      </Typography>
+    </View>
   );
 }

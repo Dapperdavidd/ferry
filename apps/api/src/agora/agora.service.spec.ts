@@ -207,4 +207,37 @@ describe("AgoraService", () => {
     ).toBeNull();
     expect(calls).toEqual({});
   });
+
+  it("creates a reusable USDC mint route into the user's Monad wallet", async () => {
+    const mock = new MockAgoraClient();
+    const route = await service(mock, "mock").usdcDepositRoute(ADDRESS);
+
+    expect(route).toMatchObject({
+      mode: "mock",
+      asset: "USDC",
+      settlementAsset: "AUSD",
+      destinationChain: "monad",
+      reusable: true,
+      routeId: expect.any(String) as string,
+    });
+    expect(route.instructions.map((instruction) => instruction.chain)).toEqual([
+      "arbitrum",
+      "base",
+      "ethereum",
+      "monad",
+    ]);
+    expect(route.instructions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          chain: "base",
+          depositAddress: expect.stringMatching(
+            /^0x[0-9a-fA-F]{40}$/,
+          ) as string,
+        }),
+      ]),
+    );
+    expect(
+      (await service(mock, "mock").usdcDepositRoute(ADDRESS)).routeId,
+    ).toBe(route.routeId);
+  });
 });

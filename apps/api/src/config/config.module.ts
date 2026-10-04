@@ -40,6 +40,34 @@ const hexKey = Joi.string().pattern(/^0x[0-9a-fA-F]{64}$/);
         STABLE_SWAP_WHITELISTER_ADDRESS: address.required(),
         SETTLEMENT_ADDRESS: address.optional().allow(""),
         PAYOUT_PARTNER_ADDRESS: address.optional().allow(""),
+        PAYOUT_PROVIDER: Joi.string()
+          .valid("disabled", "yellowcard")
+          .default("disabled"),
+        PAYOUT_DATA_KEY: Joi.string()
+          .pattern(/^[0-9a-fA-F]{64}$/)
+          .optional()
+          .allow(""),
+        YELLOW_CARD_ENV: Joi.string()
+          .valid("sandbox", "production")
+          .default("sandbox"),
+        YELLOW_CARD_API_KEY: Joi.string().when("PAYOUT_PROVIDER", {
+          is: "yellowcard",
+          then: Joi.required(),
+          otherwise: Joi.optional().allow(""),
+        }),
+        YELLOW_CARD_API_SECRET: Joi.string().when("PAYOUT_PROVIDER", {
+          is: "yellowcard",
+          then: Joi.required(),
+          otherwise: Joi.optional().allow(""),
+        }),
+        YELLOW_CARD_WEBHOOK_SECRET: Joi.string().optional().allow(""),
+        YELLOW_CARD_BUSINESS_NAME: Joi.string().default("Ferry"),
+        YELLOW_CARD_BUSINESS_ID: Joi.string().when("PAYOUT_PROVIDER", {
+          is: "yellowcard",
+          then: Joi.required(),
+          otherwise: Joi.optional().allow(""),
+        }),
+        YELLOW_CARD_SEND_REASON: Joi.string().default("gift"),
 
         RELAYER_PRIVATE_KEY: hexKey.optional().allow(""),
         RELAYER_MAX_SENDS_PER_USER_PER_DAY: Joi.number()

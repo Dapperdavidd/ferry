@@ -6,7 +6,13 @@ import { CurrentUser, type Principal } from "../auth/principal";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { SubmitSchema, type SubmitRequest } from "../transfers/dtos";
 import { CashoutService } from "./cashout.service";
-import { PrepareCashoutSchema, QuoteSchema, type QuoteRequest } from "./dtos";
+import {
+  DirectQuoteSchema,
+  PrepareCashoutSchema,
+  QuoteSchema,
+  type DirectQuoteRequest,
+  type QuoteRequest,
+} from "./dtos";
 
 @Controller("cashout")
 @UseGuards(AuthGuard)
@@ -20,7 +26,16 @@ export class CashoutController {
     @CurrentUser() principal: Principal,
     @Body(new ZodValidationPipe(QuoteSchema)) body: QuoteRequest,
   ) {
-    return this.cashout.quote(principal.address, body);
+    return this.cashout.quote(principal.userId, principal.address, body);
+  }
+
+  @Post("direct/quote")
+  @HttpCode(200)
+  directQuote(
+    @CurrentUser() principal: Principal,
+    @Body(new ZodValidationPipe(DirectQuoteSchema)) body: DirectQuoteRequest,
+  ) {
+    return this.cashout.directQuote(principal.userId, principal.address, body);
   }
 
   @Post("prepare")

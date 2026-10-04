@@ -23,6 +23,7 @@ export const UserSchema = z.object({
   homeCurrency: z.string(),
   country: z.string().nullable(),
   createdAt: z.string(),
+  payoutReady: z.boolean(),
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -41,6 +42,11 @@ export const DirectoryEntrySchema = z.object({
   address,
   handle: z.string(),
   displayName: z.string().nullable(),
+  homeCurrency: z.string(),
+  country: z.string().nullable(),
+  payoutReady: z.boolean(),
+  payoutBank: z.string().nullable(),
+  payoutAccountEnding: z.string().nullable(),
 });
 export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
 
@@ -158,8 +164,44 @@ export const CashoutQuoteSchema = z.object({
   fxRate: z.string().nullable(),
   fxSource: z.string().nullable(),
   expiresAt: z.string(),
+  delivery: z
+    .object({
+      kind: z.literal("direct"),
+      recipientAddress: address,
+      handle: z.string(),
+      displayName: z.string().nullable(),
+      localCurrency: z.string(),
+      country: z.string().nullable(),
+      rail: z.literal("bank"),
+      etaSeconds: z.number().int().positive(),
+      provider: z.literal("yellowcard"),
+      bankName: z.string(),
+      accountEnding: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 export type CashoutQuote = z.infer<typeof CashoutQuoteSchema>;
+
+export const PayoutAccountSchema = z.object({
+  provider: z.literal("yellowcard"),
+  country: z.string(),
+  currency: z.string(),
+  networkId: z.string(),
+  bankName: z.string(),
+  accountName: z.string(),
+  accountEnding: z.string(),
+  verifiedAt: z.string(),
+});
+export type PayoutAccount = z.infer<typeof PayoutAccountSchema>;
+
+export const PayoutNetworkSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  country: z.string(),
+  currency: z.string(),
+});
+export type PayoutNetwork = z.infer<typeof PayoutNetworkSchema>;
 
 export const PrepareCashoutResponseSchema = z.object({
   intentId: z.string(),
@@ -174,6 +216,37 @@ export const AgoraOverviewSchema = z.object({
   asOf: z.string(),
 });
 export type AgoraOverview = z.infer<typeof AgoraOverviewSchema>;
+
+export const DepositNetworkSchema = z.enum([
+  "arbitrum",
+  "avalanche",
+  "base",
+  "ethereum",
+  "immutable",
+  "monad",
+  "polygon-pos",
+  "solana",
+]);
+export type DepositNetwork = z.infer<typeof DepositNetworkSchema>;
+
+export const UsdcDepositRouteSchema = z.object({
+  mode: z.enum(["live", "mock"]),
+  routeId: z.string(),
+  asset: z.literal("USDC"),
+  settlementAsset: z.literal("AUSD"),
+  destinationChain: z.literal("monad"),
+  reusable: z.literal(true),
+  createdAt: z.string(),
+  instructions: z
+    .array(
+      z.object({
+        chain: DepositNetworkSchema,
+        depositAddress: z.string().min(1),
+      })
+    )
+    .min(1),
+});
+export type UsdcDepositRoute = z.infer<typeof UsdcDepositRouteSchema>;
 
 export class ApiError extends Error {
   constructor(
@@ -287,6 +360,11 @@ class BackendClient {
               address: SEED_TRANSFERS[0].toAddress,
               handle: "bola",
               displayName: "Bola",
+              homeCurrency: "NGN",
+              country: "NG",
+              payoutReady: true,
+              payoutBank: "GTBank",
+              payoutAccountEnding: "0193",
             }
           : null
       );
@@ -311,6 +389,39 @@ class BackendClient {
       "POST",
       "/wallet/fund",
       z.object({ txHash: z.string() })
+    );
+  }
+  getUsdcDepositRoute() {
+    if (SEED_DEMO) {
+      const routeId = "seed-usdc-route";
+      return Promise.resolve({
+        mode: "mock" as const,
+        routeId,
+        asset: "USDC" as const,
+        settlementAsset: "AUSD" as const,
+        destinationChain: "monad" as const,
+        reusable: true as const,
+        createdAt: new Date().toISOString(),
+        instructions: [
+          {
+            chain: "arbitrum" as const,
+            depositAddress: "0xB89A35cbE8e852fE632492312E8E1Fc8b4c4Fd3a",
+          },
+          {
+            chain: "base" as const,
+            depositAddress: "0x928Dd0aE79F02c2f6916397cDd015f25571A75A4",
+          },
+          {
+            chain: "ethereum" as const,
+            depositAddress: "0x577A25A98E68d4Bc6A44Cd0d63A58bB68D2e62ea",
+          },
+        ],
+      });
+    }
+    return this.request(
+      "POST",
+      "/wallet/deposits/usdc",
+      UsdcDepositRouteSchema
     );
   }
 
@@ -349,6 +460,45 @@ class BackendClient {
   quoteCashout(body: { amountRaw: string; currency: string }) {
     return this.request("POST", "/cashout/quote", CashoutQuoteSchema, body);
   }
+  quoteDirect(body: { to: string; amountRaw: string }) {
+    if (SEED_DEMO) {
+      const amount = Number(body.amountRaw) / 1_000_000;
+      const localAmount = (amount * 1580).toFixed(2);
+      return Promise.resolve({
+        quoteId: `seed-direct-${body.to}-${body.amountRaw}`,
+        amountInRaw: body.amountRaw,
+        outToken: "CTK",
+        outAmountRaw: (BigInt(body.amountRaw) * 1_000_000_000_000n).toString(),
+        outDecimals: 18,
+        rate: "1.000000",
+        feeRaw: "0",
+        localAmount,
+        localCurrency: "NGN",
+        fxRate: "1580.00",
+        fxSource: "seed",
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        delivery: {
+          kind: "direct" as const,
+          recipientAddress: SEED_TRANSFERS[0].toAddress,
+          handle: "bola",
+          displayName: "Bola",
+          localCurrency: "NGN",
+          country: "NG",
+          rail: "bank" as const,
+          etaSeconds: 60,
+          provider: "yellowcard" as const,
+          bankName: "GTBank",
+          accountEnding: "0193",
+        },
+      });
+    }
+    return this.request(
+      "POST",
+      "/cashout/direct/quote",
+      CashoutQuoteSchema,
+      body
+    );
+  }
   prepareCashout(body: { quoteId: string }) {
     return this.request(
       "POST",
@@ -368,6 +518,43 @@ class BackendClient {
       }),
       body
     );
+  }
+
+  // Local-bank delivery
+  listPayoutNetworks(country: string, currency: string) {
+    if (SEED_DEMO)
+      return Promise.resolve([
+        { id: "gtbank", name: "GTBank", country, currency },
+        { id: "access", name: "Access Bank", country, currency },
+        { id: "zenith", name: "Zenith Bank", country, currency },
+      ]);
+    return this.request(
+      "GET",
+      `/payout/networks?country=${encodeURIComponent(country)}&currency=${encodeURIComponent(currency)}`,
+      z.array(PayoutNetworkSchema)
+    );
+  }
+  getPayoutAccount() {
+    if (SEED_DEMO) return Promise.resolve(null as PayoutAccount | null);
+    return this.request(
+      "GET",
+      "/payout/account",
+      PayoutAccountSchema.nullable()
+    );
+  }
+  savePayoutAccount(body: { networkId: string; accountNumber: string }) {
+    if (SEED_DEMO)
+      return Promise.resolve({
+        provider: "yellowcard" as const,
+        country: SEED_USER.country ?? "NG",
+        currency: SEED_USER.homeCurrency,
+        networkId: body.networkId,
+        bankName: "GTBank",
+        accountName: SEED_USER.displayName ?? "Ada",
+        accountEnding: body.accountNumber.slice(-4),
+        verifiedAt: new Date().toISOString(),
+      });
+    return this.request("PUT", "/payout/account", PayoutAccountSchema, body);
   }
 
   // FX

@@ -1,21 +1,14 @@
 import { Stack, router } from "expo-router";
-import { View, TouchableOpacity } from "react-native";
+import { TouchableOpacity } from "react-native";
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { ThemedText, AppIcon } from "@/components/ui/atoms";
+import { ThemedText } from "@/components/ui/atoms";
 import { Ionicons } from "@expo/vector-icons";
 
 export default function SendLayout() {
   const textColor = useThemeColor({}, "text");
 
   const getHeaderTitle = (title: string) => {
-    return (
-      <View className="flex-row items-center">
-        <ThemedText type="defaultSemiBold" className="mr-2">
-          {title}
-        </ThemedText>
-        <AppIcon name="sent" size={24} />
-      </View>
-    );
+    return <ThemedText type="defaultSemiBold">{title}</ThemedText>;
   };
 
   const renderBackButton = () => {
@@ -37,13 +30,6 @@ export default function SendLayout() {
         headerLeft: () => renderBackButton(),
       }}
     >
-      <Stack.Screen
-        name="fiatamount"
-        options={{
-          title: "",
-          headerTitle: () => getHeaderTitle("Send Fiat"),
-        }}
-      />
       <Stack.Screen
         name="confirm"
         options={{

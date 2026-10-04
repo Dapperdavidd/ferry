@@ -17,7 +17,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from "react-native-reanimated";
-import RecipientStep from "./RecipientStep";
+import RecipientStep, { type RecipientSelection } from "./RecipientStep";
 import AmountStep from "./AmountStep";
 import { QRScannerModal } from "./QRScannerModal";
 
@@ -43,6 +43,8 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
 
     const [, setStep] = useState<Step>("Recipient");
     const [recipient, setRecipient] = useState<string>("");
+    const [selection, setSelection] = useState<RecipientSelection | null>(null);
+    const [flowKey, setFlowKey] = useState(0);
 
     const translateX = useSharedValue(0);
 
@@ -58,6 +60,8 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
           setTimeout(() => {
             setStep("Recipient");
             setRecipient("");
+            setSelection(null);
+            setFlowKey((current) => current + 1);
             translateX.value = 0;
           }, 300);
         }
@@ -65,8 +69,9 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
       [onClose, translateX]
     );
 
-    const handleNext = (selectedRecipient: string) => {
-      setRecipient(selectedRecipient);
+    const handleNext = (selectedRecipient: RecipientSelection) => {
+      setRecipient(selectedRecipient.value);
+      setSelection(selectedRecipient);
       setStep("Amount");
 
       Keyboard.dismiss();
@@ -114,10 +119,10 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
           keyboardBlurBehavior="restore"
           android_keyboardInputMode="adjustResize"
           handleIndicatorStyle={{ display: "none" }}
-          backgroundStyle={{ backgroundColor: "#F0F0F0" }}
-          containerStyle={{ zIndex: 1 }}
+          backgroundStyle={{ backgroundColor: "#F7F7F4" }}
+          containerStyle={{ zIndex: 20 }}
         >
-          <BottomSheetView className="h-full flex-1 overflow-hidden bg-[#F0F0F0]">
+          <BottomSheetView className="h-full flex-1 overflow-hidden bg-[#F7F7F4]">
             <Animated.View
               className="w-[200%] flex-1 flex-row"
               style={requestLayout}
@@ -133,7 +138,8 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
               </View>
               <View className="w-full flex-1">
                 <AmountStep
-                  recipient={recipient}
+                  key={flowKey}
+                  recipient={selection}
                   onBack={handleBack}
                   onClose={handleClose}
                 />

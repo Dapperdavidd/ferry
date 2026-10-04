@@ -11,15 +11,15 @@ lands in about a second. The app is the consumer shell Xend already has (design 
 send and receive flows, activity, contacts, push), with the account and money layers
 replaced:
 
-| Layer                 | Xend today                                                                                        | The app                                                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Account               | Privy passkey + Turnkey hardware key + server recovery key, 2-of-3 Squads smart account on Solana | One Mera passkey. Face ID is the key. No custody backend.                                                                                             |
-| Identity on the phone | `com.giftedborg.xend`, passkeys at `xend.global`                                                  | `money.ferry.app`, passkeys at `ferry.money`                                                                                                          |
-| Money                 | USDC on Solana                                                                                    | AUSD on Monad testnet (6 decimals)                                                                                                                    |
-| Sending               | Squads vault spend, server co-signed                                                              | Gasless AUSD transfer: the user signs an EIP-3009 authorization, our relayer pays gas. Users never hold MON.                                          |
-| Cross-border          | Blockradar NGN off-ramp (merchant side)                                                           | Cash-out through Agora's Instant Settlement pool on Monad testnet, atomically, in one transaction; the fiat payout leg is mocked, as the bounty asks. |
-| Agora API             | none                                                                                              | A client built from Agora's OpenAPI spec. Live for public metrics; mock mode for authenticated endpoints, because API keys are KYB-only.              |
-| Identity              | email + OTP                                                                                       | A handle (`@ada`). No email needed to send or receive.                                                                                                |
+| Layer                 | Xend today                                                                                        | The app                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account               | Privy passkey + Turnkey hardware key + server recovery key, 2-of-3 Squads smart account on Solana | One Mera passkey. Face ID is the key. No custody backend.                                                                                                           |
+| Identity on the phone | `com.giftedborg.xend`, passkeys at `xend.global`                                                  | `money.ferry.app`, passkeys at `ferry.money`                                                                                                                        |
+| Money                 | USDC on Solana                                                                                    | AUSD on Monad testnet (6 decimals)                                                                                                                                  |
+| Sending               | Squads vault spend, server co-signed                                                              | Gasless AUSD transfer: the user signs an EIP-3009 authorization, our relayer pays gas. Users never hold MON.                                                        |
+| Local bank delivery   | Blockradar NGN off-ramp (merchant side)                                                           | Cash-out through Agora's Instant Settlement pool, followed by an idempotent Yellow Card bank payout. Nigeria/NGN is the first corridor, not the product's identity. |
+| Agora API             | none                                                                                              | A client built from Agora's OpenAPI spec. Live for public metrics; mock mode for authenticated endpoints, because API keys are KYB-only.                            |
+| Identity              | email + OTP                                                                                       | A handle (`@ada`). No email needed to send or receive.                                                                                                              |
 
 The demo (two minutes, two real iPhones): create an account with Face ID, see an AUSD
 balance, send $50 to a friend who gets a push a second later, then the friend cashes out
@@ -31,12 +31,13 @@ Real on Monad testnet: the passkey account, every AUSD balance, every send, the 
 Agora's Instant Settlement pair, and every receipt (one transaction hash each, on
 testnet.monadscan.com).
 
-Mocked, and labelled as such in the app and the write-up: the fiat payout partner leg
-(local bank or mobile money) after the pool, and the authenticated Agora API calls
-(accounts, routes, transactions), which run against a spec-shaped mock because Agora only
-issues API keys to KYB'd institutions and has no sandbox. The destination asset on
-testnet is Agora's test token CTK, because that is the only other side of the pool Agora
-deployed there; on mainnet the same leg is AUSD to USDC on Agora's pool.
+The authenticated Agora API calls (accounts, routes and transactions) still run against a
+spec-shaped mock until Ferry has an Agora organisation key. Fiat payout is no longer a
+timer mock: the API has a Yellow Card provider using live partner rates, dynamic bank
+networks, Nigerian account-name resolution, idempotent sends and HMAC-verified webhooks.
+It remains disabled in an uncredentialed checkout; production requires Ferry to complete
+KYB, fund its payout balance and configure its partner keys. The destination asset on
+Monad testnet is Agora's CTK; on mainnet the same settlement leg is AUSD to USDC.
 
 ### Verified facts the design rests on (read on chain, 4 Oct 2026)
 
@@ -97,7 +98,7 @@ app                          api                             Monad
 
 **Receiving.** The recipient's QR encodes `ferry://pay?to=@bola` with the address as fallback. An indexer polls AUSD `Transfer` logs for addresses we know (every ~2 s, chunked by block range, cursor stored), writes RECEIVE rows, and pushes "You received $50.00 from @ada". Pending sends are confirmed by receipt the same way. HyperSync can replace polling for history later.
 
-**Funding on testnet.** "Add funds" calls the AUSD faucet through the relayer (10,000 AUSD, once a minute). In production this is an Agora route (wire → mint) or an on-ramp; the app shows that path from the Agora API client in mock mode.
+**Funding on testnet.** "Add funds" calls the AUSD faucet through the relayer (10,000 AUSD, once a minute). Production USDC funding is implemented as an Agora `stablecoin → ausd` route into the user's registered Monad wallet. Agora returns one reusable deposit address per supported source network; the app renders only those returned instructions, with an explicit USDC/network warning. Mock mode shows a clearly labelled preview and disables copying or sharing its generated addresses. USD bank funding stays marked "Coming soon" until the additional banking and verification work is complete.
 
 ## 4. Cross-border: cash out through Instant Settlement, atomically
 
@@ -127,9 +128,20 @@ purchase fees, and a display FX rate for the recipient's home currency (ported f
 Xend's `fx` module, display only, with the source named). The ticket shows "You cash out
 $100.00 → 100.00 on Agora's pool, fee 0.00, delivered to <payout partner> (mock)".
 
-The payout leg: the backend creates a `payouts` row with a partner reference and moves it
-to SENT a few seconds later. The UI says "test payout". If Agora or a partner gives us a
-testnet payout endpoint before the deadline, this is the one place that changes.
+The payout leg uses Yellow Card's Payments API. A recipient first saves a bank account;
+Ferry fetches the provider's live bank list and resolves the account-holder name before
+encrypting the account number at rest. Once the Agora settlement transaction confirms,
+the backend submits one bank send with the cash-out id as its provider sequence id. The
+same id is reused on every retry, so a process restart cannot duplicate a payout. Signed
+`PAYMENT.*` webhooks move the payout to its terminal state immediately, with a five-second
+provider lookup as recovery if a webhook is delayed.
+
+The production funding model is prefunded last mile: Agora settles AUSD into Ferry's
+payout treasury on Monad, while the Yellow Card partner balance pays the local bank and
+is rebalanced by treasury. Yellow Card also offers direct crypto-settlement off-ramp, but
+its documented network list does not currently include Monad; Ferry must not pretend a
+Monad deposit address exists. Direct settlement can replace prefunding when Yellow Card
+adds Monad or Ferry adds an audited bridge to a supported USDC network.
 
 Fallback if the contract slips: the relayer does the same three steps as three
 transactions (about 1.2 s on Monad). Not atomic; kept only as insurance.
@@ -141,7 +153,12 @@ API key → 15-minute session JWT). One interface, two implementations selected 
 `AGORA_API_MODE`:
 
 - `live`: `GET /v0/metrics` (public; AUSD supply per chain, shown on the home screen as "AUSD on Monad" so the live integration is visible) and the authenticated endpoints once Agora issues a key.
-- `mock`: spec-shaped responses for `accounts` (register the user's wallet on `monad`, request the `instant_settlement` entitlement → `pending_approval`), `routes` (a `ausd → usd` redeem route to a bank, which is the production cash-out rail), and `transactions` (a settled `redeem` with `isInstantSettlement: true` and an `instantPayment` leg, shown on the cash-out receipt).
+- `mock`: spec-shaped responses for `accounts` (register the user's wallet on `monad`, request the `instant_settlement` entitlement → `pending_approval`), `routes` (a reusable `stablecoin → ausd` USDC funding route plus the `ausd → usd` production cash-out route), and `transactions` (a settled `redeem` with `isInstantSettlement: true` and an `instantPayment` leg, shown on the cash-out receipt).
+
+`POST /wallet/deposits/usdc` is authenticated and derives the destination exclusively
+from the session principal. The mobile app never submits a destination wallet and never
+receives the Agora organisation key. The response contains the route id, live/preview
+mode and the filtered USDC deposit instructions needed by the deposit screen.
 
 The write-up says exactly this: production needs an Agora organisation key; the client is complete and switchable.
 
@@ -157,7 +174,8 @@ A fresh NestJS app, `apps/api`, replacing `apps/backend`. Reason: the old backen
 | `directory`         | handle registration (3–20 chars, unique, reserved list), profile, `GET /directory/:handle` → `{ address, displayName }`; no reverse listing                                                                                                                                               |
 | `chain`             | viem public client with RPC failover, relayer wallet client, AUSD typed-data builder (domain read once at boot), receipt waiter, explicit gas, MON balance monitor                                                                                                                        |
 | `transfers`         | prepare / submit / list (the HTTP contract the mobile app already speaks, see §7)                                                                                                                                                                                                         |
-| `settlement`        | quote / prepare / submit for cash-outs; payout mock                                                                                                                                                                                                                                       |
+| `settlement`        | quote / prepare / submit for cash-outs; binds a verified bank destination into the signed quote                                                                                                                                                                                           |
+| `payout`            | Yellow Card HMAC client, live rates and bank discovery, account-name resolution, encrypted payout accounts, idempotent bank sends and signed webhooks                                                                                                                                     |
 | `indexer`           | AUSD `Transfer` log poller, receipt confirmation, RECEIVE rows, pushes                                                                                                                                                                                                                    |
 | `agora`             | the OpenAPI client, live and mock                                                                                                                                                                                                                                                         |
 | `fx`                | display rates (ported)                                                                                                                                                                                                                                                                    |
@@ -191,7 +209,7 @@ Native config: name "Ferry", slug `ferry`, scheme `ferry`, bundle id and package
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 4–5   | Repo surgery; `apps/api` boots on Postgres with `/health`; association files live on ferry.money; Mera onboarding on a real iPhone; pinned-vector test passes; auth challenge/verify |
 | 6     | Balances; faucet funding; handles; gasless Send end to end with receipt; Activity; indexer and "You received" push                                                                   |
-| 7     | `Settlement` contract: fork tests, deploy, verify, whitelist; cash-out quote/prepare/submit; payout mock; Agora client (live metrics, mock rest)                                     |
+| 7     | `Settlement` contract: fork tests, deploy, verify, whitelist; cash-out quote/prepare/submit; payout provider; Agora client (live metrics, mock rest)                                 |
 | 8     | FX display; error states; dev seed; Android build and assetlinks if time                                                                                                             |
 | 9     | Full rehearsal on two phones; fixes                                                                                                                                                  |
 | 10    | Demo video, README, submission text (candid about the Xend base and the mocks)                                                                                                       |

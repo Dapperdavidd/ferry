@@ -174,7 +174,7 @@ export function TransactionDetailModal({
               {item.cashout.localAmount && item.cashout.localCurrency && (
                 <View className={rowClass}>
                   <Typography weight="600" className="text-black/30">
-                    Payout (test)
+                    Bank payout
                   </Typography>
                   <Typography weight="600">
                     {item.cashout.localCurrency} {item.cashout.localAmount} ·{" "}

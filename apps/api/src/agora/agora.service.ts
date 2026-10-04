@@ -1,8 +1,14 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { ApiError } from "../common/errors";
 import { AGORA_CLIENT, type AgoraClient } from "./agora.client";
 import { MockAgoraClient } from "./agora.mock-client";
-import type { Metrics, Transaction } from "./agora.types";
+import type {
+  Metrics,
+  RouteChain,
+  Transaction,
+  WalletAccount,
+} from "./agora.types";
 
 export type AgoraMode = "live" | "mock";
 
@@ -18,6 +24,20 @@ export interface RecordRedeemParams {
   amountAusd: string;
   reference: string;
   txHash?: string;
+}
+
+export interface UsdcDepositRoute {
+  mode: AgoraMode;
+  routeId: string;
+  asset: "USDC";
+  settlementAsset: "AUSD";
+  destinationChain: "monad";
+  reusable: true;
+  createdAt: string;
+  instructions: Array<{
+    chain: RouteChain;
+    depositAddress: string;
+  }>;
 }
 
 const OVERVIEW_TTL_MS = 5 * 60_000;
@@ -86,12 +106,49 @@ export class AgoraService {
     return this.client.recordMockRedeem({ ...params, accountId });
   }
 
-  private async onboard(address: string): Promise<string> {
-    const account = await this.client.registerWallet({
-      address,
-      networks: [NETWORK],
-      name: `Ferry ${address.slice(0, 6)}…${address.slice(-4)}`,
+  async usdcDepositRoute(address: string): Promise<UsdcDepositRoute> {
+    const account = await this.registerWallet(address);
+    const route = await this.client.createRoute({
+      from: { currency: "stablecoin" },
+      to: { currency: "ausd", accountId: account.id, chain: NETWORK },
+      name: `Ferry USDC deposits ${address.slice(0, 6)}…${address.slice(-4)}`,
     });
+    const instructions = route.instructions.flatMap((instruction) => {
+      if (!("depositAddress" in instruction)) return [];
+      if (
+        !instruction.supportedCurrencies.some(
+          (currency) => currency === "usdc" || currency === "stablecoin",
+        )
+      )
+        return [];
+      return [
+        {
+          chain: instruction.chain,
+          depositAddress: instruction.depositAddress,
+        },
+      ];
+    });
+    if (instructions.length === 0)
+      throw new ApiError(
+        "AGORA_REJECTED",
+        "Agora returned a USDC route without deposit instructions.",
+        HttpStatus.BAD_GATEWAY,
+      );
+
+    return {
+      mode: this.mode,
+      routeId: route.id,
+      asset: "USDC",
+      settlementAsset: "AUSD",
+      destinationChain: NETWORK,
+      reusable: true,
+      createdAt: route.createdAt,
+      instructions,
+    };
+  }
+
+  private async onboard(address: string): Promise<string> {
+    const account = await this.registerWallet(address);
     const onMonad = account.networks.find((n) => n.chain === NETWORK);
     if (!onMonad?.entitlements.some((e) => e.type === "instant_settlement"))
       await this.client.requestEntitlement({
@@ -101,6 +158,14 @@ export class AgoraService {
       });
     this.logger.log(`agora.onboarded address=${address} account=${account.id}`);
     return account.id;
+  }
+
+  private registerWallet(address: string): Promise<WalletAccount> {
+    return this.client.registerWallet({
+      address,
+      networks: [NETWORK],
+      name: `Ferry ${address.slice(0, 6)}…${address.slice(-4)}`,
+    });
   }
 
   private async buildOverview(): Promise<AgoraOverview> {

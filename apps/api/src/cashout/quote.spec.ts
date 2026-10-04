@@ -20,6 +20,29 @@ describe("quote ids", () => {
     expect(decodeQuote(encodeQuote(terms, "s3cret"), "s3cret")).toEqual(terms);
   });
 
+  it("binds Ferry Direct delivery details into the signed quote", () => {
+    const directTerms: QuoteTerms = {
+      ...terms,
+      delivery: {
+        kind: "direct",
+        recipientAddress: "0x0000000000000000000000000000000000000001",
+        handle: "bola",
+        displayName: "Bola Adebayo",
+        localCurrency: "NGN",
+        country: "NG",
+        rail: "bank",
+        etaSeconds: 45,
+        provider: "yellowcard",
+        bankName: "GTBank",
+        accountEnding: "0193",
+      },
+    };
+
+    expect(
+      decodeQuote(encodeQuote(directTerms, "s3cret"), "s3cret")?.delivery,
+    ).toEqual(directTerms.delivery);
+  });
+
   it("refuse a tampered body or another secret", () => {
     const id = encodeQuote(terms, "s3cret");
     const [body, mac] = id.split(".");

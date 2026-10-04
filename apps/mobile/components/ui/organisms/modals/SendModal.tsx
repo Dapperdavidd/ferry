@@ -28,8 +28,8 @@ export function SendModal({
   const sendOptions: ActionOption[] = [
     {
       key: "crypto",
-      title: "To an address",
-      description: "Send to a Solana address or .sol name",
+      title: "To a Ferry account",
+      description: "Send AUSD to a @handle or Monad address",
       icon: walletIcon,
       onPress: handleSendToWallet,
     },

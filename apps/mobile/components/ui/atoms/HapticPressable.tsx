@@ -64,6 +64,10 @@ interface HapticPressableProps extends Omit<PressableProps, "style"> {
   feedback?: PressFeedback;
   /** Opt out of the press-in scale where it would look wrong. */
   scaleOnPress?: boolean;
+  /** Per-surface tuning for larger cards that need a quieter response. */
+  pressedScale?: number;
+  pressInDuration?: number;
+  pressOutDuration?: number;
 }
 
 /**
@@ -76,6 +80,9 @@ interface HapticPressableProps extends Omit<PressableProps, "style"> {
 const HapticPressable = ({
   feedback = "impact",
   scaleOnPress = true,
+  pressedScale = PRESSED_SCALE,
+  pressInDuration = PRESS_IN_MS,
+  pressOutDuration = PRESS_OUT_MS,
   disabled,
   onPressIn,
   onPressOut,
@@ -101,7 +108,7 @@ const HapticPressable = ({
     (event) => {
       if (!disabled) {
         if (scaleOnPress && !reduceMotion) {
-          scaleTo(PRESSED_SCALE, PRESS_IN_MS);
+          scaleTo(pressedScale, pressInDuration);
         }
         if (feedback === "impact") {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -111,15 +118,24 @@ const HapticPressable = ({
       }
       onPressIn?.(event);
     },
-    [disabled, feedback, onPressIn, reduceMotion, scaleOnPress, scaleTo]
+    [
+      disabled,
+      feedback,
+      onPressIn,
+      pressInDuration,
+      pressedScale,
+      reduceMotion,
+      scaleOnPress,
+      scaleTo,
+    ]
   );
 
   const handlePressOut = useCallback<NonNullable<PressableProps["onPressOut"]>>(
     (event) => {
-      scaleTo(1, PRESS_OUT_MS);
+      scaleTo(1, pressOutDuration);
       onPressOut?.(event);
     },
-    [onPressOut, scaleTo]
+    [onPressOut, pressOutDuration, scaleTo]
   );
 
   const scaleStyle = useMemo(() => ({ transform: [{ scale }] }), [scale]);

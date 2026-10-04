@@ -33,6 +33,24 @@ export const payoutStatus = pgEnum("payout_status", [
   "FAILED",
 ]);
 
+export interface StoredPayoutAccount {
+  provider: "yellowcard";
+  country: string;
+  currency: string;
+  networkId: string;
+  bankName: string;
+  accountName: string;
+  accountEnding: string;
+  ciphertext: string;
+  iv: string;
+  authTag: string;
+  verifiedAt: string;
+}
+
+export interface CashoutPayoutData extends StoredPayoutAccount {
+  beneficiaryUserId: string;
+}
+
 /** One row per passkey-derived address. The address is the identity; the handle is what people send to. */
 export const users = pgTable(
   "users",
@@ -43,6 +61,7 @@ export const users = pgTable(
     displayName: text("display_name"),
     homeCurrency: text("home_currency").notNull().default("USD"),
     country: text("country"),
+    payoutAccount: jsonb("payout_account").$type<StoredPayoutAccount>(),
     notificationsEnabled: boolean("notifications_enabled")
       .notNull()
       .default(true),
@@ -128,7 +147,7 @@ export const transfers = pgTable(
   ],
 );
 
-/** The cross-border leg: what the pool quoted, what it paid, and the mocked payout after it. */
+/** Agora settlement plus the provider-backed local-bank delivery that follows it. */
 export const cashouts = pgTable("cashouts", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -148,6 +167,8 @@ export const cashouts = pgTable("cashouts", {
   payoutTo: text("payout_to").notNull(),
   salt: text("salt").notNull(),
   payoutStatus: payoutStatus("payout_status").notNull().default("PENDING"),
+  payoutProvider: text("payout_provider"),
+  payoutData: jsonb("payout_data").$type<CashoutPayoutData>(),
   payoutRef: text("payout_ref"),
   txHash: text("tx_hash"),
   status: transferStatus("status").notNull().default("PENDING"),
