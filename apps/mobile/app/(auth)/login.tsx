@@ -16,7 +16,11 @@ import { Typography } from "@/components/ui/atoms/Typography";
 import { WithScreenTheme } from "@/components/WithScreenTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNetwork } from "@/contexts/NetworkContext";
-import { showToast } from "@/utils/toast";
+import {
+  primaryPasskeyAction,
+  secondaryPasskeyAction,
+  type PasskeyEntryAction,
+} from "@/utils/authEntry";
 
 const WELCOME_MESSAGES = [
   "Send dollars across borders.",
@@ -156,25 +160,19 @@ function TypewriterHeadline() {
 function WelcomeScreen() {
   const { createAccount, signIn, account, authError } = useAuth();
   const { config } = useNetwork();
-  const [busy, setBusy] = useState<
-    "create" | "resume" | "signIn" | "choose" | null
-  >(null);
+  const [busy, setBusy] = useState<PasskeyEntryAction | null>(null);
   const authErrorMessage = authError?.split("\n", 1)[0];
 
-  const run = async (which: "create" | "resume" | "signIn" | "choose") => {
+  const run = async (which: PasskeyEntryAction) => {
     if (busy) return;
     setBusy(which);
     try {
       if (which === "create" || which === "resume") {
         await createAccount({ resumePending: which === "resume" });
       } else {
-        const { isNew } = await signIn({
+        await signIn({
           useRememberedAccount: which === "signIn",
         });
-        if (isNew)
-          showToast(
-            "That passkey hadn't been used with Ferry before, so a new account was opened."
-          );
       }
     } catch {
       // The context keeps the message; a cancelled Face ID is not an error.
@@ -237,15 +235,7 @@ function WelcomeScreen() {
           ) : null}
           <View className="gap-2.5">
             <HapticPressable
-              onPress={() =>
-                run(
-                  account?.registrationPending
-                    ? "resume"
-                    : account
-                      ? "signIn"
-                      : "create"
-                )
-              }
+              onPress={() => run(primaryPasskeyAction(account))}
               disabled={busy !== null}
               className="w-full flex-row items-center justify-center gap-3 rounded-full border border-white bg-white p-4"
             >
@@ -259,17 +249,17 @@ function WelcomeScreen() {
                   ? "Finish with passkey"
                   : account
                     ? `Unlock on ${config.label}`
-                    : "Continue with passkey"}
+                    : "Sign in with passkey"}
               </Typography>
             </HapticPressable>
 
             <HapticPressable
-              onPress={() => run("choose")}
+              onPress={() => run(secondaryPasskeyAction(account))}
               disabled={busy !== null}
               className="w-full flex-row items-center justify-center gap-3 rounded-full border border-white/20 bg-white/20 p-4"
             >
               <Typography weight="600" className="text-lg text-white">
-                {account ? "Use another passkey" : "I already have an account"}
+                {account ? "Use another passkey" : "Create a Ferry account"}
               </Typography>
             </HapticPressable>
 

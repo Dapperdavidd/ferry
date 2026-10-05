@@ -158,7 +158,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       prfOutput: Uint8Array,
       credentialId: string,
       intent: "create" | "signIn" | "connect",
-      expectAddress?: Address
+      expectAddress?: Address,
+      rememberedHandle?: string
     ) =>
       withSigner(prfOutput, async (signer) => {
         if (expectAddress && !sameAddress(signer.address, expectAddress)) {
@@ -192,19 +193,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new AppError(ErrorCode.PASSKEY_ACCOUNT_NOT_FOUND, false, false);
         }
         await AuthStorage.saveToken(verified.token);
-        await AuthStorage.saveUserData(verified.user);
+        // Mainnet and Testnet deliberately keep separate sessions and user
+        // rows. The passkey address is still the same identity on both. When
+        // this phone already knows the handle, carry it onto a newly-connected
+        // network so switching networks does not look like first-run setup.
+        let verifiedUser = verified.user;
+        if (intent === "connect" && verified.isNew && rememberedHandle) {
+          try {
+            verifiedUser = await apiClient.updateMe({
+              handle: rememberedHandle,
+            });
+          } catch {
+            // A handle can legitimately be unavailable on the other network.
+            // Keep the authenticated session and let onboarding resolve only
+            // that exceptional conflict instead of failing sign-in entirely.
+          }
+        }
+        await AuthStorage.saveUserData(verifiedUser);
         const next: StoredAccount = {
           address: signer.address,
           credentialId,
-          handle: verified.user.handle ?? undefined,
+          handle: verifiedUser.handle ?? undefined,
           registrationPending: false,
         };
         await saveAccount(next);
         setAccount(next);
-        setUserState(verified.user);
+        setUserState(verifiedUser);
         setStatus("signedIn");
         setAuthError(null);
-        return verified;
+        return { ...verified, user: verifiedUser };
       }),
     []
   );
@@ -270,7 +287,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           asserted.prfOutput,
           asserted.credentialId,
           intent,
-          rememberedAccount?.address
+          rememberedAccount?.address,
+          rememberedAccount?.handle
         );
         return { isNew: intent === "signIn" && verified.isNew };
       }),
