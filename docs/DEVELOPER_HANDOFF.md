@@ -214,9 +214,11 @@ confirm the project was opened through `Ferry.xcworkspace`, not `Ferry.xcodeproj
 
 ## What the next developer should do
 
-1. Deploy `FerryFlow` on Monad testnet, record its deployment block, apply migration 0002,
-   configure the API/mobile feature gates, and run the two-account configure/send/event-
-   reconciliation/disable/fallback rehearsal. Do not enable Pocket or Bank destinations.
+1. FerryFlow is deployed on Monad testnet at
+   `0x77b0662bD04798E9982A2df4547929f6B0a46659` from block `68,533,597`; the
+   API and release-build mobile gates use that address. Finish the physical two-account
+   configure/send/event-reconciliation/disable/fallback rehearsal. Do not enable Pocket or
+   Bank destinations.
 2. Create a fresh Release archive from a clean prebuild and upload it to TestFlight. Check
    that the upload has neither missing-symbol warnings nor nested-dSYM error 90171, and
    bump the iOS build number before each upload.
@@ -245,8 +247,8 @@ confirm the project was opened through `Ferry.xcworkspace`, not `Ferry.xcodeproj
 - Yellow Card bank payouts are disabled unless the server is deliberately configured.
 - USD bank deposits are not implemented and are labelled Coming soon.
 - Mainnet selection is a preview when the installed build is configured for testnet.
-- Ferry Flows is implemented but inactive until its contract address and deployment block
-  are configured; Pocket and Bank Flow destinations are intentionally non-activatable.
+- Ferry Flows is live on testnet and intentionally gated off on mainnet; Pocket and Bank
+  Flow destinations remain non-activatable.
 - Generated `apps/mobile/ios` output and local `.xcarchive` files are not source artifacts.
   Regenerate native code from Expo config; do not commit local signing products.
 - `apps/backend` is the legacy Xend backend and is not a place for new Ferry work.

@@ -11,8 +11,9 @@ Instant Settlement** pool.
 **Ferry Flows** adds programmable incoming money: a recipient can save a percentage rule
 once, then a payment sent to their Ferry handle is atomically routed across up to five
 onchain destinations. The sender still sees a normal Send flow; wallets, gas, contracts,
-and basis points stay out of the consumer experience. Flows remain behind an explicit
-contract-address feature gate until `FerryFlow` is deployed and rehearsed on testnet.
+and basis points stay out of the consumer experience. Flows are deployed and enabled on
+Monad testnet; mainnet remains behind the explicit contract-address gate until its deployment
+has been audited and rehearsed.
 
 **Ferry Plus** turns gas sponsorship into a consumer entitlement instead of an invisible
 unbounded subsidy. Free accounts receive five covered sends each UTC month. A real 9.99
@@ -36,12 +37,12 @@ untouched Xend snapshot, so the whole refit is reviewable as a diff from it.
 
 ## What is real and what is mocked
 
-|                                                                 |                                                                                                                                                                                                                                                                                                  |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                                                                                                                             |
-| Ferry Flows                                                     | Contract, API, migration, event reconciliation, mobile configuration/review, and tests are implemented. The feature is not live until `FerryFlow` is deployed and the API/mobile contract-address gates are configured. Without them, sends retain the existing direct-transfer path.            |
-| Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live. USDC deposit routes, accounts and transactions switch from a clearly labelled safe preview to the real API when Ferry has an approved Agora organisation key.                                                                 |
-| Fiat payout after the pool                                      | A production Yellow Card adapter now resolves bank accounts, prices the local payout, creates idempotent bank sends and consumes signed webhooks. It is disabled until Ferry has KYB credentials and a funded partner balance. Monad testnet still settles to CTK; mainnet settles AUSD to USDC. |
+|                                                                 |                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                                                                                                                                  |
+| Ferry Flows                                                     | Contract, API, migration, event reconciliation, mobile configuration/review, and tests are implemented. FerryFlow is live on Monad testnet at `0x77b0662bD04798E9982A2df4547929f6B0a46659`; mainnet stays gated off. Without a configured deployment, sends retain the existing direct-transfer path. |
+| Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live. USDC deposit routes, accounts and transactions switch from a clearly labelled safe preview to the real API when Ferry has an approved Agora organisation key.                                                                      |
+| Fiat payout after the pool                                      | A production Yellow Card adapter now resolves bank accounts, prices the local payout, creates idempotent bank sends and consumes signed webhooks. It is disabled until Ferry has KYB credentials and a funded partner balance. Monad testnet still settles to CTK; mainnet settles AUSD to USDC.      |
 
 ## Layout
 

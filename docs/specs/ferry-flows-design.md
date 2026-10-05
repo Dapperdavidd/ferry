@@ -1,6 +1,6 @@
 # Ferry Flows: programmable incoming money
 
-Status: experimental MVP, 5 October 2026.
+Status: deployed testnet MVP, 6 October 2026.
 
 ## Product promise
 
@@ -151,8 +151,9 @@ build on the same intent and receipt model after the percentage Flow is reliable
 
 ## Activation checklist
 
-The UI, API, database migration, and contract are implemented, but Flows are not live until
-the contract is deployed and the same address is configured on both clients:
+The UI, API, database migration, and contract are implemented. The Monad testnet deployment
+is `0x77b0662bD04798E9982A2df4547929f6B0a46659` from block `68,533,597`. Testnet activation
+uses that same address in the API and mobile build:
 
 1. Deploy `FerryFlow` with the network's AUSD address.
 2. Run the API database migration.
