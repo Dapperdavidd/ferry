@@ -38,6 +38,7 @@ import {
 } from "@/utils/activity";
 import { cn } from "@/utils/cn";
 import { StorageService } from "@/utils/storage";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 const HOME_CHROME_SPACE = 140;
 const NETWORK_PREFERENCE_KEY = "ferry.network-preference";
@@ -45,6 +46,7 @@ const NETWORK_PREFERENCE_KEY = "ferry.network-preference";
 type NetworkPreference = "mainnet" | "testnet";
 
 function HomeScreenContent() {
+  const { theme } = useAppTheme();
   const router = useRouter();
   const { compact } = useResponsiveLayout();
   const {
@@ -133,9 +135,9 @@ function HomeScreenContent() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] p-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <ScrollView
         className="flex-1"
@@ -150,9 +152,14 @@ function HomeScreenContent() {
             feedback="selection"
             accessibilityLabel="Open settings"
             onPress={() => router.push("/(tabs)/settings" as never)}
-            className="size-12 items-center justify-center rounded-full bg-white"
+            className="size-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Typography weight="700" className="text-base text-[#111111]">
+            <Typography
+              weight="700"
+              className="text-base"
+              style={{ color: theme.text }}
+            >
               {initial}
             </Typography>
           </HapticPressable>
@@ -161,14 +168,19 @@ function HomeScreenContent() {
             feedback="selection"
             accessibilityLabel="Receive money"
             onPress={() => runOnConnectedNetwork(showReceiveModal)}
-            className="size-12 items-center justify-center rounded-full bg-white"
+            className="size-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="qr-code-outline" size={20} color="#111111" />
+            <Ionicons name="qr-code-outline" size={20} color={theme.text} />
           </HapticPressable>
         </View>
 
         <View className="items-center pb-12 pt-11">
-          <Typography weight="700" className="text-[16px] text-black/45">
+          <Typography
+            weight="700"
+            className="text-[16px]"
+            style={{ color: theme.muted }}
+          >
             Spendable
           </Typography>
           {!isSelectedNetworkConnected ? (
@@ -176,6 +188,8 @@ function HomeScreenContent() {
               amount="—"
               weight="700"
               className="w-full text-center text-[54px] leading-[64px] tracking-[-2.7px] text-[#111111]"
+              style={{ color: theme.text }}
+              decimalColor={theme.faint}
             />
           ) : isBalanceError ? (
             <HapticPressable
@@ -186,10 +200,15 @@ function HomeScreenContent() {
               <Typography
                 weight="700"
                 className="text-[52px] leading-[62px] tracking-[-2.4px] text-[#111111]"
+                style={{ color: theme.text }}
               >
                 —
               </Typography>
-              <Typography weight="500" className="text-xs text-black/40">
+              <Typography
+                weight="500"
+                className="text-xs"
+                style={{ color: theme.muted }}
+              >
                 Tap to retry
               </Typography>
             </HapticPressable>
@@ -198,6 +217,8 @@ function HomeScreenContent() {
               amount={isBalanceLoading ? "…" : totalDisplay}
               weight="700"
               className="w-full text-center text-[54px] leading-[64px] tracking-[-2.7px] text-[#111111]"
+              style={{ color: theme.text }}
+              decimalColor={theme.faint}
             />
           )}
           <HapticPressable
@@ -208,15 +229,23 @@ function HomeScreenContent() {
             accessibilityRole="button"
             onPress={() => setIsNetworkPickerVisible(true)}
             className="mt-3 flex-row items-center gap-2 rounded-full border border-black/[0.04] bg-black/[0.04] py-2.5 pl-2.5 pr-3"
+            style={{
+              backgroundColor: theme.accentSoft,
+              borderColor: theme.border,
+            }}
           >
             <TokenMark token="AUSD" size={22} />
-            <Typography weight="700" className="text-sm text-black/55">
+            <Typography
+              weight="700"
+              className="text-sm"
+              style={{ color: theme.muted }}
+            >
               AUSD · {selectedNetwork === "mainnet" ? "Mainnet" : "Testnet"}
             </Typography>
             <Ionicons
               name="chevron-down"
               size={14}
-              color="rgba(0,0,0,0.42)"
+              color={theme.muted}
               style={{ width: 14 }}
             />
           </HapticPressable>
@@ -250,7 +279,11 @@ function HomeScreenContent() {
         />
 
         <View className="mb-2 flex-row items-center justify-between">
-          <Typography weight="700" className="text-xl text-[#111111]">
+          <Typography
+            weight="700"
+            className="text-xl"
+            style={{ color: theme.text }}
+          >
             Recent activity
           </Typography>
           <HapticPressable
@@ -262,7 +295,11 @@ function HomeScreenContent() {
             }
             style={{ paddingHorizontal: 2, paddingVertical: 8 }}
           >
-            <Typography weight="600" className="text-sm text-black/40">
+            <Typography
+              weight="600"
+              className="text-sm"
+              style={{ color: theme.muted }}
+            >
               See all
             </Typography>
           </HapticPressable>
@@ -287,8 +324,15 @@ function HomeScreenContent() {
             ))}
           </View>
         ) : (
-          <View className="items-center rounded-[22px] border border-black/[0.06] bg-white py-6">
-            <Typography weight="500" className="text-sm text-black/35">
+          <View
+            className="items-center rounded-[22px] border py-6"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          >
+            <Typography
+              weight="500"
+              className="text-sm"
+              style={{ color: theme.muted }}
+            >
               {isSelectedNetworkConnected
                 ? "No activity yet"
                 : `No ${selectedNetwork} activity in this build`}
@@ -506,6 +550,7 @@ function FerryDirectCard({
   compact: boolean;
   onPress: () => void;
 }) {
+  const { theme } = useAppTheme();
   return (
     <View
       className="mb-10 rounded-[32px]"
@@ -525,8 +570,12 @@ function FerryDirectCard({
         pressedScale={0.99}
         pressInDuration={75}
         pressOutDuration={180}
-        className="overflow-hidden rounded-[32px] border border-white/80 bg-[#EFF0EB]"
-        style={{ height: compact ? 184 : 200 }}
+        className="overflow-hidden rounded-[32px] border"
+        style={{
+          height: compact ? 184 : 200,
+          backgroundColor: theme.cardStrong,
+          borderColor: theme.border,
+        }}
       >
         <Svg
           pointerEvents="none"
@@ -550,9 +599,9 @@ function FerryDirectCard({
               x2="100%"
               y2="100%"
             >
-              <Stop offset="0%" stopColor="#FAFAF7" />
-              <Stop offset="56%" stopColor="#EEEFE9" />
-              <Stop offset="100%" stopColor="#DADDD4" />
+              <Stop offset="0%" stopColor={theme.card} />
+              <Stop offset="56%" stopColor={theme.cardStrong} />
+              <Stop offset="100%" stopColor={theme.accentSoft} />
             </SvgLinearGradient>
             <SvgLinearGradient
               id="ferryDirectRoute"
@@ -561,9 +610,9 @@ function FerryDirectCard({
               x2="100%"
               y2="0%"
             >
-              <Stop offset="0%" stopColor="#B6AC64" stopOpacity="0" />
-              <Stop offset="48%" stopColor="#B6AC64" stopOpacity="0.68" />
-              <Stop offset="100%" stopColor="#11120F" stopOpacity="0.78" />
+              <Stop offset="0%" stopColor={theme.accent} stopOpacity="0" />
+              <Stop offset="48%" stopColor={theme.accent} stopOpacity="0.68" />
+              <Stop offset="100%" stopColor={theme.text} stopOpacity="0.78" />
             </SvgLinearGradient>
           </Defs>
           <Rect
@@ -599,12 +648,12 @@ function FerryDirectCard({
             strokeWidth="2.5"
             strokeLinecap="round"
           />
-          <Circle cx="170" cy="93" r="4.5" fill="#B6AC64" />
-          <Circle cx="347" cy="76" r="4.5" fill="#11120F" />
+          <Circle cx="170" cy="93" r="4.5" fill={theme.accent} />
+          <Circle cx="347" cy="76" r="4.5" fill={theme.text} />
           <Path
             d="M -36 194 C 52 132 101 224 190 166"
             fill="none"
-            stroke="#B6AC64"
+            stroke={theme.accent}
             strokeOpacity="0.12"
             strokeWidth="34"
             strokeLinecap="round"
@@ -633,14 +682,22 @@ function FerryDirectCard({
               />
               <Typography
                 weight="700"
-                className="text-[11px] uppercase tracking-[1.6px] text-black/55"
+                className="text-[11px] uppercase tracking-[1.6px]"
+                style={{ color: theme.muted }}
               >
                 Ferry Direct
               </Typography>
             </View>
             <View className="flex-row items-center gap-1.5 rounded-full border border-white/70 bg-white/55 px-2.5 py-1.5">
-              <View className="size-1.5 rounded-full bg-[#AAA052]" />
-              <Typography weight="700" className="text-[10px] text-black/50">
+              <View
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: theme.accent }}
+              />
+              <Typography
+                weight="700"
+                className="text-[10px]"
+                style={{ color: theme.muted }}
+              >
                 Under 1 min
               </Typography>
             </View>
@@ -651,7 +708,8 @@ function FerryDirectCard({
             <View className="mx-2 h-px w-7 bg-black/15" />
             <Typography
               weight="700"
-              className="text-[17px] tracking-[-0.3px] text-[#111111]"
+              className="text-[17px] tracking-[-0.3px]"
+              style={{ color: theme.text }}
             >
               {currency}
             </Typography>
@@ -661,26 +719,36 @@ function FerryDirectCard({
             <View>
               <Typography
                 weight="700"
-                className="text-[27px] tracking-[-0.9px] text-[#111111]"
+                className="text-[27px] tracking-[-0.9px]"
+                style={{ color: theme.text }}
               >
                 Cash out to {currency}
               </Typography>
-              <Typography weight="600" className="mt-1 text-xs text-black/40">
+              <Typography
+                weight="600"
+                className="mt-1 text-xs"
+                style={{ color: theme.muted }}
+              >
                 AUSD to your bank, without the crypto steps
               </Typography>
             </View>
             <View
               pointerEvents="none"
-              className="size-11 items-center justify-center rounded-full bg-[#111210]"
+              className="size-11 items-center justify-center rounded-full"
               style={{
-                shadowColor: "#111210",
+                backgroundColor: theme.primary,
+                shadowColor: theme.primary,
                 shadowOffset: { width: 0, height: 6 },
                 shadowOpacity: 0.16,
                 shadowRadius: 10,
                 elevation: 5,
               }}
             >
-              <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
+              <Ionicons
+                name="arrow-forward"
+                size={19}
+                color={theme.primaryText}
+              />
             </View>
           </View>
         </View>

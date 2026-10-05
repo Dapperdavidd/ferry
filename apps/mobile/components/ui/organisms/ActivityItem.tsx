@@ -12,10 +12,12 @@ import {
 import { formatUsdFromString, rawToNumber } from "@/utils/balances";
 import { cn } from "@/utils/cn";
 import { describeToken, formatTokenAmount } from "@/utils/tokens";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export type ActivityItemProps = ActivityEntry & { onPress?: () => void };
 
 export function ActivityItem({ onPress, ...entry }: ActivityItemProps) {
+  const { theme } = useAppTheme();
   const isSend = entry.direction === "send";
   const isInactive = entry.status === "pending" || entry.status === "failed";
   const { symbol } = describeToken(entry.token);
@@ -43,18 +45,29 @@ export function ActivityItem({ onPress, ...entry }: ActivityItemProps) {
       onPress={onPress}
     >
       {entry.kind === "cashout" ? (
-        <View className="size-10 items-center justify-center rounded-full border border-black/[0.08]">
-          <Ionicons name="cash-outline" size={18} color="#00000059" />
+        <View
+          className="size-10 items-center justify-center rounded-full border"
+          style={{ borderColor: theme.border }}
+        >
+          <Ionicons name="cash-outline" size={18} color={theme.muted} />
         </View>
       ) : (
         <TokenMark token={entry.token} size={40} />
       )}
       <View className="flex-1 flex-row items-center justify-between">
         <View className="flex-col">
-          <Typography weight="600" className="mb-0.5">
+          <Typography
+            weight="600"
+            className="mb-0.5"
+            style={{ color: theme.text }}
+          >
             {statusLabel(entry)}
           </Typography>
-          <Typography weight="500" className="text-sm text-black/30">
+          <Typography
+            weight="500"
+            className="text-sm"
+            style={{ color: theme.muted }}
+          >
             {label}
           </Typography>
         </View>
@@ -71,7 +84,11 @@ export function ActivityItem({ onPress, ...entry }: ActivityItemProps) {
             {amount} {symbol}
           </Typography>
           {entry.usdValue !== null && (
-            <Typography weight="500" className="text-xs text-black/30">
+            <Typography
+              weight="500"
+              className="text-xs"
+              style={{ color: theme.muted }}
+            >
               {formatUsdFromString(entry.usdValue)}
             </Typography>
           )}

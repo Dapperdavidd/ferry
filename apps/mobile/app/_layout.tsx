@@ -15,11 +15,11 @@ import "@/utils/cssInteropSetup";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLockProvider, useAppLock } from "@/contexts/AppLockContext";
 import { ScreenThemeProvider } from "@/contexts/ScreenThemeContext";
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/utils/cn";
 import { ModalFlowProvider } from "@/contexts/ModalFlowContext";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { AppThemeProvider, useAppTheme } from "@/contexts/AppThemeContext";
 import {
   BlurTargetProvider,
   BlurTargetHost,
@@ -113,7 +113,7 @@ function AuthLayout() {
   const segments = useSegments();
   const { status, user } = useAuth();
   const { isLocked, isObscured } = useAppLock();
-  const colorScheme = useColorScheme();
+  const { theme: appTheme } = useAppTheme();
 
   const screens = useMemo(
     () => (
@@ -123,12 +123,12 @@ function AuthLayout() {
             <BlurTargetHost>
               <Slot />
             </BlurTargetHost>
-            <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+            <StatusBar style={appTheme.dark ? "light" : "dark"} />
           </ToastProvider>
         </ModalFlowProvider>
       </ScreenThemeProvider>
     ),
-    [colorScheme]
+    [appTheme.dark]
   );
 
   if (status === "loading") {
@@ -221,18 +221,20 @@ function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <ReactQueryFocusBridge />
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <ThemedRoot>
-          <AuthProvider>
-            <ActivityWatch />
-            <AppLockProvider>
-              <BlurTargetProvider>
-                <BottomSheetModalProvider>
-                  <AuthLayout />
-                </BottomSheetModalProvider>
-              </BlurTargetProvider>
-            </AppLockProvider>
-          </AuthProvider>
-        </ThemedRoot>
+        <AppThemeProvider>
+          <ThemedRoot>
+            <AuthProvider>
+              <ActivityWatch />
+              <AppLockProvider>
+                <BlurTargetProvider>
+                  <BottomSheetModalProvider>
+                    <AuthLayout />
+                  </BottomSheetModalProvider>
+                </BlurTargetProvider>
+              </AppLockProvider>
+            </AuthProvider>
+          </ThemedRoot>
+        </AppThemeProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );
@@ -254,8 +256,14 @@ function ActivityWatch() {
 
 function ThemedRoot({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme();
+  const { theme: appTheme } = useAppTheme();
   return (
-    <View className={cn("flex-1", theme === "dark" && "dark")}>{children}</View>
+    <View
+      className={cn("flex-1", theme === "dark" && "dark")}
+      style={{ backgroundColor: appTheme.background }}
+    >
+      {children}
+    </View>
   );
 }
 

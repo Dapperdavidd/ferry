@@ -14,8 +14,10 @@ import {
   mapTransferRowToActivityEntry,
   type ActivityEntry,
 } from "@/utils/activity";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export default function HistoryScreen() {
+  const { theme } = useAppTheme();
   const address = useWalletAddress();
   const {
     data,
@@ -59,8 +61,8 @@ export default function HistoryScreen() {
   }, [refetch]);
 
   return (
-    <ScreenLayout>
-      <TabHeaderText>Activity</TabHeaderText>
+    <ScreenLayout lightColor={theme.background} darkColor={theme.background}>
+      <TabHeaderText style={{ color: theme.text }}>Activity</TabHeaderText>
       <ActivityList
         sections={sections}
         onEndReached={() => fetchNextPage()}

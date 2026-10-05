@@ -15,12 +15,21 @@ import History from "../atoms/icons/history";
 import Home from "../atoms/icons/home";
 import Settings from "../atoms/icons/settings";
 import { Typography } from "../atoms/Typography";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 const iconMappings = {
   index: Home,
   history: History,
   settings: Settings,
-} as Record<string, React.FC<{ isActive?: boolean; size?: number }>>;
+} as Record<
+  string,
+  React.FC<{
+    isActive?: boolean;
+    size?: number;
+    color?: string;
+    detailColor?: string;
+  }>
+>;
 
 const activeShadow = {
   shadowColor: "#000000",
@@ -37,6 +46,7 @@ export function CustomTabBar({
 }: BottomTabBarProps) {
   const segments = useSegments() as string[];
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
   const [barWidth, setBarWidth] = useState(0);
   const position = useRef(new Animated.Value(state.index)).current;
   const isSettingsSubPage =
@@ -60,11 +70,12 @@ export function CustomTabBar({
   return (
     <BlurView
       intensity={26}
-      tint="light"
+      tint={theme.dark ? "dark" : "light"}
       style={[
         styles.chrome,
         {
           paddingBottom: Math.max(insets.bottom, 8),
+          backgroundColor: theme.chrome,
         },
       ]}
     >
@@ -81,6 +92,7 @@ export function CustomTabBar({
             style={[
               activeShadow,
               styles.activeTab,
+              { backgroundColor: theme.card },
               {
                 width: tabWidth,
                 transform: [
@@ -143,14 +155,18 @@ export function CustomTabBar({
                 justifyContent: "center",
               }}
             >
-              {Icon ? <Icon isActive={isFocused} size={24} /> : null}
+              {Icon ? (
+                <Icon
+                  isActive={isFocused}
+                  size={24}
+                  color={isFocused ? theme.text : theme.faint}
+                  detailColor={theme.card}
+                />
+              ) : null}
               <Typography
                 weight={isFocused ? "700" : "600"}
-                className={
-                  isFocused
-                    ? "text-[13px] text-black"
-                    : "text-[13px] text-black/35"
-                }
+                className="text-[13px]"
+                style={{ color: isFocused ? theme.text : theme.faint }}
               >
                 {label}
               </Typography>

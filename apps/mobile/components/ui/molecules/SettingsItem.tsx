@@ -12,6 +12,10 @@ interface SettingsItemProps {
   showChevron?: boolean;
   color?: string;
   className?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  iconBackgroundColor?: string;
+  chevronColor?: string;
 }
 
 export function SettingsItem({
@@ -21,6 +25,10 @@ export function SettingsItem({
   showChevron = true,
   color,
   className,
+  backgroundColor,
+  textColor,
+  iconBackgroundColor,
+  chevronColor,
 }: SettingsItemProps) {
   return (
     <HapticPressable
@@ -34,8 +42,12 @@ export function SettingsItem({
         "min-h-[60px] flex-row items-center gap-3.5 bg-white px-4 py-3",
         className
       )}
+      style={{ backgroundColor }}
     >
-      <View className="size-9 items-center justify-center rounded-full bg-black/[0.035]">
+      <View
+        className="size-9 items-center justify-center rounded-full bg-black/[0.035]"
+        style={{ backgroundColor: iconBackgroundColor }}
+      >
         {isValidElement(icon) ? (
           icon
         ) : (
@@ -51,13 +63,17 @@ export function SettingsItem({
         <Typography
           weight="600"
           className="text-[16px] tracking-[-0.2px] text-black"
-          style={{ color }}
+          style={{ color: color ?? textColor }}
         >
           {label}
         </Typography>
       </View>
       {showChevron && (
-        <Ionicons name="chevron-forward" size={18} color="#A3A3A0" />
+        <Ionicons
+          name="chevron-forward"
+          size={18}
+          color={chevronColor ?? "#A3A3A0"}
+        />
       )}
     </HapticPressable>
   );

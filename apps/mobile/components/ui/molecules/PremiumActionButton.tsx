@@ -12,6 +12,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 type PremiumActionButtonProps = {
   label: string;
@@ -37,6 +38,7 @@ export function PremiumActionButton({
   const press = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReducedMotion();
   const isInk = tone === "ink";
+  const { theme } = useAppTheme();
 
   const motionStyle = useMemo(
     () => ({
@@ -141,12 +143,18 @@ export function PremiumActionButton({
                 x2="100%"
                 y2="100%"
               >
-                <Stop offset="0%" stopColor={isInk ? "#080908" : "#FFFFFF"} />
+                <Stop
+                  offset="0%"
+                  stopColor={isInk ? theme.primary : theme.card}
+                />
                 <Stop
                   offset={isInk ? "52%" : "58%"}
-                  stopColor={isInk ? "#171816" : "#FCFCFA"}
+                  stopColor={isInk ? theme.primary : theme.card}
                 />
-                <Stop offset="100%" stopColor={isInk ? "#30312E" : "#F0F1ED"} />
+                <Stop
+                  offset="100%"
+                  stopColor={isInk ? theme.primary : theme.cardStrong}
+                />
               </LinearGradient>
               <LinearGradient
                 id="ferryActionLight"
@@ -186,9 +194,8 @@ export function PremiumActionButton({
           <View pointerEvents="none" style={styles.labelWrap}>
             <Typography
               weight="700"
-              className={
-                isInk ? "text-[17px] text-white" : "text-[17px] text-[#111111]"
-              }
+              className={"text-[17px]"}
+              style={{ color: isInk ? theme.primaryText : theme.text }}
             >
               {label}
             </Typography>

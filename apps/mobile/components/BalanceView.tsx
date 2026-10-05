@@ -4,9 +4,10 @@ import { Typography, TypographyProps } from "./ui/atoms/Typography";
 
 type BalanceViewProps = TypographyProps & {
   amount: string;
+  decimalColor?: string;
 };
 
-const BalanceView = ({ amount, ...props }: BalanceViewProps) => {
+const BalanceView = ({ amount, decimalColor, ...props }: BalanceViewProps) => {
   const [integerPart, decimalPart] = amount.split(".");
 
   return (
@@ -18,7 +19,9 @@ const BalanceView = ({ amount, ...props }: BalanceViewProps) => {
     >
       ${integerPart}
       {decimalPart !== undefined ? (
-        <Text className="text-black/30">.{decimalPart || "00"}</Text>
+        <Text className="text-black/30" style={{ color: decimalColor }}>
+          .{decimalPart || "00"}
+        </Text>
       ) : null}
     </Typography>
   );

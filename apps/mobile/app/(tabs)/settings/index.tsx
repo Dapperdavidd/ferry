@@ -24,6 +24,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useBalances } from "@/hooks/useBalances";
 import { useNotificationPreference } from "@/hooks/usePushRegistration";
 import { useWalletName } from "@/hooks/useWalletName";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 import { addressUrl, monad } from "@/lib/chain";
 import { cn } from "@/utils/cn";
 
@@ -46,6 +47,7 @@ export default function SettingsScreen() {
   const notifications = useNotificationPreference();
   const { showToast } = useToast();
   const { total: balanceTotal, totalDisplay: balanceDisplay } = useBalances();
+  const { theme } = useAppTheme();
 
   const handleAccountDeleted = async () => {
     showToast("Your account has been deleted");
@@ -64,25 +66,47 @@ export default function SettingsScreen() {
       data: [
         {
           label: user?.handle ? `@${user.handle}` : "Edit account",
-          icon: <Ionicons name="person-outline" size={19} color="#111111" />,
+          icon: <Ionicons name="person-outline" size={19} color={theme.text} />,
           onPress: () => setShowEditWallet(true),
         },
         {
           label: "Address book",
-          icon: <Ionicons name="people-outline" size={19} color="#111111" />,
+          icon: <Ionicons name="people-outline" size={19} color={theme.text} />,
           onPress: () => router.push("/settings/address-book" as never),
         },
         {
           label: user?.payoutReady ? "Bank account" : "Add bank account",
-          icon: <Ionicons name="business-outline" size={19} color="#111111" />,
+          icon: (
+            <Ionicons name="business-outline" size={19} color={theme.text} />
+          ),
           onPress: () => router.push("/settings/payout-account" as never),
         },
         {
           label: "Notifications",
           icon: (
-            <Ionicons name="notifications-outline" size={19} color="#111111" />
+            <Ionicons
+              name="notifications-outline"
+              size={19}
+              color={theme.text}
+            />
           ),
           onPress: () => notificationsSheetRef.current?.present(),
+        },
+      ],
+    },
+    {
+      title: "Appearance",
+      data: [
+        {
+          label: `Theme · ${theme.name}`,
+          icon: (
+            <Ionicons
+              name="color-palette-outline"
+              size={19}
+              color={theme.text}
+            />
+          ),
+          onPress: () => router.push("/settings/appearance" as never),
         },
       ],
     },
@@ -91,12 +115,12 @@ export default function SettingsScreen() {
       data: [
         {
           label: "Recovery phrase",
-          icon: <Ionicons name="key-outline" size={19} color="#111111" />,
+          icon: <Ionicons name="key-outline" size={19} color={theme.text} />,
           onPress: () => router.push("/settings/recovery-phrase" as never),
         },
         {
           label: `View on ${monad.name}`,
-          icon: <Ionicons name="open-outline" size={19} color="#111111" />,
+          icon: <Ionicons name="open-outline" size={19} color={theme.text} />,
           onPress: () => address && Linking.openURL(addressUrl(address)),
         },
       ],
@@ -106,7 +130,9 @@ export default function SettingsScreen() {
       data: [
         {
           label: "Sign out",
-          icon: <Ionicons name="log-out-outline" size={19} color="#111111" />,
+          icon: (
+            <Ionicons name="log-out-outline" size={19} color={theme.text} />
+          ),
           onPress: signOut,
         },
         {
@@ -121,14 +147,17 @@ export default function SettingsScreen() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] px-5 pb-0 pt-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="px-5 pb-0 pt-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <View className="w-full flex-1">
         <SectionList
           ListHeaderComponent={
-            <TabHeaderText className="pb-3 pt-2 text-[24px] tracking-[-0.7px]">
+            <TabHeaderText
+              className="pb-3 pt-2 text-[24px] tracking-[-0.7px]"
+              style={{ color: theme.text }}
+            >
               Settings
             </TabHeaderText>
           }
@@ -146,6 +175,10 @@ export default function SettingsScreen() {
                   ? "rounded-b-[24px]"
                   : "border-b border-black/[0.045]"
               )}
+              backgroundColor={theme.card}
+              textColor={item.color ?? theme.text}
+              iconBackgroundColor={theme.accentSoft}
+              chevronColor={theme.faint}
             />
           )}
           renderSectionHeader={({ section: { title } }) => (
@@ -153,6 +186,7 @@ export default function SettingsScreen() {
               <Typography
                 weight="700"
                 className="text-[11px] uppercase tracking-[1.25px] text-black/35"
+                style={{ color: theme.muted }}
               >
                 {title}
               </Typography>
@@ -165,7 +199,11 @@ export default function SettingsScreen() {
                 className="mb-3 size-8 rounded-lg opacity-40"
                 resizeMode="contain"
               />
-              <Typography weight="500" className="text-sm text-black/40">
+              <Typography
+                weight="500"
+                className="text-sm"
+                style={{ color: theme.muted }}
+              >
                 Ferry {APP_VERSION}
                 {APP_BUILD ? ` (${APP_BUILD})` : ""} · {monad.name}
               </Typography>
@@ -173,15 +211,27 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
                 >
-                  <Typography weight="500" className="text-xs text-black/40">
+                  <Typography
+                    weight="500"
+                    className="text-xs"
+                    style={{ color: theme.muted }}
+                  >
                     Privacy
                   </Typography>
                 </TouchableOpacity>
-                <Typography weight="500" className="mx-2 text-xs text-black/40">
+                <Typography
+                  weight="500"
+                  className="mx-2 text-xs"
+                  style={{ color: theme.muted }}
+                >
                   ·
                 </Typography>
                 <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
-                  <Typography weight="500" className="text-xs text-black/40">
+                  <Typography
+                    weight="500"
+                    className="text-xs"
+                    style={{ color: theme.muted }}
+                  >
                     Terms
                   </Typography>
                 </TouchableOpacity>
