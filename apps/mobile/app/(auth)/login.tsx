@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useReducedMotion } from "react-native-reanimated";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
@@ -68,7 +69,7 @@ function TypewriterHeadline() {
       const nextCharacter = message[visibleText.length];
       if (!reduceMotion) {
         letterReveal.setValue(0);
-        wake.setValue(nextLength % 2 === 0 ? -1.25 : 1.25);
+        wake.setValue(0);
         Animated.parallel([
           Animated.timing(letterReveal, {
             toValue: 1,
@@ -77,8 +78,8 @@ function TypewriterHeadline() {
             useNativeDriver: true,
           }),
           Animated.timing(wake, {
-            toValue: 0,
-            duration: 130,
+            toValue: 1,
+            duration: 160,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
@@ -104,35 +105,51 @@ function TypewriterHeadline() {
       accessible
       accessibilityLabel={message}
     >
-      <Animated.View
-        style={{
-          transform: [{ translateX: wake }],
-        }}
+      <Typography
+        weight="500"
+        className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
       >
-        <Typography
-          weight="500"
-          className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
-        >
-          {settledText}
-          {activeLetter ? (
-            <Animated.Text
-              style={{
-                opacity: letterReveal,
-                transform: [
-                  {
-                    translateY: letterReveal.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [5, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              {activeLetter}
-            </Animated.Text>
-          ) : null}
-        </Typography>
-      </Animated.View>
+        {settledText}
+        {activeLetter ? (
+          <Animated.Text
+            style={{
+              opacity: letterReveal,
+              transform: [
+                {
+                  translateY: letterReveal.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [5, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            {activeLetter}
+          </Animated.Text>
+        ) : null}
+        {visibleText === message ? null : (
+          <Animated.Text
+            style={{
+              color: "#D8D29B",
+              fontSize: 18,
+              opacity: wake.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.35, 0.9],
+              }),
+              transform: [
+                {
+                  translateX: wake.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-2, 2],
+                  }),
+                },
+              ],
+            }}
+          >
+            ≋
+          </Animated.Text>
+        )}
+      </Typography>
     </View>
   );
 }
@@ -152,6 +169,7 @@ function WelcomeScreen() {
     try {
       if (which === "demo") {
         await signInDemo();
+        router.replace("/(tabs)");
       } else if (which === "create" || which === "resume") {
         await createAccount({ resumePending: which === "resume" });
       } else {
