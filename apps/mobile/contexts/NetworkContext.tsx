@@ -48,9 +48,9 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const switchNetwork = useCallback(async (next: FerryNetwork) => {
+    await StorageService.setItem(NETWORK_PREFERENCE_KEY, next);
     setActiveNetwork(next);
     setNetwork(next);
-    await StorageService.setItem(NETWORK_PREFERENCE_KEY, next);
   }, []);
 
   const value = useMemo<NetworkContextValue | null>(

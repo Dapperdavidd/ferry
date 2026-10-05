@@ -100,7 +100,9 @@ function HomeScreenContent() {
   const selectNetwork = (next: FerryNetwork) => {
     setIsNetworkPickerVisible(false);
     if (next === network) return;
-    void switchNetwork(next);
+    void switchNetwork(next).catch(() => {
+      showToast("Couldn't switch networks. Please try again.");
+    });
   };
 
   const runWhenAvailable = (

@@ -64,7 +64,7 @@ import {
   usePushRegistration,
 } from "@/hooks/usePushRegistration";
 import { useRewardLifecycle } from "@/hooks/useRewardLifecycle";
-import { NetworkProvider, useNetwork } from "@/contexts/NetworkContext";
+import { NetworkProvider } from "@/contexts/NetworkContext";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2 } },
@@ -134,17 +134,14 @@ function AuthLayout() {
     [appTheme.dark]
   );
 
-  if (status === "loading") {
-    return <LoadingScreen />;
-  }
-
   const isAuthenticated = status === "signedIn";
+  const isLoading = status === "loading";
   const inAuthGroup = segments[0] === "(auth)";
   const atOnboarding = segments[0] === "onboarding";
   // A handle is the identity people send to, so an account without one stays on onboarding.
   const needsHandle = isAuthenticated && (!user || !user.handle);
 
-  if (!isAuthenticated && !inAuthGroup) {
+  if (!isLoading && !isAuthenticated && !inAuthGroup) {
     return <Redirect href="/login" withAnchor />;
   }
 
@@ -163,15 +160,20 @@ function AuthLayout() {
   return (
     <View style={styles.authRoot}>
       <View
-        accessibilityElementsHidden={showLock || showObscure}
+        accessibilityElementsHidden={isLoading || showLock || showObscure}
         importantForAccessibility={
-          showLock || showObscure ? "no-hide-descendants" : "auto"
+          isLoading || showLock || showObscure ? "no-hide-descendants" : "auto"
         }
-        pointerEvents={showLock || showObscure ? "none" : "auto"}
+        pointerEvents={isLoading || showLock || showObscure ? "none" : "auto"}
         style={styles.authContent}
       >
         {screens}
       </View>
+      {isLoading && (
+        <View pointerEvents="auto" style={styles.securityLayer}>
+          <LoadingScreen />
+        </View>
+      )}
       {showObscure && (
         <View
           accessibilityElementsHidden
@@ -247,9 +249,8 @@ function RootLayout() {
 }
 
 function NetworkSession() {
-  const { network } = useNetwork();
   return (
-    <AuthProvider key={network}>
+    <AuthProvider>
       <ActivityWatch />
       <AppLockProvider>
         <BlurTargetProvider>

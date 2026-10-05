@@ -38,6 +38,7 @@ import { AppError, ErrorCode } from "@/utils/errors";
 import { SEED_ADDRESS, SEED_DEMO, SEED_USER } from "@/utils/devSeed";
 import { forgetThisDevice } from "@/utils/pushDevice";
 import { useNetwork } from "@/contexts/NetworkContext";
+import type { FerryNetwork } from "@/utils/network";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -59,6 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<StoredAccount | null>(null);
   const [user, setUserState] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [resolvedNetwork, setResolvedNetwork] = useState<FerryNetwork | null>(
+    null
+  );
   const queryClient = useQueryClient();
   const { network } = useNetwork();
   const busy = useRef(false);
@@ -81,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           setUserState(SEED_USER);
           setStatus("signedIn");
+          setResolvedNetwork(network);
           return;
         }
 
@@ -94,13 +99,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!stored || !token || isJwtExpired(token)) {
           if (token) await AuthStorage.clearAuthData().catch(() => {});
-          if (!cancelled) setStatus("signedOut");
+          if (!cancelled) {
+            setStatus("signedOut");
+            setResolvedNetwork(network);
+          }
           return;
         }
 
         if (cachedUser) {
           setUserState(cachedUser);
           setStatus("signedIn");
+          setResolvedNetwork(network);
         }
 
         try {
@@ -109,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserState(fresh);
           setStatus("signedIn");
           setAuthError(null);
+          setResolvedNetwork(network);
           void AuthStorage.saveUserData(fresh);
         } catch (error) {
           if (cancelled) return;
@@ -117,10 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUserState(null);
             setStatus("signedOut");
             setAuthError("Your session expired. Unlock with Face ID again.");
+            setResolvedNetwork(network);
           } else if (!cachedUser) {
             setUserState(null);
             setStatus("signedOut");
             setAuthError(authFailureMessage(error));
+            setResolvedNetwork(network);
+          } else {
+            setResolvedNetwork(network);
           }
         }
       } catch (error) {
@@ -128,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserState(null);
           setStatus("signedOut");
           setAuthError(authFailureMessage(error));
+          setResolvedNetwork(network);
         }
       }
     })();
@@ -350,13 +365,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace("/(auth)/login");
   }, [queryClient]);
 
-  const value = useMemo<AuthContextType>(
-    () => ({
-      status,
-      isAuthenticated: status === "loading" ? null : status === "signedIn",
-      isLoading: status === "loading",
+  const value = useMemo<AuthContextType>(() => {
+    const sessionReady = resolvedNetwork === network;
+    const visibleStatus = sessionReady ? status : "loading";
+    return {
+      status: visibleStatus,
+      isAuthenticated:
+        visibleStatus === "loading" ? null : visibleStatus === "signedIn",
+      isLoading: visibleStatus === "loading",
       account,
-      user,
+      user: sessionReady ? user : null,
       address: account?.address ?? null,
       authError,
       createAccount,
@@ -366,21 +384,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authorize,
       refreshUser,
       setUser,
-    }),
-    [
-      status,
-      account,
-      user,
-      authError,
-      createAccount,
-      signIn,
-      signInDemo,
-      signOut,
-      authorize,
-      refreshUser,
-      setUser,
-    ]
-  );
+    };
+  }, [
+    status,
+    account,
+    user,
+    authError,
+    createAccount,
+    signIn,
+    signInDemo,
+    signOut,
+    authorize,
+    refreshUser,
+    setUser,
+    resolvedNetwork,
+    network,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
