@@ -26,12 +26,40 @@ export const transferStatus = pgEnum("transfer_status", [
   "CONFIRMED",
   "FAILED",
 ]);
-export const intentKind = pgEnum("intent_kind", ["transfer", "cashout"]);
+export const intentKind = pgEnum("intent_kind", [
+  "transfer",
+  "cashout",
+  "flow_config",
+  "flow_payment",
+]);
 export const payoutStatus = pgEnum("payout_status", [
   "PENDING",
   "SENT",
   "FAILED",
 ]);
+export const flowConfigurationStatus = pgEnum("flow_configuration_status", [
+  "PREPARED",
+  "SUBMITTING",
+  "SUBMITTED",
+  "CONFIRMED",
+  "FAILED",
+  "EXPIRED",
+]);
+export const flowPaymentStatus = pgEnum("flow_payment_status", [
+  "PREPARED",
+  "SUBMITTING",
+  "PENDING",
+  "CONFIRMED",
+  "FAILED",
+  "EXPIRED",
+]);
+
+export interface StoredFlowDestination {
+  label: string;
+  kind: "spendable" | "pocket" | "person" | "bank";
+  address: string;
+  basisPoints: number;
+}
 
 export interface StoredPayoutAccount {
   provider: "yellowcard";
@@ -143,7 +171,75 @@ export const transfers = pgTable(
   (t) => [
     index("transfers_user_created_idx").on(t.userId, t.createdAt),
     uniqueIndex("transfers_user_tx_log_idx").on(t.userId, t.txHash, t.logIndex),
+    uniqueIndex("transfers_intent_user_direction_idx").on(
+      t.intentId,
+      t.userId,
+      t.direction,
+    ),
     index("transfers_status_idx").on(t.status),
+  ],
+);
+
+/** Immutable configuration attempts. The latest submitted/confirmed row is the consumer's current Flow. */
+export const flowConfigurations = pgTable(
+  "flow_configurations",
+  {
+    id: text("id").primaryKey(),
+    intentId: text("intent_id").notNull(),
+    userId: text("user_id").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    destinations: jsonb("destinations")
+      .$type<StoredFlowDestination[]>()
+      .notNull(),
+    configurationNonce: text("configuration_nonce").notNull(),
+    version: integer("version").notNull(),
+    status: flowConfigurationStatus("status").notNull().default("PREPARED"),
+    txHash: text("tx_hash"),
+    errorCode: text("error_code"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("flow_configurations_intent_idx").on(t.intentId),
+    index("flow_configurations_user_created_idx").on(t.userId, t.createdAt),
+    index("flow_configurations_status_idx").on(t.status),
+  ],
+);
+
+/** One row per Flow payment attempt, independent from the eventual destination transfers. */
+export const flowPayments = pgTable(
+  "flow_payments",
+  {
+    id: text("id").primaryKey(),
+    intentId: text("intent_id").notNull(),
+    userId: text("user_id").notNull(),
+    fromAddress: text("from_address").notNull(),
+    ownerAddress: text("owner_address").notNull(),
+    amountRaw: text("amount_raw").notNull(),
+    status: flowPaymentStatus("status").notNull().default("PREPARED"),
+    txHash: text("tx_hash"),
+    errorCode: text("error_code"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("flow_payments_intent_idx").on(t.intentId),
+    index("flow_payments_user_created_idx").on(t.userId, t.createdAt),
+    index("flow_payments_status_idx").on(t.status),
   ],
 );
 

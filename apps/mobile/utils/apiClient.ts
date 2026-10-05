@@ -247,6 +247,80 @@ export const UsdcDepositRouteSchema = z.object({
 });
 export type UsdcDepositRoute = z.infer<typeof UsdcDepositRouteSchema>;
 
+export const FlowDestinationKindSchema = z.enum([
+  "spendable",
+  "pocket",
+  "person",
+  "bank",
+]);
+export type FlowDestinationKind = z.infer<typeof FlowDestinationKindSchema>;
+
+export const FlowDestinationSchema = z.object({
+  label: z.string().min(1),
+  kind: FlowDestinationKindSchema,
+  address,
+  basisPoints: z.number().int().min(1).max(10_000),
+});
+export type FlowDestination = z.infer<typeof FlowDestinationSchema>;
+
+export const FlowSchema = z.object({
+  enabled: z.boolean(),
+  destinations: z.array(FlowDestinationSchema).max(5),
+  version: z.number().int().nonnegative(),
+  updatedAt: z.string().nullable(),
+});
+export type Flow = z.infer<typeof FlowSchema>;
+
+export const PrepareFlowResponseSchema = z.object({
+  intentId: z.string(),
+  typedData: TypedDataSchema,
+  expiresAt: z.string(),
+});
+export type PrepareFlowResponse = z.infer<typeof PrepareFlowResponseSchema>;
+
+export const SubmitFlowResponseSchema = z.object({
+  flowId: z.string(),
+  txHash: z.string(),
+  status: z.enum(["PENDING", "CONFIRMED", "FAILED"]),
+  enabled: z.boolean(),
+});
+export type SubmitFlowResponse = z.infer<typeof SubmitFlowResponseSchema>;
+
+export const PrepareFlowPaymentResponseSchema = z.object({
+  intentId: z.string(),
+  typedData: TypedDataSchema,
+  expiresAt: z.string(),
+  amount: z.string(),
+  amountRaw: rawAmount,
+  recipient: z.object({
+    address,
+    handle: z.string().nullable(),
+    displayName: z.string().nullable(),
+  }),
+  flowEnabled: z.boolean(),
+  feeRaw: rawAmount,
+});
+export type PrepareFlowPaymentResponse = z.infer<
+  typeof PrepareFlowPaymentResponseSchema
+>;
+
+export const SubmitFlowPaymentResponseSchema = z.object({
+  paymentId: z.string(),
+  txHash: z.string(),
+  status: z.enum(["PENDING", "CONFIRMED", "FAILED"]),
+});
+export type SubmitFlowPaymentResponse = z.infer<
+  typeof SubmitFlowPaymentResponseSchema
+>;
+
+const SEED_FLOW_UPDATED_AT = "2026-10-05T09:00:00.000Z";
+let seedFlow: Flow = {
+  enabled: false,
+  destinations: [],
+  version: 0,
+  updatedAt: SEED_FLOW_UPDATED_AT,
+};
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -479,6 +553,76 @@ class BackendClient {
       SubmitResponseSchema,
       body
     );
+  }
+
+  // Flows
+  getFlow() {
+    if (SEED_DEMO) return Promise.resolve(seedFlow);
+    return this.request("GET", "/flows/me", FlowSchema);
+  }
+  prepareFlow(body: { enabled?: boolean; destinations: FlowDestination[] }) {
+    return this.request(
+      "POST",
+      "/flows/prepare",
+      PrepareFlowResponseSchema,
+      body
+    );
+  }
+  submitFlow(body: { intentId: string; signature: string }) {
+    return this.request(
+      "POST",
+      "/flows/submit",
+      SubmitFlowResponseSchema,
+      body
+    );
+  }
+  prepareFlowPayment(body: { to: string; amount: string }) {
+    return this.request(
+      "POST",
+      "/flows/payments/prepare",
+      PrepareFlowPaymentResponseSchema,
+      body
+    );
+  }
+  submitFlowPayment(body: { intentId: string; signature: string }) {
+    return this.request(
+      "POST",
+      "/flows/payments/submit",
+      SubmitFlowPaymentResponseSchema,
+      body
+    );
+  }
+  previewFlow(destinations: FlowDestination[]) {
+    if (!SEED_DEMO) {
+      throw new ApiError(
+        0,
+        "PREVIEW_NOT_AVAILABLE",
+        "Flow previews are only available in the demo build."
+      );
+    }
+    seedFlow = {
+      enabled: true,
+      destinations,
+      version: seedFlow.version + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    return Promise.resolve(seedFlow);
+  }
+  previewDisableFlow() {
+    if (!SEED_DEMO) {
+      throw new ApiError(
+        0,
+        "PREVIEW_NOT_AVAILABLE",
+        "Flow previews are only available in the demo build."
+      );
+    }
+    seedFlow = {
+      enabled: false,
+      destinations: [],
+      version: seedFlow.version + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    return Promise.resolve(seedFlow);
   }
   listTransfers(params: { cursor?: string; limit?: number } = {}) {
     if (SEED_DEMO)

@@ -17,6 +17,7 @@ import {
 } from "@/utils/activity";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { Typography } from "@/components/ui/atoms/Typography";
+import HapticPressable from "@/components/ui/atoms/HapticPressable";
 
 export default function HistoryScreen() {
   const { theme } = useAppTheme();
@@ -27,6 +28,8 @@ export default function HistoryScreen() {
     hasNextPage,
     isFetchingNextPage,
     isLoading,
+    isError,
+    isRefetching,
     refetch,
   } = useTransfersInfinite();
 
@@ -97,10 +100,7 @@ export default function HistoryScreen() {
               Everything in and out, in one place.
             </Typography>
           </View>
-          <View
-            className="size-12 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: theme.accentSoft }}
-          >
+          <View className="size-12 items-center justify-center rounded-2xl">
             <Ionicons name="pulse-outline" size={23} color={theme.text} />
           </View>
         </View>
@@ -119,7 +119,7 @@ export default function HistoryScreen() {
         </Typography>
         <View
           className="flex-row items-center gap-1 rounded-full px-3 py-2"
-          style={{ backgroundColor: theme.accentSoft }}
+          style={{ backgroundColor: theme.card }}
         >
           <Typography
             weight="700"
@@ -140,8 +140,54 @@ export default function HistoryScreen() {
         refreshing={refreshing}
         ListEmptyComponent={
           isLoading ? (
-            <View className="items-center py-16">
-              <ActivityIndicator />
+            <View
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel="Loading activity"
+              className="items-center py-16"
+            >
+              <ActivityIndicator color={theme.accent} />
+            </View>
+          ) : isError ? (
+            <View className="items-center px-8 py-14">
+              <Ionicons
+                name="cloud-offline-outline"
+                size={30}
+                color={theme.muted}
+              />
+              <Typography
+                weight="700"
+                className="mt-4 text-center text-base"
+                style={{ color: theme.text }}
+              >
+                Activity is unavailable
+              </Typography>
+              <Typography
+                weight="500"
+                className="mt-1 text-center text-xs leading-5"
+                style={{ color: theme.muted }}
+              >
+                Check your connection and try again.
+              </Typography>
+              <HapticPressable
+                accessible
+                accessibilityRole="button"
+                accessibilityLabel="Try loading activity again"
+                accessibilityState={{ busy: isRefetching }}
+                disabled={isRefetching}
+                feedback="selection"
+                onPress={() => void refetch()}
+                className="mt-5 min-w-28 items-center rounded-full px-5 py-3"
+                style={{ backgroundColor: theme.cardStrong }}
+              >
+                {isRefetching ? (
+                  <ActivityIndicator size="small" color={theme.text} />
+                ) : (
+                  <Typography weight="700" style={{ color: theme.text }}>
+                    Try again
+                  </Typography>
+                )}
+              </HapticPressable>
             </View>
           ) : undefined
         }

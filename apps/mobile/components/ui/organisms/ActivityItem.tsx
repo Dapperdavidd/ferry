@@ -10,7 +10,6 @@ import {
   type ActivityEntry,
 } from "@/utils/activity";
 import { formatUsdFromString, rawToNumber } from "@/utils/balances";
-import { cn } from "@/utils/cn";
 import { describeToken, formatTokenAmount } from "@/utils/tokens";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 
@@ -33,18 +32,28 @@ export function ActivityItem({ onPress, ...entry }: ActivityItemProps) {
       : isSend
         ? `To ${who}`
         : `From ${who}`;
-  const valueColorClass = isInactive
-    ? "text-black/30"
-    : isSend
-      ? "text-destructive"
-      : "text-success";
+  const valueColor = isInactive ? theme.faint : isSend ? "#D64B4B" : "#22A660";
+  const usdLabel = entry.usdValue
+    ? `, ${formatUsdFromString(entry.usdValue)}`
+    : "";
 
   return (
     <HapticPressable
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={`${statusLabel(entry)}. ${label}. ${sign}${amount} ${symbol}${usdLabel}`}
+      accessibilityHint="Opens payment details"
       className="flex-row items-center gap-3.5 py-3"
       onPress={onPress}
     >
-      {entry.kind === "cashout" ? (
+      {entry.flow ? (
+        <View
+          className="size-10 items-center justify-center rounded-full border"
+          style={{ borderColor: theme.border }}
+        >
+          <Ionicons name="git-branch-outline" size={19} color={theme.text} />
+        </View>
+      ) : entry.kind === "cashout" ? (
         <View
           className="size-10 items-center justify-center rounded-full border"
           style={{ borderColor: theme.border }}
@@ -55,9 +64,10 @@ export function ActivityItem({ onPress, ...entry }: ActivityItemProps) {
         <TokenMark token={entry.token} size={40} />
       )}
       <View className="flex-1 flex-row items-center justify-between">
-        <View className="flex-col">
+        <View className="min-w-0 flex-1 flex-col pr-2">
           <Typography
             weight="600"
+            numberOfLines={1}
             className="mb-0.5"
             style={{ color: theme.text }}
           >
@@ -65,20 +75,19 @@ export function ActivityItem({ onPress, ...entry }: ActivityItemProps) {
           </Typography>
           <Typography
             weight="500"
+            numberOfLines={1}
             className="text-sm"
             style={{ color: theme.muted }}
           >
             {label}
           </Typography>
         </View>
-        <View className="items-end gap-0.5">
+        <View className="max-w-[45%] items-end gap-0.5">
           <Typography
             weight="600"
-            className={cn(
-              "text-sm tracking-[0.5px]",
-              valueColorClass,
-              entry.status === "failed" && "line-through"
-            )}
+            numberOfLines={1}
+            className={`text-sm tracking-[0.5px] ${entry.status === "failed" ? "line-through" : ""}`}
+            style={{ color: valueColor }}
           >
             {sign}
             {amount} {symbol}

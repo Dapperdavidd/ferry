@@ -87,7 +87,12 @@ export const ActivityList = memo(
         }}
         refreshControl={
           onRefresh ? (
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.muted}
+              colors={[theme.accent]}
+            />
           ) : undefined
         }
         ListEmptyComponent={emptyState}

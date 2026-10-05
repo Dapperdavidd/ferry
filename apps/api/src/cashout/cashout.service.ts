@@ -84,6 +84,17 @@ export class CashoutService {
     return address;
   }
 
+  private get settlementPair(): { pair: Address; ctk: Address } {
+    const { pair, ctk } = this.chain.addresses;
+    if (!pair || !ctk)
+      throw new ApiError(
+        "CASHOUT_UNAVAILABLE",
+        "Cash-outs aren't available right now.",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    return { pair, ctk };
+  }
+
   /** The pool's own numbers, plus a display conversion to the recipient's currency. */
   async quote(
     userId: string,
@@ -153,11 +164,12 @@ export class CashoutService {
     if (amountIn < MIN_CASHOUT_RAW)
       throw new ApiError("AMOUNT_TOO_SMALL", "The minimum cash-out is $1.00.");
     const settlement = this.settlement;
+    const { pair: pairAddress, ctk } = this.settlementPair;
     const pair = {
-      address: this.chain.addresses.pair,
+      address: pairAddress,
       abi: stableSwapPairAbi,
     } as const;
-    const path = [this.chain.addresses.ausd, this.chain.addresses.ctk] as const;
+    const path = [this.chain.addresses.ausd, ctk] as const;
     const [balance, paused, approved, amounts, feeBps] = await Promise.all([
       this.chain.ausdBalance(address),
       this.chain.publicClient.readContract({

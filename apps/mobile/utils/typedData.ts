@@ -6,10 +6,15 @@ export function toSignable(typedData: TypedData) {
   const message: Record<string, unknown> = {};
   for (const field of fields) {
     const value = typedData.message[field.name];
-    message[field.name] =
-      /^u?int\d*$/.test(field.type) && typeof value === "string"
-        ? BigInt(value)
-        : value;
+    if (/^u?int\d*$/.test(field.type) && typeof value === "string") {
+      message[field.name] = BigInt(value);
+    } else if (/^u?int\d*\[\]$/.test(field.type) && Array.isArray(value)) {
+      message[field.name] = value.map((item) =>
+        typeof item === "string" ? BigInt(item) : item
+      );
+    } else {
+      message[field.name] = value;
+    }
   }
   return {
     domain: typedData.domain,

@@ -131,7 +131,7 @@ function WelcomeScreen() {
               adjustsFontSizeToFit
               minimumFontScale={0.85}
             >
-              One-second settlement · Your face is the only key
+              One-second settlement · Protected by your passkey
             </Typography>
           </View>
           {authError ? (
@@ -156,14 +156,14 @@ function WelcomeScreen() {
               {busy ? (
                 <ActivityIndicator color="#000000" />
               ) : (
-                <Ionicons name="scan-outline" size={22} color="#000000" />
+                <Ionicons name="key-outline" size={22} color="#000000" />
               )}
               <Typography weight="600" className="text-lg text-black">
                 {account?.registrationPending
-                  ? "Finish creating account"
+                  ? "Finish with passkey"
                   : account
-                    ? "Unlock with Face ID"
-                    : "Create account with Face ID"}
+                    ? "Unlock with passkey"
+                    : "Continue with passkey"}
               </Typography>
             </HapticPressable>
 

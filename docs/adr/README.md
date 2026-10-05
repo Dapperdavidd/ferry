@@ -84,8 +84,9 @@ You do **not** need an ADR for routine choices like file naming, single-feature 
 | [0034](./0034-merchant-portal-routing.md)                                | Merchant portal uses a dependency-free history router with a fixed top nav                                                          | Accepted                             | Frontend / Merchant      |
 | [0035](./0035-merchant-portal-owner-surface-and-audit.md)                | Owner-authenticated merchant portal surface, audit trail and least-privilege reads                                                  | Accepted                             | Backend / Security       |
 | [0036](./0036-checkout-cancel-dismisses-the-attempt.md)                  | Checkout Cancel dismisses the attempt, it does not terminally cancel the intent                                                     | Accepted                             | Frontend / Checkout      |
+| [0037](./0037-recipient-owned-programmable-incoming-money.md)            | Recipient-owned rules route incoming AUSD atomically                                                                                | Accepted                             | Payments / Contracts     |
 
-> 0014 is reserved for a conditional relayer decision (a Kora reversal, see the 0012 update) and remains an intentional gap. The next free number is 0037.
+> 0014 is reserved for a conditional relayer decision (a Kora reversal, see the 0012 update) and remains an intentional gap. The next free number is 0038.
 
 ## Generating new ADR numbers
 

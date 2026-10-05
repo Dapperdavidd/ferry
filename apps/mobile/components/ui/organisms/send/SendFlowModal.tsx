@@ -1,10 +1,4 @@
-import React, {
-  useMemo,
-  useCallback,
-  forwardRef,
-  useState,
-  useRef,
-} from "react";
+import React, { useMemo, useCallback, forwardRef, useState } from "react";
 import { View, Dimensions, Keyboard } from "react-native";
 import {
   BottomSheetModal,
@@ -19,7 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import RecipientStep, { type RecipientSelection } from "./RecipientStep";
 import AmountStep from "./AmountStep";
-import { QRScannerModal } from "./QRScannerModal";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export interface SendFlowModalRef {
   present: () => void;
@@ -38,9 +32,8 @@ const springConfig = {};
 
 export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
   ({ onClose }, ref) => {
+    const { theme } = useAppTheme();
     const snapPoints = useMemo(() => ["94%"], []);
-    const scannerRef = useRef<BottomSheetModal>(null);
-
     const [, setStep] = useState<Step>("Recipient");
     const [recipient, setRecipient] = useState<string>("");
     const [selection, setSelection] = useState<RecipientSelection | null>(null);
@@ -88,15 +81,6 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
       ref?.current?.dismiss();
     };
 
-    const handleScanPress = () => {
-      Keyboard.dismiss();
-      scannerRef.current?.present();
-    };
-
-    const handleScan = (address: string) => {
-      setRecipient(address);
-    };
-
     const requestLayout = useAnimatedStyle(() => {
       return {
         transform: [{ translateX: translateX.value }],
@@ -104,52 +88,51 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
     });
 
     return (
-      <>
-        <BottomSheetModal
-          ref={ref}
-          snapPoints={snapPoints}
-          enableDynamicSizing={false}
-          onChange={handleSheetChanges}
-          backdropComponent={renderBackdrop}
-          enablePanDownToClose={true}
-          // The sheet keeps its full height while the keyboard is up. Letting it
-          // shrink collapses the amount step's flexible middle to nothing, and
-          // the height does not come back when the keyboard goes away.
-          keyboardBehavior="extend"
-          keyboardBlurBehavior="restore"
-          android_keyboardInputMode="adjustResize"
-          handleIndicatorStyle={{ display: "none" }}
-          backgroundStyle={{ backgroundColor: "#F7F7F4" }}
-          containerStyle={{ zIndex: 20 }}
+      <BottomSheetModal
+        ref={ref}
+        snapPoints={snapPoints}
+        enableDynamicSizing={false}
+        onChange={handleSheetChanges}
+        backdropComponent={renderBackdrop}
+        enablePanDownToClose={true}
+        // The sheet keeps its full height while the keyboard is up. Letting it
+        // shrink collapses the amount step's flexible middle to nothing, and
+        // the height does not come back when the keyboard goes away.
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        handleIndicatorStyle={{ display: "none" }}
+        backgroundStyle={{ backgroundColor: theme.background }}
+        containerStyle={{ zIndex: 20 }}
+      >
+        <BottomSheetView
+          className="h-full flex-1 overflow-hidden"
+          style={{ backgroundColor: theme.background }}
         >
-          <BottomSheetView className="h-full flex-1 overflow-hidden bg-[#F7F7F4]">
-            <Animated.View
-              className="w-[200%] flex-1 flex-row"
-              style={requestLayout}
-            >
-              <View className="w-full flex-1">
-                <RecipientStep
-                  onClose={handleClose}
-                  onNext={handleNext}
-                  onScanPress={handleScanPress}
-                  recipient={recipient}
-                  setRecipient={setRecipient}
-                />
-              </View>
-              <View className="w-full flex-1">
-                <AmountStep
-                  key={flowKey}
-                  recipient={selection}
-                  onBack={handleBack}
-                  onClose={handleClose}
-                />
-              </View>
-            </Animated.View>
-          </BottomSheetView>
-        </BottomSheetModal>
-
-        <QRScannerModal ref={scannerRef} onScan={handleScan} />
-      </>
+          <Animated.View
+            className="w-[200%] flex-1 flex-row"
+            style={requestLayout}
+          >
+            <View className="w-full flex-1">
+              <RecipientStep
+                key={flowKey}
+                onClose={handleClose}
+                onNext={handleNext}
+                recipient={recipient}
+                setRecipient={setRecipient}
+              />
+            </View>
+            <View className="w-full flex-1">
+              <AmountStep
+                key={flowKey}
+                recipient={selection}
+                onBack={handleBack}
+                onClose={handleClose}
+              />
+            </View>
+          </Animated.View>
+        </BottomSheetView>
+      </BottomSheetModal>
     );
   }
 );

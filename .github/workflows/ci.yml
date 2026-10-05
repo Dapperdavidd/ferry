@@ -1,12 +1,16 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
     branches: [main]
 
 jobs:
-  checks:
+  app-checks:
+    name: App and API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,4 +20,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx turbo run lint check-types test
+      - run: npm --workspace @ferry/api run build
 
+  contract-checks:
+    name: Contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Install pinned forge-std
+        run: forge install foundry-rs/forge-std@rev=3ce09137c04cfa037fef27f4270f3ddfa4358156 --no-git
+      - run: forge fmt --check
+      - run: forge build --sizes
+      - run: forge test -vvv

@@ -35,10 +35,15 @@ const hexKey = Joi.string().pattern(/^0x[0-9a-fA-F]{64}$/);
 
         AUSD_ADDRESS: address.required(),
         AUSD_FAUCET_ADDRESS: address.optional().allow(""),
-        CTK_ADDRESS: address.required(),
-        STABLE_SWAP_PAIR_ADDRESS: address.required(),
-        STABLE_SWAP_WHITELISTER_ADDRESS: address.required(),
+        // Settlement is an optional product rail. Core AUSD accounts and
+        // transfers must still boot on mainnet before Ferry has a production
+        // Agora pair and whitelist.
+        CTK_ADDRESS: address.optional().allow(""),
+        STABLE_SWAP_PAIR_ADDRESS: address.optional().allow(""),
+        STABLE_SWAP_WHITELISTER_ADDRESS: address.optional().allow(""),
         SETTLEMENT_ADDRESS: address.optional().allow(""),
+        FLOW_CONTRACT_ADDRESS: address.optional().allow(""),
+        FLOW_DEPLOYMENT_BLOCK: Joi.string().pattern(/^\d+$/).default("0"),
         PAYOUT_PARTNER_ADDRESS: address.optional().allow(""),
         PAYOUT_PROVIDER: Joi.string()
           .valid("disabled", "yellowcard")

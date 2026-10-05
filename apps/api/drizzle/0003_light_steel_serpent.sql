@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "transfers_intent_user_direction_idx" ON "transfers" USING btree ("intent_id","user_id","direction");

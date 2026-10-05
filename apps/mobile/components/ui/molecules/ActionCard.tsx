@@ -3,6 +3,7 @@ import { View, Image, ImageSourcePropType } from "react-native";
 import { ThemedText } from "@/components/ui/atoms";
 import BalanceView from "@/components/BalanceView";
 import HapticPressable from "../atoms/HapticPressable";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { cn } from "@/utils/cn";
 
@@ -29,14 +30,14 @@ interface ActionCardProps {
 }
 
 const CARD_GAP = 16;
-const REFERENCE_MIN_HEIGHT = 140;
+const REFERENCE_MIN_HEIGHT = 118;
 
 // Matches Typography's lineHeightMedium / lineHeightNormal. Overriding fontSize
 // alone leaves the line box at its unscaled height, which keeps the text block
 // the same size on every device and is what stopped the card shrinking at all.
 const TITLE_LEADING = 1.3;
 const SUBTITLE_LEADING = 1.2;
-const REFERENCE_ICON = 40;
+const REFERENCE_ICON = 34;
 
 export function ActionCard({
   title,
@@ -46,6 +47,7 @@ export function ActionCard({
   onPress,
   funded = false,
 }: ActionCardProps) {
+  const { theme } = useAppTheme();
   // Read per render rather than at module scope: a width captured at import
   // survives rotation and split-screen resizes as a stale value.
   const { width, size, typeSize } = useResponsiveLayout();
@@ -56,16 +58,16 @@ export function ActionCard({
     <HapticPressable
       // MEASURED-LAYOUT
       style={{
+        backgroundColor: theme.card,
+        borderColor: theme.border,
         width: cardWidth,
         minHeight: size(REFERENCE_MIN_HEIGHT),
-        paddingVertical: size(24),
-        marginBottom: size(16),
+        paddingVertical: size(18),
+        marginBottom: size(12),
       }}
       className={cn(
-        "justify-between rounded-2xl border bg-card px-4",
-        funded
-          ? "border-[0.3px] border-solid border-black/[0.12]"
-          : "border-dashed border-black/[0.12]"
+        "justify-between rounded-2xl border px-4",
+        funded ? "border-[0.3px] border-solid" : "border-dashed"
       )}
       onPress={onPress}
     >
@@ -79,8 +81,9 @@ export function ActionCard({
         <ThemedText
           type="defaultSemiBold"
           style={{
-            fontSize: typeSize(16),
-            lineHeight: typeSize(16) * TITLE_LEADING,
+            color: theme.text,
+            fontSize: typeSize(15),
+            lineHeight: typeSize(15) * TITLE_LEADING,
           }}
         >
           {title}
@@ -90,8 +93,9 @@ export function ActionCard({
             weight="500"
             amount={amount}
             style={{
-              fontSize: typeSize(13),
-              lineHeight: typeSize(13) * SUBTITLE_LEADING,
+              color: theme.text,
+              fontSize: typeSize(12),
+              lineHeight: typeSize(12) * SUBTITLE_LEADING,
             }}
           />
         ) : (
@@ -99,8 +103,9 @@ export function ActionCard({
             type="small"
             className="opacity-60"
             style={{
-              fontSize: typeSize(13),
-              lineHeight: typeSize(13) * SUBTITLE_LEADING,
+              color: theme.muted,
+              fontSize: typeSize(12),
+              lineHeight: typeSize(12) * SUBTITLE_LEADING,
             }}
           >
             {subtitle}

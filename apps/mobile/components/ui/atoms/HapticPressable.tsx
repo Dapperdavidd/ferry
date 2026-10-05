@@ -1,5 +1,12 @@
-import React, { useCallback, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Pressable,
@@ -7,7 +14,6 @@ import {
   StyleProp,
   ViewStyle,
 } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
 /**
@@ -44,6 +50,27 @@ const PRESS_IN_MS = 10;
 const PRESS_OUT_MS = 120;
 
 const PRESSED_SCALE = 0.97;
+
+function useReducedMotion() {
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (mounted) setReduceMotion(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion
+    );
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  return reduceMotion;
+}
 
 export type PressFeedback = "impact" | "selection" | "none";
 

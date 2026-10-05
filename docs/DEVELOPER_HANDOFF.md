@@ -1,8 +1,8 @@
 # Ferry developer handoff
 
-Updated 5 October 2026. This document describes the state merged into `main`, what is
-already functional, what still depends on partner access, and the safest path for the next
-developer to continue.
+Updated 5 October 2026. This document describes the current Ferry working tree, what is
+already functional, what is implemented behind an activation gate, what still depends on
+partner access, and the safest path for the next developer to continue.
 
 ## Product in one paragraph
 
@@ -58,6 +58,25 @@ is the mobile/API contract in code.
   pays the recipient's saved local bank account. The signing progress screen and success
   receipt were restyled to the same premium card language.
 
+### Ferry Flows
+
+- Flows is Ferry's programmable incoming-money feature: the recipient saves a percentage
+  rule once and future handle payments follow it automatically.
+- `FerryFlow` atomically routes AUSD across one to five distinct destinations. Allocation
+  must total 100%, rounding dust goes to the final destination, configuration uses a
+  deadline-bound sequential EIP-712 nonce, and payment uses owner-bound EIP-3009.
+- The API prepares immutable intents, verifies the mobile signature, durably claims a
+  submission before relay, reconciles from contract events, and never blindly rebroadcasts
+  an ambiguous payment. Explicit pre-broadcast failures can safely reopen for retry.
+- The mobile app provides a premium create/edit/review/disable experience, exact typed-data
+  verification, and a Home entry card. It exposes the 70/20/10 seed rule only as a labelled
+  local preview; production starts at 100% Spendable until the user activates a real rule.
+- Production activation currently supports Spendable and resolved Ferry people. Pocket and
+  bank destinations remain visible product directions but cannot be activated until they
+  resolve to real, distinct settlement destinations.
+- Flows is not deployed yet. When no Flow contract address is configured, normal sends use
+  the existing direct-transfer path so TestFlight builds do not regress.
+
 ### Funding
 
 - Add money now has a dedicated route rather than a generic modal.
@@ -112,10 +131,18 @@ All routes below use the existing JWT principal unless noted otherwise.
 | `PUT /payout/account`              | Resolve, verify, encrypt, and store a payout account.                                                               |
 | `POST /cashout/direct/quote`       | Quote AUSD settlement followed by delivery to a Ferry recipient's bank.                                             |
 | `POST /payout/webhook/yellow-card` | Consume an HMAC-verified Yellow Card payment update. This endpoint is intentionally public at the controller level. |
+| `GET /flows/me`                    | Return the authenticated user's active Flow or the disabled default.                                                |
+| `POST /flows/prepare`              | Pin and prepare a short-lived signed configure/disable intent.                                                      |
+| `POST /flows/submit`               | Verify and relay a prepared configuration idempotently.                                                             |
+| `POST /flows/payments/prepare`     | Resolve a Ferry recipient and prepare an owner-bound AUSD payment authorization.                                    |
+| `POST /flows/payments/submit`      | Verify, relay, and reconcile an atomic Flow payment.                                                                |
 
 Database migration `apps/api/drizzle/0001_overconfident_imperial_guard.sql` adds encrypted
 payout metadata to users and payout state to cash-outs. Run it before starting the updated
 API against an existing database.
+
+Migration `apps/api/drizzle/0002_glossy_rictor.sql` adds Flow configuration and payment
+state, including the durable `SUBMITTING` state used to prevent double broadcasts.
 
 ## Environment and external access
 
@@ -140,6 +167,10 @@ The provider must remain disabled until the sandbox request shapes, signature ru
 webhook header, retry behavior, payout limits, and compliance requirements have been
 verified against Ferry's actual Yellow Card account.
 
+Flows additionally needs `FLOW_CONTRACT_ADDRESS` and `FLOW_DEPLOYMENT_BLOCK` on the API,
+plus the same address as `EXPO_PUBLIC_FLOW_CONTRACT_ADDRESS` in the mobile build. Keep all
+three unset until the contract is deployed and the deployment block is recorded.
+
 ## Run and verify locally
 
 ```sh
@@ -158,6 +189,8 @@ Run the repository checks before merging:
 npm run check-types
 npm run lint
 npm test
+npm --workspace @ferry/api run build
+cd contracts && forge fmt --check && forge build --sizes && forge test
 ```
 
 The passkey derivation vector in
@@ -181,25 +214,28 @@ confirm the project was opened through `Ferry.xcworkspace`, not `Ferry.xcodeproj
 
 ## What the next developer should do
 
-1. Create a fresh Release archive from a clean prebuild and upload it to TestFlight. Check
+1. Deploy `FerryFlow` on Monad testnet, record its deployment block, apply migration 0002,
+   configure the API/mobile feature gates, and run the two-account configure/send/event-
+   reconciliation/disable/fallback rehearsal. Do not enable Pocket or Bank destinations.
+2. Create a fresh Release archive from a clean prebuild and upload it to TestFlight. Check
    that the upload has neither missing-symbol warnings nor nested-dSYM error 90171, and
    bump the iOS build number before each upload.
-2. Run the complete two-device physical-iPhone rehearsal: create/sign in with passkeys,
+3. Run the complete two-device physical-iPhone rehearsal: create/sign in with passkeys,
    fund from the testnet faucet, send by handle and QR, background/foreground the app,
    inspect activity, and open the explorer receipt. PRF passkeys do not work correctly in
    the simulator, so simulator-only QA is insufficient.
-3. Apply the new database migration in staging and test all payout-account routes with a
+4. Apply the new database migration in staging and test all payout-account routes with a
    disposable database.
-4. Once partner access arrives, test Agora live deposit routes and the entire Yellow Card
+5. Once partner access arrives, test Agora live deposit routes and the entire Yellow Card
    sandbox lifecycle before enabling either feature in production. Add contract tests from
    captured, redacted provider responses rather than relying only on hand-built fixtures.
-5. Add end-to-end tests for the direct-send state machine, especially settlement confirmed
+6. Add end-to-end tests for the direct-send state machine, especially settlement confirmed
    plus payout retry, delayed webhook, duplicate webhook, rejected payout, and app restart.
-6. Replace the temporary mainnet selector preview with a real build/runtime network
+7. Replace the temporary mainnet selector preview with a real build/runtime network
    configuration only when all mainnet addresses, RPCs, relayer, settlement contract, and
    provider treasury are ready. Never let the label switch while the signing client remains
    on another chain.
-7. Finish accessibility, small-device layout, offline/error-state, and Android device QA.
+8. Finish accessibility, small-device layout, offline/error-state, and Android device QA.
    The visual pass is strongest on the current iPhone reference size; keep the calm white,
    black, warm-metal, and soft-shadow system when polishing other sizes.
 
@@ -209,6 +245,8 @@ confirm the project was opened through `Ferry.xcworkspace`, not `Ferry.xcodeproj
 - Yellow Card bank payouts are disabled unless the server is deliberately configured.
 - USD bank deposits are not implemented and are labelled Coming soon.
 - Mainnet selection is a preview when the installed build is configured for testnet.
+- Ferry Flows is implemented but inactive until its contract address and deployment block
+  are configured; Pocket and Bank Flow destinations are intentionally non-activatable.
 - Generated `apps/mobile/ios` output and local `.xcarchive` files are not source artifacts.
   Regenerate native code from Expo config; do not commit local signing products.
 - `apps/backend` is the legacy Xend backend and is not a place for new Ferry work.

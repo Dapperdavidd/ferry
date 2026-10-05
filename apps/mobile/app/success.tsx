@@ -1,5 +1,5 @@
 import React from "react";
-import { Image, Linking, StyleSheet, View } from "react-native";
+import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import Svg, {
@@ -30,6 +30,8 @@ export default function SuccessScreen() {
     localAmount,
     localCurrency,
     txHash,
+    flowPayment,
+    flowApplied,
   } = useLocalSearchParams<{
     amount: string;
     type: string;
@@ -38,8 +40,12 @@ export default function SuccessScreen() {
     localAmount: string;
     localCurrency: string;
     txHash: string;
+    flowPayment: string;
+    flowApplied: string;
   }>();
   const isDelivery = type === "direct" || type === "cashout";
+  const isFlowPayment = flowPayment === "true";
+  const didApplyFlow = flowApplied === "true";
   const delivered = formatLocalMoney(
     Number(localAmount || amount || 0),
     localCurrency || "USD"
@@ -52,7 +58,16 @@ export default function SuccessScreen() {
       lightColor={theme.background}
       darkColor={theme.background}
     >
-      <View className="flex-1 px-6 pb-8 pt-10">
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingHorizontal: 24,
+          paddingBottom: 32,
+          paddingTop: 28,
+        }}
+      >
         <View className="items-center">
           <View
             className="size-16 items-center justify-center rounded-full"
@@ -65,7 +80,11 @@ export default function SuccessScreen() {
             className="mt-8 text-center text-[34px] leading-[40px] tracking-[-1.1px]"
             style={{ color: theme.text }}
           >
-            {isDelivery ? "Money is on its way" : "Sent"}
+            {isDelivery
+              ? "Money is on its way"
+              : isFlowPayment && didApplyFlow
+                ? "Sent with Flow"
+                : "Sent"}
           </Typography>
           <Typography
             weight="500"
@@ -74,7 +93,11 @@ export default function SuccessScreen() {
           >
             {isDelivery
               ? `${destination} should receive it in under a minute.`
-              : `${formatAmount({ amount: amount || "0" })} AUSD was sent to ${recipient}.`}
+              : isFlowPayment
+                ? didApplyFlow
+                  ? `${formatAmount({ amount: amount || "0" })} AUSD reached ${recipient}. Their Flow is sorting it now.`
+                  : `${formatAmount({ amount: amount || "0" })} AUSD reached ${recipient} and stayed fully Spendable.`
+                : `${formatAmount({ amount: amount || "0" })} AUSD was sent to ${recipient}.`}
           </Typography>
         </View>
 
@@ -138,14 +161,19 @@ export default function SuccessScreen() {
               </View>
             </View>
           </View>
+        ) : isFlowPayment ? (
+          <FlowReceipt
+            recipient={recipientName || recipient}
+            applied={didApplyFlow}
+          />
         ) : null}
 
-        <View className="mt-auto gap-3">
+        <View className="mt-auto gap-3 pt-8">
           {txHash ? (
             <HapticPressable
               accessible
               accessibilityRole="link"
-              accessibilityLabel="View receipt on Monad"
+              accessibilityLabel="View payment receipt"
               feedback="selection"
               onPress={() => void Linking.openURL(txUrl(txHash))}
               className="h-11 flex-row items-center justify-center gap-2"
@@ -155,7 +183,7 @@ export default function SuccessScreen() {
                 className="text-sm"
                 style={{ color: theme.muted }}
               >
-                View receipt on Monad
+                View payment receipt
               </Typography>
               <Ionicons name="arrow-up-outline" size={15} color={theme.muted} />
             </HapticPressable>
@@ -166,8 +194,74 @@ export default function SuccessScreen() {
             onPress={() => router.replace("/(tabs)")}
           />
         </View>
-      </View>
+      </ScrollView>
     </ScreenLayout>
+  );
+}
+
+function FlowReceipt({
+  recipient,
+  applied,
+}: {
+  recipient: string;
+  applied: boolean;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Ferry Flow route. ${applied ? "The recipient's allocation was applied." : "The payment was delivered to Spendable."}`}
+      className="relative mt-10 min-h-[174px] overflow-hidden rounded-[30px] border p-5"
+      style={{ backgroundColor: theme.cardStrong, borderColor: theme.border }}
+    >
+      <View
+        className="absolute -right-12 -top-16 size-40 rounded-full"
+        style={{ backgroundColor: theme.accentSoft, opacity: 0.8 }}
+      />
+      <View
+        className="absolute -bottom-20 -right-10 size-44 rounded-full border"
+        style={{ borderColor: theme.accent, opacity: 0.18 }}
+      />
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <View
+            className="size-2 rounded-full"
+            style={{ backgroundColor: theme.accent }}
+          />
+          <Typography
+            weight="800"
+            className="text-[10px] uppercase tracking-[1.5px]"
+            style={{ color: theme.muted }}
+          >
+            Ferry Flow route
+          </Typography>
+        </View>
+        <View
+          className="size-9 items-center justify-center rounded-full"
+          style={{ backgroundColor: theme.card }}
+        >
+          <Ionicons name="git-branch-outline" size={18} color={theme.text} />
+        </View>
+      </View>
+      <View className="mt-auto">
+        <Typography
+          weight="700"
+          numberOfLines={1}
+          className="text-[21px] tracking-[-0.5px]"
+          style={{ color: theme.text }}
+        >
+          {applied ? "Allocation applied" : "Delivered to Spendable"}
+        </Typography>
+        <Typography
+          weight="500"
+          numberOfLines={1}
+          className="mt-1 text-xs"
+          style={{ color: theme.muted }}
+        >
+          {recipient}
+        </Typography>
+      </View>
+    </View>
   );
 }
 

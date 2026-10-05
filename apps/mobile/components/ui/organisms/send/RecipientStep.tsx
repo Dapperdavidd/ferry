@@ -1,40 +1,25 @@
-import React, { useRef, useEffect, useMemo, useCallback, memo } from "react";
-import {
-  Image,
-  View,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Keyboard,
-} from "react-native";
-import { Typography } from "@/components/ui/atoms/Typography";
+import React, { memo, useCallback, useMemo, useRef, useState } from "react";
+import { Keyboard, TouchableWithoutFeedback, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import {
-  Ionicons,
-  FontAwesome5,
-  MaterialCommunityIcons,
-  MaterialIcons,
-} from "@expo/vector-icons";
-import HapticPressable from "@/components/ui/atoms/HapticPressable";
-import TabHeaderText from "@/components/ui/atoms/TabHeaderText";
-import {
-  BottomSheetTextInput,
-  BottomSheetScrollView,
-} from "@gorhom/bottom-sheet";
-import { truncateAddress } from "@/utils/helper";
+import { Ionicons } from "@expo/vector-icons";
+import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { TextInput } from "react-native-gesture-handler";
-import { isAddress } from "viem";
-import { cn } from "@/utils/cn";
 import { useQuery } from "@tanstack/react-query";
-import { useDebounce } from "@/hooks/useDebounce";
+import { isAddress } from "viem";
+
+import HapticPressable from "@/components/ui/atoms/HapticPressable";
+import { Typography } from "@/components/ui/atoms/Typography";
+import { useAppTheme } from "@/contexts/AppThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useContacts } from "@/hooks/useContacts";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useRecentRecipients } from "@/hooks/useRecentRecipients";
 import { apiClient, type DirectoryEntry } from "@/utils/apiClient";
-import { useAuth } from "@/contexts/AuthContext";
+import { truncateAddress } from "@/utils/helper";
 
 interface RecipientStepProps {
   onClose: () => void;
   onNext: (recipient: RecipientSelection) => void;
-  onScanPress: () => void;
   recipient: string;
   setRecipient: (recipient: string) => void;
 }
@@ -59,6 +44,16 @@ const selectionFromDirectory = (entry: DirectoryEntry): RecipientSelection => ({
   payoutReady: entry.payoutReady,
 });
 
+const selectionFromAddress = (address: string): RecipientSelection => ({
+  value: address,
+  address,
+  handle: null,
+  displayName: null,
+  homeCurrency: null,
+  country: null,
+  payoutReady: false,
+});
+
 const HANDLE = /^@?[a-z0-9_]{3,20}$/i;
 
 /** "@ada", "ada" and "ferry://pay?to=@ada" all mean the handle ada. */
@@ -75,22 +70,31 @@ export function parseRecipient(
 }
 
 export default memo(function RecipientStep({
+  onClose,
   onNext,
-  onScanPress,
   recipient,
   setRecipient,
 }: RecipientStepProps) {
+  const { theme } = useAppTheme();
   const inputRef = useRef<TextInput | null>(null);
-  const debouncedRecipient = useDebounce(recipient, 400);
+  const walletAddressRef = useRef<TextInput | null>(null);
+  const [destinationMode, setDestinationMode] = useState<"list" | "wallet">(
+    "list"
+  );
+  const [walletName, setWalletName] = useState("");
+  const debouncedRecipient = useDebounce(recipient, 350);
   const { address } = useAuth();
-  const { contacts } = useContacts();
+  const { contacts, addContact } = useContacts();
   const savedAddresses = useMemo(
-    () => contacts.map((c) => c.address),
+    () => contacts.map((contact) => contact.address),
     [contacts]
   );
   const { recipients } = useRecentRecipients({ exclude: savedAddresses });
   const sendsTo = useMemo(
-    () => new Map(recipients.map((r) => [r.address.toLowerCase(), r.sends])),
+    () =>
+      new Map(
+        recipients.map((entry) => [entry.address.toLowerCase(), entry.sends])
+      ),
     [recipients]
   );
 
@@ -99,9 +103,8 @@ export default memo(function RecipientStep({
     () => parseRecipient(debouncedRecipient),
     [debouncedRecipient]
   );
-  const isHandle = parsed?.kind === "handle";
   const lookupMatchesCurrent =
-    isHandle &&
+    parsed?.kind === "handle" &&
     debouncedParsed?.kind === "handle" &&
     debouncedParsed.value === parsed.value;
 
@@ -113,11 +116,6 @@ export default memo(function RecipientStep({
     staleTime: 60_000,
   });
 
-  const handlePaste = async () => {
-    const text = await Clipboard.getStringAsync();
-    if (text && parseRecipient(text)) setRecipient(text.trim());
-  };
-
   const currentResolved = lookupMatchesCurrent ? resolved : undefined;
   const target =
     parsed?.kind === "address" ? parsed.value : currentResolved?.address;
@@ -126,343 +124,496 @@ export default memo(function RecipientStep({
     address !== null &&
     target.toLowerCase() === address.toLowerCase();
 
+  const matchingContacts = useMemo(() => {
+    const query = recipient.trim().toLowerCase();
+    if (!query || parsed) return [];
+    return contacts
+      .filter(
+        (contact) =>
+          contact.name.toLowerCase().includes(query) ||
+          contact.address.toLowerCase().includes(query)
+      )
+      .slice(0, 3);
+  }, [contacts, parsed, recipient]);
+
   const handleContinue = useCallback(() => {
     if (!parsed || isSelf) return;
-    if (parsed.kind === "address")
-      onNext({
-        value: parsed.value,
-        address: parsed.value,
-        handle: null,
-        displayName: null,
-        homeCurrency: null,
-        country: null,
-        payoutReady: false,
-      });
-    else if (currentResolved) onNext(selectionFromDirectory(currentResolved));
+    if (parsed.kind === "address") {
+      onNext(selectionFromAddress(parsed.value));
+      return;
+    }
+    if (currentResolved) onNext(selectionFromDirectory(currentResolved));
   }, [currentResolved, isSelf, onNext, parsed]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.focus(), 300);
-    return () => clearTimeout(timer);
-  }, []);
+  const handlePaste = async () => {
+    const text = (await Clipboard.getStringAsync()).trim();
+    if (!text) return;
 
-  const { isValid, label, icon } = useMemo(() => {
-    if (debouncedRecipient.length === 0)
-      return { isValid: true, label: "Enter a @handle or a Monad address" };
-    if (!parsed)
-      return {
-        isValid: false,
-        label: "That isn't a handle or a Monad address",
-      };
-
-    if (isSelf)
-      return {
-        isValid: false,
-        label: "That's your own Ferry account",
-        icon: (
-          <MaterialCommunityIcons name="alert-decagram" size={14} color="red" />
-        ),
-      };
-
-    const sends = (target && sendsTo.get(target.toLowerCase())) ?? 0;
-    const sendsLabel =
-      sends === 0 ? "New recipient" : `${sends} send${sends === 1 ? "" : "s"}`;
-
-    if (parsed.kind === "handle") {
-      if (!lookupMatchesCurrent || isResolving) {
-        return {
-          isValid: true,
-          label: "Looking up…",
-          icon: <FontAwesome5 name="spinner" size={14} color="blue" />,
-        };
-      }
-      if (currentResolved === null) {
-        return {
-          isValid: false,
-          label: `No one on Ferry is @${parsed.value}`,
-          icon: (
-            <MaterialCommunityIcons
-              name="alert-decagram"
-              size={14}
-              color="red"
-            />
-          ),
-        };
-      }
-      if (currentResolved) {
-        return {
-          isValid: true,
-          label: currentResolved.payoutReady
-            ? `${currentResolved.payoutBank ?? `${currentResolved.homeCurrency} bank`} · •••• ${currentResolved.payoutAccountEnding ?? ""} · ${sendsLabel}`
-            : `Ferry wallet · ${sendsLabel}`,
-          icon: (
-            <MaterialCommunityIcons
-              name="check-decagram"
-              size={14}
-              color="green"
-            />
-          ),
-        };
-      }
-      return { isValid: true, label: "Enter a @handle or a Monad address" };
+    setRecipient(text);
+    const pasted = parseRecipient(text);
+    if (!pasted) {
+      inputRef.current?.focus();
+      return;
     }
 
-    return {
-      isValid: true,
-      label: sendsLabel,
-      icon: (
-        <MaterialCommunityIcons
-          name="clock-time-nine"
-          size={14}
-          color="lightgrey"
-        />
-      ),
-    };
+    if (
+      pasted.kind === "address" &&
+      address?.toLowerCase() !== pasted.value.toLowerCase()
+    ) {
+      onNext(selectionFromAddress(pasted.value));
+      return;
+    }
+
+    if (pasted.kind === "handle") {
+      const found = await apiClient
+        .resolveHandle(pasted.value)
+        .catch(() => null);
+      if (found && found.address.toLowerCase() !== address?.toLowerCase()) {
+        onNext(selectionFromDirectory(found));
+        return;
+      }
+    }
+
+    inputRef.current?.focus();
+  };
+
+  const state = useMemo(() => {
+    if (!recipient.trim()) return { label: "", valid: false };
+    if (!parsed) {
+      return {
+        label:
+          matchingContacts.length > 0
+            ? "Choose a contact"
+            : "Enter a Ferry username or wallet address",
+        valid: false,
+      };
+    }
+    if (isSelf) return { label: "That's your own Ferry account", valid: false };
+    if (parsed.kind === "address") {
+      const sends = sendsTo.get(parsed.value.toLowerCase()) ?? 0;
+      return {
+        label:
+          sends > 0
+            ? `Wallet · ${sends} previous send${sends === 1 ? "" : "s"}`
+            : "Wallet ready",
+        valid: true,
+      };
+    }
+    if (!lookupMatchesCurrent || isResolving)
+      return { label: "Finding that Ferry account…", valid: false };
+    if (!currentResolved)
+      return {
+        label: `No Ferry account found for @${parsed.value}`,
+        valid: false,
+      };
+    return { label: `@${currentResolved.handle} is ready`, valid: true };
   }, [
     currentResolved,
-    debouncedRecipient,
     isResolving,
     isSelf,
     lookupMatchesCurrent,
+    matchingContacts.length,
     parsed,
+    recipient,
     sendsTo,
-    target,
   ]);
 
-  const isContinueDisabled =
-    !parsed ||
-    !isValid ||
-    isSelf ||
-    (parsed.kind === "handle" && !currentResolved);
+  const focusRecipient = () => {
+    setDestinationMode("list");
+    inputRef.current?.focus();
+  };
+
+  const openWallet = () => {
+    Keyboard.dismiss();
+    setRecipient("");
+    setWalletName("");
+    setDestinationMode("wallet");
+  };
+
+  const handleBack = () => {
+    if (destinationMode === "wallet") {
+      Keyboard.dismiss();
+      setRecipient("");
+      setWalletName("");
+      setDestinationMode("list");
+      return;
+    }
+    onClose();
+  };
+
+  const handleWalletPaste = async () => {
+    const text = (await Clipboard.getStringAsync()).trim();
+    if (!text) {
+      walletAddressRef.current?.focus();
+      return;
+    }
+    setRecipient(text);
+  };
+
+  const walletAddress =
+    parsed?.kind === "address" && !isSelf ? parsed.value : null;
+
+  const handleWalletContinue = () => {
+    if (!walletAddress) return;
+    const name = walletName.trim();
+    if (
+      name &&
+      !contacts.some(
+        (contact) =>
+          contact.address.toLowerCase() === walletAddress.toLowerCase()
+      )
+    ) {
+      addContact({ name, address: walletAddress });
+    }
+    onNext({
+      ...selectionFromAddress(walletAddress),
+      displayName: name || null,
+    });
+  };
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View className="flex-1 bg-[#F7F7F4]">
-        <View className="mb-7 flex-row items-center justify-between px-6">
-          <View className="size-11" />
-          <View className="items-center">
-            <TabHeaderText className="pb-0 text-center font-bold">
-              Send money
-            </TabHeaderText>
-            <Typography weight="500" className="mt-0.5 text-xs text-black/35">
-              Ferry Direct or wallet address
-            </Typography>
-          </View>
-          <TouchableOpacity
-            onPress={onScanPress}
+      <View className="flex-1" style={{ backgroundColor: theme.background }}>
+        <View className="flex-row items-center justify-between px-6 pb-12 pt-5">
+          <HapticPressable
+            accessibilityLabel={
+              destinationMode === "wallet" ? "Back to send" : "Close send"
+            }
             accessibilityRole="button"
-            accessibilityLabel="Scan a Ferry QR code"
-            className="size-11 items-center justify-center rounded-full bg-white"
+            feedback="selection"
+            onPress={handleBack}
+            className="size-14 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="scan-outline" size={21} color="#111111" />
-          </TouchableOpacity>
-        </View>
-
-        <View className="mx-6 mb-9 rounded-[28px] bg-white p-5">
+            <Ionicons name="chevron-back" size={27} color={theme.text} />
+          </HapticPressable>
           <Typography
             weight="700"
-            className="mb-2 text-[10px] uppercase tracking-[1.5px] text-black/30"
+            className="text-[20px] tracking-[-0.3px]"
+            style={{ color: theme.text }}
           >
-            Recipient
+            {destinationMode === "wallet" ? "Add wallet" : "Send"}
           </Typography>
-          <TouchableOpacity
-            className="relative bg-transparent"
-            onPress={() => inputRef.current?.focus()}
-          >
-            <BottomSheetTextInput
-              accessibilityLabel="Ferry handle or wallet address"
-              className="-ml-1 mb-2 w-full py-0 pr-8 text-[22px] font-bold tracking-[-0.35px] text-black/90"
-              placeholder="@handle or address"
-              placeholderTextColor="#0000004D"
-              value={recipient}
-              onChangeText={setRecipient}
-              autoCapitalize="none"
-              autoCorrect={false}
-              ref={inputRef}
-              style={{ fontFamily: "Inter_700Bold" }}
-              returnKeyType="go"
-              onSubmitEditing={handleContinue}
-              submitBehavior="blurAndSubmit"
-            />
-            <TouchableOpacity
-              onPress={() => inputRef.current?.focus()}
-              className="mb-4 flex-row items-center justify-start gap-1.5"
+          <View className="size-14" />
+        </View>
+
+        {destinationMode === "wallet" ? (
+          <View className="flex-1 px-6">
+            <View
+              className="min-h-[104px] flex-row items-center rounded-[30px] px-6"
+              style={{ backgroundColor: theme.cardStrong }}
             >
-              {icon}
+              <BottomSheetTextInput
+                ref={walletAddressRef}
+                accessibilityLabel="Wallet address"
+                value={recipient}
+                onChangeText={setRecipient}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                placeholder="Wallet address"
+                placeholderTextColor={theme.muted}
+                returnKeyType="next"
+                className="min-w-0 flex-1 text-[18px]"
+                style={{ color: theme.text, fontFamily: "Inter_500Medium" }}
+              />
+              <HapticPressable
+                accessibilityLabel="Paste wallet address"
+                accessibilityRole="button"
+                feedback="selection"
+                onPress={handleWalletPaste}
+                className="ml-3 items-center justify-center rounded-full px-5 py-3.5"
+                style={{ backgroundColor: theme.text }}
+              >
+                <Typography
+                  weight="600"
+                  className="text-[16px]"
+                  style={{ color: theme.background }}
+                >
+                  Paste
+                </Typography>
+              </HapticPressable>
+            </View>
+
+            <View
+              className="mt-5 min-h-[78px] justify-center rounded-[30px] px-6"
+              style={{ backgroundColor: theme.cardStrong }}
+            >
+              <BottomSheetTextInput
+                accessibilityLabel="Wallet name, optional"
+                value={walletName}
+                onChangeText={setWalletName}
+                autoCapitalize="words"
+                autoCorrect
+                placeholder="Wallet name (Optional)"
+                placeholderTextColor={theme.muted}
+                returnKeyType="done"
+                onSubmitEditing={handleWalletContinue}
+                className="text-[18px]"
+                style={{ color: theme.text, fontFamily: "Inter_500Medium" }}
+              />
+            </View>
+
+            <HapticPressable
+              accessibilityLabel="Continue with wallet"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !walletAddress }}
+              disabled={!walletAddress}
+              feedback="impact"
+              onPress={handleWalletContinue}
+              className="mb-7 mt-auto min-h-[68px] items-center justify-center rounded-full"
+              style={{
+                backgroundColor: walletAddress ? theme.text : theme.faint,
+                opacity: walletAddress ? 1 : 0.82,
+              }}
+            >
               <Typography
                 weight="600"
-                className={cn(
-                  "text-[12px] text-black/35",
-                  !isValid && "text-red-500"
-                )}
+                className="text-[20px]"
+                style={{ color: theme.background }}
               >
-                {label}
-              </Typography>
-            </TouchableOpacity>
-
-            {recipient && (
-              <HapticPressable
-                className="absolute -right-5 -top-5 z-10 p-5"
-                onPress={() => setRecipient("")}
-              >
-                <Ionicons name="close-circle" size={20} color="lightgrey" />
-              </HapticPressable>
-            )}
-          </TouchableOpacity>
-
-          <View className="flex-row gap-2.5">
-            <HapticPressable
-              accessibilityRole="button"
-              accessibilityLabel="Continue to enter amount"
-              className={cn(
-                "h-12 flex-1 items-center justify-center rounded-full",
-                !isContinueDisabled ? "bg-black" : "bg-black/20"
-              )}
-              onPress={handleContinue}
-              disabled={isContinueDisabled}
-            >
-              <Typography weight="600" className="text-white">
                 Continue
               </Typography>
             </HapticPressable>
-
-            <HapticPressable
-              accessibilityRole="button"
-              accessibilityLabel="Paste recipient"
-              className="size-12 items-center justify-center rounded-full bg-black/[0.055]"
-              onPress={handlePaste}
-            >
-              <Ionicons name="document-outline" size={19} color="#111111" />
-            </HapticPressable>
           </View>
-        </View>
+        ) : (
+          <>
+            <View className="px-6">
+              <DestinationRow
+                icon="business-outline"
+                title="Add a bank account"
+                subtitle="6 currencies"
+                flags={["🇺🇸", "🇪🇺", "🇬🇧", "🇧🇷", "🇨🇴"]}
+                badge="Coming soon"
+                disabled
+              />
+              <DestinationRow
+                icon="wallet-outline"
+                title="Wallet"
+                subtitle="Monad"
+                onPress={openWallet}
+              />
+              <DestinationRow
+                icon="at-outline"
+                title="Username"
+                subtitle="Instantly on Ferry"
+                onPress={focusRecipient}
+                last
+              />
+            </View>
 
-        <BottomSheetScrollView showsVerticalScrollIndicator={false}>
-          {contacts.length > 0 && (
-            <>
-              <Typography
-                weight="700"
-                className="mb-4 ml-6 text-[21px] tracking-[-0.4px] text-black/55"
-              >
-                Address book
-              </Typography>
-              {contacts.map((contact) => (
-                <RecipientRow
-                  key={contact.address}
-                  title={contact.name}
-                  subtitle={truncateAddress(contact.address)}
-                  direct={false}
-                  onPress={() => {
-                    setRecipient(contact.address);
-                    onNext({
-                      value: contact.address,
-                      address: contact.address,
-                      handle: null,
-                      displayName: contact.name,
-                      homeCurrency: null,
-                      country: null,
-                      payoutReady: false,
-                    });
+            <View className="mt-auto px-6 pb-7">
+              {matchingContacts.length > 0 ? (
+                <View
+                  className="mb-3 overflow-hidden rounded-[24px] border"
+                  style={{
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
                   }}
-                />
-              ))}
-            </>
-          )}
+                >
+                  {matchingContacts.map((contact, index) => (
+                    <HapticPressable
+                      key={contact.address}
+                      accessibilityLabel={`Send to ${contact.name}`}
+                      feedback="selection"
+                      onPress={() => {
+                        setRecipient(contact.address);
+                        onNext({
+                          ...selectionFromAddress(contact.address),
+                          displayName: contact.name,
+                        });
+                      }}
+                      className="flex-row items-center px-5 py-3.5"
+                      style={
+                        index === matchingContacts.length - 1
+                          ? undefined
+                          : {
+                              borderBottomColor: theme.border,
+                              borderBottomWidth: 1,
+                            }
+                      }
+                    >
+                      <View className="min-w-0 flex-1">
+                        <Typography weight="700" style={{ color: theme.text }}>
+                          {contact.name}
+                        </Typography>
+                        <Typography
+                          weight="500"
+                          className="mt-0.5 text-xs"
+                          style={{ color: theme.muted }}
+                        >
+                          {truncateAddress(contact.address)}
+                        </Typography>
+                      </View>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={18}
+                        color={theme.muted}
+                      />
+                    </HapticPressable>
+                  ))}
+                </View>
+              ) : null}
 
-          {recipients.length > 0 && (
-            <>
-              <Typography
-                weight="700"
-                className={cn(
-                  "mb-4 ml-6 text-[21px] tracking-[-0.4px] text-black/55",
-                  contacts.length > 0 && "mt-4"
-                )}
+              {state.label ? (
+                <Typography
+                  weight="600"
+                  className="mb-2.5 px-4 text-xs"
+                  style={{ color: state.valid ? theme.muted : theme.faint }}
+                >
+                  {state.label}
+                </Typography>
+              ) : null}
+
+              <HapticPressable
+                accessibilityLabel="Search for a recipient"
+                feedback="selection"
+                onPress={focusRecipient}
+                className="min-h-[72px] flex-row items-center rounded-full border px-3.5"
+                style={{
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                }}
               >
-                Recent
-              </Typography>
-              {recipients.map((entry) => (
-                <RecipientRow
-                  key={entry.address}
-                  title={
-                    entry.handle
-                      ? `@${entry.handle}`
-                      : truncateAddress(entry.address)
+                <Ionicons name="search" size={24} color={theme.muted} />
+                <BottomSheetTextInput
+                  ref={inputRef}
+                  accessibilityLabel="Name, username, or wallet address"
+                  value={recipient}
+                  onChangeText={setRecipient}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  clearButtonMode="while-editing"
+                  placeholder="Name, @username, wallet"
+                  placeholderTextColor={theme.faint}
+                  returnKeyType="go"
+                  submitBehavior="blurAndSubmit"
+                  onSubmitEditing={handleContinue}
+                  className="ml-2 min-w-0 flex-1 text-[15px]"
+                  style={{ color: theme.text, fontFamily: "Inter_500Medium" }}
+                />
+                <HapticPressable
+                  accessibilityLabel={
+                    recipient ? "Continue" : "Paste recipient"
                   }
-                  subtitle={`${entry.sends} send${entry.sends === 1 ? "" : "s"}`}
-                  direct={Boolean(entry.handle)}
-                  onPress={async () => {
-                    const value = entry.handle ?? entry.address;
-                    setRecipient(value);
-                    if (entry.handle) {
-                      const found = await apiClient.resolveHandle(entry.handle);
-                      if (found) onNext(selectionFromDirectory(found));
-                      return;
-                    }
-                    onNext({
-                      value,
-                      address: entry.address,
-                      handle: null,
-                      displayName: null,
-                      homeCurrency: null,
-                      country: null,
-                      payoutReady: false,
-                    });
+                  accessibilityRole="button"
+                  disabled={recipient ? !state.valid : false}
+                  feedback="selection"
+                  onPress={recipient ? handleContinue : handlePaste}
+                  className="ml-2 min-w-[68px] items-center justify-center rounded-full px-4 py-3"
+                  style={{
+                    backgroundColor: theme.text,
+                    opacity: recipient && !state.valid ? 0.22 : 1,
                   }}
-                />
-              ))}
-            </>
-          )}
-        </BottomSheetScrollView>
+                >
+                  <Typography
+                    weight="700"
+                    className="text-[15px]"
+                    style={{ color: theme.background }}
+                  >
+                    {recipient ? "Next" : "Paste"}
+                  </Typography>
+                </HapticPressable>
+              </HapticPressable>
+            </View>
+          </>
+        )}
       </View>
     </TouchableWithoutFeedback>
   );
 });
 
-function RecipientRow({
+function DestinationRow({
+  icon,
   title,
   subtitle,
-  direct,
+  flags,
+  badge,
+  disabled = false,
+  last = false,
   onPress,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
-  direct: boolean;
-  onPress: () => void;
+  flags?: string[];
+  badge?: string;
+  disabled?: boolean;
+  last?: boolean;
+  onPress?: () => void;
 }) {
+  const { theme } = useAppTheme();
+
   return (
-    <TouchableOpacity
+    <HapticPressable
+      accessibilityLabel={`${title}. ${subtitle}${badge ? `. ${badge}` : ""}`}
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${direct ? "Ferry Direct" : "Wallet"}. ${subtitle}`}
-      className="mx-6 mb-3 min-h-[82px] flex-row items-center rounded-[24px] bg-white px-4 py-3.5"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      feedback="selection"
       onPress={onPress}
+      className="min-h-[96px] flex-row items-center"
+      style={
+        last
+          ? undefined
+          : { borderBottomColor: theme.border, borderBottomWidth: 1 }
+      }
     >
       <View
-        className={cn(
-          "mr-3 size-12 items-center justify-center rounded-full",
-          direct ? "bg-[#20211E]" : "bg-black/[0.045]"
-        )}
+        className="size-14 items-center justify-center rounded-full"
+        style={{ backgroundColor: theme.card }}
       >
-        {direct ? (
-          <Image
-            source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
-            resizeMode="contain"
-            className="size-6"
-          />
-        ) : (
-          <MaterialIcons name="wallet" size={21} color="#111111" />
-        )}
+        <Ionicons name={icon} size={25} color={theme.text} />
       </View>
-      <View className="min-w-0 flex-1">
-        <Typography weight="700" className="text-[17px] tracking-[-0.25px]">
+      <View className="ml-5 min-w-0 flex-1">
+        <Typography
+          weight="700"
+          className="text-[18px] tracking-[-0.3px]"
+          style={{ color: theme.text }}
+        >
           {title}
         </Typography>
-        <Typography weight="500" className="mt-0.5 text-[12px] text-black/35">
-          {direct ? `Ferry Direct · ${subtitle}` : subtitle}
-        </Typography>
+        <View className="mt-1 flex-row items-center">
+          {flags ? (
+            <View className="mr-2 flex-row items-center">
+              {flags.map((flag, index) => (
+                <Typography
+                  key={flag}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  className={index === 0 ? "text-[15px]" : "-ml-1 text-[15px]"}
+                >
+                  {flag}
+                </Typography>
+              ))}
+            </View>
+          ) : null}
+          <Typography
+            weight="500"
+            className="text-[14px]"
+            style={{ color: theme.muted }}
+          >
+            {subtitle}
+          </Typography>
+          {badge ? (
+            <View
+              className="ml-2 rounded-full px-2.5 py-1"
+              style={{ backgroundColor: theme.cardStrong }}
+            >
+              <Typography
+                weight="700"
+                className="text-[10px]"
+                style={{ color: theme.muted }}
+              >
+                {badge}
+              </Typography>
+            </View>
+          ) : null}
+        </View>
       </View>
-      <View className="size-9 items-center justify-center rounded-full bg-black/[0.035]">
-        <Ionicons name="arrow-forward" size={18} color="#111111" />
-      </View>
-    </TouchableOpacity>
+      {!badge ? (
+        <Ionicons name="chevron-forward" size={24} color={theme.faint} />
+      ) : null}
+    </HapticPressable>
   );
 }

@@ -42,7 +42,9 @@ export const SEED_TRANSFERS: TransferRow[] = [
     counterparty: { address: other, handle: "bola", displayName: "Bola" },
     status: "CONFIRMED",
     txHash: "0x" + "ab".repeat(32),
-    memo: "Lunch",
+    // Mirror the durable marker returned by the Flow payment API so the demo
+    // can exercise Activity and receipt identity without pretending it is live.
+    memo: "Ferry Flow",
     usdValue: "50.00",
     createdAt: "2026-10-03T14:12:00.000Z",
     confirmedAt: "2026-10-03T14:12:01.000Z",

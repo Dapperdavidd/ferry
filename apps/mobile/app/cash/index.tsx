@@ -7,7 +7,6 @@ import { Ionicons } from "@expo/vector-icons";
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import TabHeaderText from "@/components/ui/atoms/TabHeaderText";
 import { ActionPill } from "@/components/ui/molecules";
-import { SendModal } from "@/components/ui/organisms/modals/SendModal";
 import { ReceiveModal } from "@/components/ui/organisms/modals/ReceiveModal";
 import { QRCodeModal } from "@/components/ui/organisms/modals/QRCodeModal";
 import { SendFlowModal } from "@/components/ui/organisms/send/SendFlowModal";
@@ -31,7 +30,6 @@ export default function CashScreen() {
   const address = useWalletAddress();
 
   // Modal State
-  const [isSendModalVisible, setIsSendModalVisible] = useState(false);
   const [isReceiveModalVisible, setIsReceiveModalVisible] = useState(false);
   const sendFlowModalRef = useRef<BottomSheetModal>(null);
   const qrCodeModalRef = useRef<BottomSheetModal>(null);
@@ -80,7 +78,7 @@ export default function CashScreen() {
             </Typography>
           </View>
         ),
-        onPress: () => setIsSendModalVisible(true),
+        onPress: () => sendFlowModalRef.current?.present(),
         label: "Send",
       },
     ],
@@ -220,15 +218,6 @@ export default function CashScreen() {
       </View>
 
       {/* Modals */}
-      <SendModal
-        visible={isSendModalVisible}
-        onClose={() => setIsSendModalVisible(false)}
-        onSendToWallet={() => {
-          setIsSendModalVisible(false);
-          sendFlowModalRef.current?.present();
-        }}
-      />
-
       <SendFlowModal ref={sendFlowModalRef} onClose={() => {}} />
 
       <ReceiveModal

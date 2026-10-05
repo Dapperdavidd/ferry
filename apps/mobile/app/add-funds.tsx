@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, View } from "react-native";
+import { Image } from "expo-image";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -62,7 +63,14 @@ export default function AddFundsScreen() {
             feedback="selection"
             onPress={() => router.back()}
             className="z-10 size-12 items-center justify-center rounded-full"
-            style={{ backgroundColor: theme.card }}
+            style={{
+              backgroundColor: theme.card,
+              shadowColor: theme.text,
+              shadowOffset: { width: 0, height: 7 },
+              shadowOpacity: theme.dark ? 0.16 : 0.06,
+              shadowRadius: 14,
+              elevation: 4,
+            }}
           >
             <Ionicons name="chevron-back" size={25} color={theme.text} />
           </HapticPressable>
@@ -82,18 +90,15 @@ export default function AddFundsScreen() {
           <View className="size-12" />
         </View>
 
-        <View className="mt-12">
-          <SectionTitle>Available now</SectionTitle>
-          <View
-            className="mt-5 overflow-hidden rounded-[28px] border"
-            style={{ backgroundColor: theme.card, borderColor: theme.border }}
-          >
+        <View className="mt-10">
+          <SectionTitle>Stablecoins</SectionTitle>
+          <FundingGroup>
             {testnet ? (
               <FundingRow
-                icon={<TokenMark token="AUSD" size={48} />}
+                icon={<TokenMark token="AUSD" size={42} />}
                 title="Test AUSD"
                 badge="Free"
-                description="10,000 AUSD · Monad testnet"
+                tags={["Monad", "Testnet"]}
                 onPress={() => void addTestFunds()}
                 trailing={
                   funding ? (
@@ -102,25 +107,15 @@ export default function AddFundsScreen() {
                     <Ionicons name="add" size={26} color={theme.text} />
                   )
                 }
+                trailingSurface
                 disabled={funding}
               />
             ) : null}
 
             <FundingRow
-              icon={
-                <View
-                  className="size-12 items-center justify-center rounded-full"
-                  style={{ backgroundColor: theme.accentSoft }}
-                >
-                  <Ionicons
-                    name="qr-code-outline"
-                    size={22}
-                    color={theme.text}
-                  />
-                </View>
-              }
-              title="Receive AUSD"
-              description="Handle, QR, or wallet address"
+              icon={<TokenMark token="AUSD" size={42} />}
+              title="AUSD"
+              tags={["Handle", "QR", "Wallet"]}
               onPress={() => setReceiveVisible(true)}
               trailing={
                 <Ionicons
@@ -131,49 +126,16 @@ export default function AddFundsScreen() {
               }
               bordered={testnet}
             />
-          </View>
-        </View>
-
-        <View className="mt-11">
-          <SectionTitle>More ways to add</SectionTitle>
-          <View
-            className="mt-5 overflow-hidden rounded-[28px] border"
-            style={{ backgroundColor: theme.card, borderColor: theme.border }}
-          >
             <FundingRow
               icon={
-                <View
-                  className="size-12 items-center justify-center rounded-full"
-                  style={{ backgroundColor: theme.accentSoft }}
-                >
-                  <Ionicons
-                    name="business-outline"
-                    size={23}
-                    color={theme.text}
-                  />
-                </View>
+                <Image
+                  source={require("@/assets/icons/usdc.png")}
+                  style={{ width: 42, height: 42 }}
+                  contentFit="contain"
+                />
               }
-              title="USD bank transfer"
-              description="USD → AUSD through Agora"
-              onPress={() => showToast("Bank transfer funding is coming soon.")}
-              trailing={<RouteBadge label="Coming soon" />}
-              bareTrailing
-            />
-            <FundingRow
-              icon={
-                <View
-                  className="size-12 items-center justify-center rounded-full"
-                  style={{ backgroundColor: theme.accentSoft }}
-                >
-                  <Ionicons
-                    name="swap-horizontal"
-                    size={23}
-                    color={theme.text}
-                  />
-                </View>
-              }
-              title="Deposit USDC"
-              description="USDC → AUSD, delivered on Monad"
+              title="USDC"
+              tags={["Base", "Arbitrum", "Ethereum"]}
               onPress={() => router.push("/deposit-usdc")}
               trailing={
                 <Ionicons
@@ -184,15 +146,27 @@ export default function AddFundsScreen() {
               }
               bordered
             />
-          </View>
-          <Typography
-            weight="500"
-            className="mx-2 mt-4 text-[13px] leading-5"
-            style={{ color: theme.muted }}
-          >
-            USDC deposits convert to AUSD through Agora. Bank transfers require
-            additional verification and will follow later.
-          </Typography>
+          </FundingGroup>
+        </View>
+
+        <View className="mt-9">
+          <SectionTitle>Cash deposit</SectionTitle>
+          <FundingGroup>
+            <FundingRow
+              icon={
+                <Image
+                  source={require("@/assets/images/us-flag-round.png")}
+                  style={{ width: 42, height: 42 }}
+                  contentFit="contain"
+                />
+              }
+              title="USD"
+              tags={["ACH", "Wire", "Coming soon"]}
+              onPress={() => showToast("Bank transfer funding is coming soon.")}
+              trailing={<Ionicons name="add" size={26} color={theme.text} />}
+              trailingSurface
+            />
+          </FundingGroup>
         </View>
       </ScrollView>
 
@@ -213,33 +187,57 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   const { theme } = useAppTheme();
   return (
     <Typography
-      weight="700"
-      className="text-[22px] tracking-[-0.4px]"
-      style={{ color: theme.text }}
+      weight="600"
+      className="text-[20px] tracking-[-0.3px]"
+      style={{ color: theme.muted }}
     >
       {children}
     </Typography>
   );
 }
 
+function FundingGroup({ children }: { children: React.ReactNode }) {
+  const { theme } = useAppTheme();
+
+  return (
+    <View
+      className="mt-4 rounded-[28px]"
+      style={{
+        shadowColor: theme.text,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: theme.dark ? 0.14 : 0.045,
+        shadowRadius: 18,
+        elevation: 3,
+      }}
+    >
+      <View
+        className="overflow-hidden rounded-[28px] border"
+        style={{ backgroundColor: theme.card, borderColor: theme.border }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
 function FundingRow({
   icon,
   title,
-  description,
+  tags,
   badge,
   trailing,
   bordered = false,
-  bareTrailing = false,
+  trailingSurface = false,
   disabled = false,
   onPress,
 }: {
   icon: React.ReactNode;
   title: string;
-  description: string;
+  tags: string[];
   badge?: string;
   trailing: React.ReactNode;
   bordered?: boolean;
-  bareTrailing?: boolean;
+  trailingSurface?: boolean;
   disabled?: boolean;
   onPress: () => void;
 }) {
@@ -247,16 +245,17 @@ function FundingRow({
   return (
     <HapticPressable
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${description}`}
+      accessibilityLabel={`${title}. ${tags.join(", ")}`}
       disabled={disabled}
       onPress={onPress}
       className={
         bordered
-          ? "min-h-[104px] flex-row items-center gap-4 border-t border-black/[0.06] px-5 py-5"
-          : "min-h-[104px] flex-row items-center gap-4 px-5 py-5"
+          ? "min-h-[96px] flex-row items-center gap-4 border-t px-4 py-4"
+          : "min-h-[96px] flex-row items-center gap-4 px-4 py-4"
       }
+      style={bordered ? { borderColor: theme.border } : undefined}
     >
-      {icon}
+      <View className="w-[46px] items-center justify-center">{icon}</View>
       <View className="min-w-0 flex-1">
         <View className="flex-row items-center gap-2">
           <Typography
@@ -267,51 +266,39 @@ function FundingRow({
             {title}
           </Typography>
           {badge ? (
-            <View className="rounded-full bg-info/10 px-2.5 py-1">
-              <Typography weight="700" className="text-xs text-info">
+            <View className="rounded-full bg-[#168CFF]/10 px-2.5 py-1">
+              <Typography weight="700" className="text-[12px] text-[#168CFF]">
                 {badge}
               </Typography>
             </View>
           ) : null}
         </View>
-        <Typography
-          weight="500"
-          className="mt-1 text-[13px]"
-          style={{ color: theme.muted }}
-        >
-          {description}
-        </Typography>
+        <View className="mt-1.5 flex-row flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <View
+              key={tag}
+              className="rounded-full px-2 py-1"
+              style={{ backgroundColor: theme.cardStrong }}
+            >
+              <Typography
+                weight="500"
+                className="text-[12px] leading-[14px]"
+                style={{ color: theme.muted }}
+              >
+                {tag}
+              </Typography>
+            </View>
+          ))}
+        </View>
       </View>
       <View
-        className={
-          bareTrailing
-            ? "items-center justify-center"
-            : "size-11 items-center justify-center rounded-full bg-black/[0.035]"
-        }
+        className="size-11 items-center justify-center rounded-full"
         style={
-          !bareTrailing ? { backgroundColor: theme.cardStrong } : undefined
+          trailingSurface ? { backgroundColor: theme.cardStrong } : undefined
         }
       >
         {trailing}
       </View>
     </HapticPressable>
-  );
-}
-
-function RouteBadge({ label }: { label: string }) {
-  const { theme } = useAppTheme();
-  return (
-    <View
-      className="rounded-full px-2.5 py-1.5"
-      style={{ backgroundColor: theme.cardStrong }}
-    >
-      <Typography
-        weight="700"
-        className="text-[11px]"
-        style={{ color: theme.muted }}
-      >
-        {label}
-      </Typography>
-    </View>
   );
 }

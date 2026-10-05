@@ -1,23 +1,17 @@
 import React from "react";
-import { View } from "react-native";
+import { Switch, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
-import {
-  APP_THEMES,
-  type AppTheme,
-  type AppThemeId,
-  useAppTheme,
-} from "@/contexts/AppThemeContext";
-
-const THEME_ORDER: AppThemeId[] = ["olive", "slate", "sand", "onyx", "lilac"];
+import { APP_THEMES, useAppTheme } from "@/contexts/AppThemeContext";
 
 export default function AppearanceScreen() {
   const router = useRouter();
   const { theme, themeId, setTheme } = useAppTheme();
+  const isDark = themeId === "onyx";
 
   return (
     <ScreenLayout
@@ -50,110 +44,52 @@ export default function AppearanceScreen() {
         className="text-[30px] tracking-[-1px]"
         style={{ color: theme.text }}
       >
-        Make Ferry yours
+        Light or dark
       </Typography>
       <Typography
         weight="500"
-        className="mb-6 mt-2 text-[15px] leading-6"
+        className="mt-2 text-[15px] leading-6"
         style={{ color: theme.muted }}
       >
-        Choose a finish. Olive stays the default, and your choice follows you
-        the next time you open the app.
+        Ferry uses Olive in light mode and Onyx in dark mode.
       </Typography>
 
-      <View className="gap-3">
-        {THEME_ORDER.map((id) => (
-          <ThemeOption
-            key={id}
-            palette={APP_THEMES[id]}
-            surface={theme}
-            selected={themeId === id}
-            onPress={() => setTheme(id)}
-          />
-        ))}
-      </View>
-    </ScreenLayout>
-  );
-}
-
-function ThemeOption({
-  palette,
-  surface,
-  selected,
-  onPress,
-}: {
-  palette: AppTheme;
-  surface: AppTheme;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <HapticPressable
-      accessible
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={`${palette.name}: ${palette.description}`}
-      feedback="selection"
-      onPress={onPress}
-      className="flex-row items-center rounded-[24px] border p-3"
-      style={{
-        backgroundColor: surface.card,
-        borderColor: selected ? palette.accent : palette.border,
-        borderWidth: selected ? 2 : 1,
-      }}
-    >
-      <View
-        className="h-[76px] w-[92px] overflow-hidden rounded-[18px] p-3"
-        style={{ backgroundColor: palette.background }}
-      >
-        <View
-          className="mb-2 h-2 w-8 rounded-full"
-          style={{ backgroundColor: palette.text }}
-        />
-        <View
-          className="mb-3 h-1.5 w-12 rounded-full"
-          style={{ backgroundColor: palette.muted }}
-        />
-        <View className="mt-auto flex-row gap-1.5">
-          <View
-            className="h-5 flex-1 rounded-full"
-            style={{ backgroundColor: palette.primary }}
-          />
-          <View
-            className="h-5 flex-1 rounded-full"
-            style={{ backgroundColor: palette.accentSoft }}
+      <View className="mt-10 flex-row items-center px-2 py-4">
+        <View className="size-10 items-center justify-center">
+          <Ionicons
+            name={isDark ? "moon-outline" : "sunny-outline"}
+            size={24}
+            color={theme.text}
           />
         </View>
+        <View className="ml-3 flex-1">
+          <Typography
+            weight="600"
+            className="text-[17px] tracking-[-0.25px]"
+            style={{ color: theme.text }}
+          >
+            Dark mode
+          </Typography>
+          <Typography
+            weight="500"
+            className="mt-0.5 text-[13px]"
+            style={{ color: theme.muted }}
+          >
+            {isDark ? "Onyx is active" : "Olive is active"}
+          </Typography>
+        </View>
+        <Switch
+          accessibilityLabel="Dark mode"
+          value={isDark}
+          onValueChange={(enabled) => setTheme(enabled ? "onyx" : "olive")}
+          trackColor={{
+            false: APP_THEMES.olive.cardStrong,
+            true: APP_THEMES.onyx.primary,
+          }}
+          thumbColor={isDark ? APP_THEMES.onyx.primaryText : "#FFFFFF"}
+          ios_backgroundColor={APP_THEMES.olive.cardStrong}
+        />
       </View>
-
-      <View className="ml-4 flex-1">
-        <Typography
-          weight="700"
-          className="text-[16px]"
-          style={{ color: surface.text }}
-        >
-          {palette.name}
-        </Typography>
-        <Typography
-          weight="500"
-          className="mt-1 text-[12px]"
-          style={{ color: surface.muted }}
-        >
-          {palette.description}
-        </Typography>
-      </View>
-
-      <View
-        className="size-7 items-center justify-center rounded-full border-2"
-        style={{ borderColor: selected ? palette.accent : surface.faint }}
-      >
-        {selected ? (
-          <View
-            className="size-3.5 rounded-full"
-            style={{ backgroundColor: palette.accent }}
-          />
-        ) : null}
-      </View>
-    </HapticPressable>
+    </ScreenLayout>
   );
 }

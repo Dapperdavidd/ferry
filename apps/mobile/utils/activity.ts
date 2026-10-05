@@ -17,6 +17,8 @@ export interface ActivityEntry {
   txHash: string | null;
   usdValue: string | null;
   memo: string | null;
+  /** The API marks contract-routed sends with the durable `Ferry Flow` memo. */
+  flow: boolean;
   cashout: TransferRow["cashout"];
   createdAt: string;
   confirmedAt: string | null;
@@ -55,6 +57,7 @@ export function mapTransferRowToActivityEntry(
     txHash: row.txHash,
     usdValue: row.usdValue,
     memo: row.memo,
+    flow: row.memo === "Ferry Flow",
     cashout: row.cashout,
     createdAt: row.createdAt,
     confirmedAt: row.confirmedAt,
@@ -100,9 +103,17 @@ export function statusLabel(entry: ActivityEntry): string {
   if (entry.kind === "funding")
     return entry.status === "pending" ? "Arriving…" : "Added";
   if (entry.status === "pending")
-    return entry.direction === "send" ? "Sending…" : "Arriving…";
+    return entry.direction === "send"
+      ? entry.flow
+        ? "Sending with Flow…"
+        : "Sending…"
+      : "Arriving…";
   if (entry.status === "failed") return "Failed";
-  return entry.direction === "send" ? "Sent" : "Received";
+  return entry.direction === "send"
+    ? entry.flow
+      ? "Sent with Flow"
+      : "Sent"
+    : "Received";
 }
 
 export function arrivalLabel(row: TransferRow): string {

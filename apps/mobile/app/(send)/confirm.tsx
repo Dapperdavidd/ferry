@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/organisms/modals/SpendCheckModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { AUSD_ADDRESS, monad } from "@/lib/chain";
+import { AUSD_ADDRESS, FLOW_CONTRACT_ADDRESS, monad } from "@/lib/chain";
 import { PasskeyFailure } from "@/lib/mera";
 import {
   apiClient,
@@ -29,10 +29,15 @@ import { checkAuthorization } from "@/utils/authorization";
 import { AUSD_DECIMALS, formatLocalMoney, numberToRaw } from "@/utils/balances";
 import { AppError } from "@/utils/errors";
 import { formatAmount, truncateAddress } from "@/utils/helper";
+import { checkFlowPaymentAuthorization } from "@/utils/flowAuthorization";
 import { toSignable } from "@/utils/typedData";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 
-type PendingSubmission = { intentId: string; signature: string };
+type PendingSubmission = {
+  intentId: string;
+  signature: string;
+  flowEnabled?: boolean;
+};
 
 type SendFlow = {
   step: SpendCheckStep;
@@ -56,6 +61,7 @@ export default function ConfirmScreen() {
   const {
     amount,
     recipient,
+    recipientAddress,
     recipientName,
     type,
     title,
@@ -66,6 +72,7 @@ export default function ConfirmScreen() {
   } = useLocalSearchParams<{
     amount: string;
     recipient: string;
+    recipientAddress: string;
     recipientName: string;
     type: string;
     title: string;
@@ -76,6 +83,12 @@ export default function ConfirmScreen() {
   }>();
 
   const isDirect = type === "direct" && Boolean(quoteId);
+  // Until FerryFlow is deployed/configured, preserve the existing handle-send
+  // rail. Once configured, handles route through FerryFlow while raw wallet
+  // addresses continue to use the direct transfer authorization.
+  const isFlowPayment = Boolean(
+    FLOW_CONTRACT_ADDRESS && !isDirect && !isAddress(recipient ?? "")
+  );
   const recipientLabel = isAddress(recipient ?? "")
     ? truncateAddress(recipient)
     : `@${recipient}`;
@@ -139,12 +152,57 @@ export default function ConfirmScreen() {
       if (!prepared) {
         let typedData: TypedData;
         let intentId: string;
+        let flowEnabled = false;
 
         if (isDirect) {
           try {
             const prep = await apiClient.prepareCashout({ quoteId });
             typedData = prep.typedData;
             intentId = prep.intentId;
+          } catch (error) {
+            return holdKnownError(hold, error);
+          }
+        } else if (isFlowPayment) {
+          if (!FLOW_CONTRACT_ADDRESS) {
+            return hold(
+              "failed",
+              "Flows are not connected in this build yet. Nothing has been sent."
+            );
+          }
+          try {
+            const prep = await apiClient.prepareFlowPayment({
+              to: `@${recipient.replace(/^@/, "")}`,
+              amount,
+            });
+            const mismatch = checkFlowPaymentAuthorization(prep.typedData, {
+              from: address,
+              flowContract: FLOW_CONTRACT_ADDRESS,
+              recipientOwner: prep.recipient.address,
+              amountRaw,
+              token: AUSD_ADDRESS,
+              chainId: monad.id,
+              expiresAt: prep.expiresAt,
+            });
+            if (
+              mismatch ||
+              (recipientAddress &&
+                prep.recipient.address.toLowerCase() !==
+                  recipientAddress.toLowerCase())
+            ) {
+              Sentry.captureException(
+                new Error(
+                  `flow payment authorization mismatch: ${mismatch ?? "recipient"}`
+                ),
+                { tags: { surface: "send.confirm" } }
+              );
+              return hold(
+                "failed",
+                "This payment didn't match what you confirmed. Nothing has been sent."
+              );
+            }
+            typedData = prep.typedData;
+            intentId = prep.intentId;
+            flowEnabled = prep.flowEnabled;
           } catch (error) {
             return holdKnownError(hold, error);
           }
@@ -168,8 +226,12 @@ export default function ConfirmScreen() {
           });
           if (
             mismatch ||
-            (isAddress(recipient) &&
-              prep.recipient.address.toLowerCase() !== recipient.toLowerCase())
+            (recipientAddress
+              ? prep.recipient.address.toLowerCase() !==
+                recipientAddress.toLowerCase()
+              : isAddress(recipient) &&
+                prep.recipient.address.toLowerCase() !==
+                  recipient.toLowerCase())
           ) {
             Sentry.captureException(
               new Error(`authorization mismatch: ${mismatch ?? "recipient"}`),
@@ -194,7 +256,7 @@ export default function ConfirmScreen() {
           if (error instanceof PasskeyFailure && error.kind === "cancelled") {
             return hold(
               "paused",
-              "You cancelled Face ID. Nothing has been sent."
+              "You cancelled the passkey check. Nothing has been sent."
             );
           }
           if (error instanceof AppError || error instanceof PasskeyFailure)
@@ -202,7 +264,7 @@ export default function ConfirmScreen() {
           throw error;
         }
 
-        prepared = { intentId, signature };
+        prepared = { intentId, signature, flowEnabled };
         pendingSubmission.current = prepared;
       }
 
@@ -211,7 +273,9 @@ export default function ConfirmScreen() {
       try {
         submitted = isDirect
           ? await apiClient.submitCashout(prepared)
-          : await apiClient.submitTransfer(prepared);
+          : isFlowPayment
+            ? await apiClient.submitFlowPayment(prepared)
+            : await apiClient.submitTransfer(prepared);
       } catch (error) {
         const code = apiErrorCode(error);
         if (code === "INTENT_EXPIRED") {
@@ -227,6 +291,14 @@ export default function ConfirmScreen() {
           );
         }
         throw error;
+      }
+
+      if (submitted.status === "FAILED") {
+        pendingSubmission.current = null;
+        return hold(
+          "failed",
+          "This payment couldn't be completed. Nothing has been sent. Please try again."
+        );
       }
 
       pendingSubmission.current = null;
@@ -250,6 +322,8 @@ export default function ConfirmScreen() {
           recipientName: recipientName || recipientLabel,
           localAmount: localAmount ?? "",
           localCurrency: localCurrency ?? "",
+          flowPayment: isFlowPayment ? "true" : "false",
+          flowApplied: prepared.flowEnabled ? "true" : "false",
         },
       });
     } catch (error) {
@@ -375,6 +449,10 @@ export default function ConfirmScreen() {
 
         <View className="mt-auto pt-6">
           <HapticPressable
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Confirm payment with passkey"
+            accessibilityState={{ busy: isLoading, disabled: isLoading }}
             disabled={isLoading}
             onPress={handleConfirm}
             className="h-[62px] flex-row items-center justify-center gap-2 rounded-full"
@@ -386,7 +464,7 @@ export default function ConfirmScreen() {
               className="text-base"
               style={{ color: theme.primaryText }}
             >
-              Confirm with Face ID
+              Confirm with passkey
             </Typography>
           </HapticPressable>
           <Typography

@@ -17,7 +17,8 @@
           }
         ],
         "NSCameraUsageDescription": "Ferry uses the camera to scan a recipient's QR code.",
-        "NSFaceIDUsageDescription": "Ferry uses Face ID to unlock the app and confirm payments."
+        "NSFaceIDUsageDescription": "Ferry uses Face ID to unlock the app and confirm payments.",
+        "NSPhotoLibraryUsageDescription": "Allow Ferry to choose a photo for your profile."
       },
       "associatedDomains": ["webcredentials:ferry.money"],
       "bundleIdentifier": "money.ferry.app",
@@ -58,6 +59,13 @@
       ],
       "expo-font",
       "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Ferry to choose a photo for your profile.",
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {

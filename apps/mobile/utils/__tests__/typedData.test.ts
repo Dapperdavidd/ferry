@@ -38,4 +38,22 @@ describe("toSignable", () => {
       nonce: "0xab",
     });
   });
+
+  it("turns uint array strings into bigint arrays", () => {
+    const signable = toSignable({
+      domain: { name: "FerryFlow", chainId: 10143 },
+      types: {
+        ConfigureFlow: [
+          { name: "destinations", type: "address[]" },
+          { name: "basisPoints", type: "uint256[]" },
+        ],
+      },
+      primaryType: "ConfigureFlow",
+      message: {
+        destinations: ["0x1", "0x2"],
+        basisPoints: ["7000", "3000"],
+      },
+    });
+    expect(signable.message.basisPoints).toEqual([7000n, 3000n]);
+  });
 });

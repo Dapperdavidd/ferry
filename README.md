@@ -8,6 +8,12 @@ phrase, no wallet app and no custody server. Sends are gasless (the user signs a
 authorization, Ferry's relayer pays), and cash-outs settle atomically through **Agora's
 Instant Settlement** pool.
 
+**Ferry Flows** adds programmable incoming money: a recipient can save a percentage rule
+once, then a payment sent to their Ferry handle is atomically routed across up to five
+onchain destinations. The sender still sees a normal Send flow; wallets, gas, contracts,
+and basis points stay out of the consumer experience. Flows remain behind an explicit
+contract-address feature gate until `FerryFlow` is deployed and rehearsed on testnet.
+
 Built for Agora's "Best Cross-Border Payments App on Monad" bounty at Monad Metropolis,
 October 2026. The design is in
 [`docs/specs/cross-border-ausd-design.md`](docs/specs/cross-border-ausd-design.md).
@@ -26,6 +32,7 @@ untouched Xend snapshot, so the whole refit is reviewable as a diff from it.
 |                                                                 |                                                                                                                                                                                                                                                                                                  |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                                                                                                                             |
+| Ferry Flows                                                     | Contract, API, migration, event reconciliation, mobile configuration/review, and tests are implemented. The feature is not live until `FerryFlow` is deployed and the API/mobile contract-address gates are configured. Without them, sends retain the existing direct-transfer path.            |
 | Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live. USDC deposit routes, accounts and transactions switch from a clearly labelled safe preview to the real API when Ferry has an approved Agora organisation key.                                                                 |
 | Fiat payout after the pool                                      | A production Yellow Card adapter now resolves bank accounts, prices the local payout, creates idempotent bank sends and consumes signed webhooks. It is disabled until Ferry has KYB credentials and a funded partner balance. Monad testnet still settles to CTK; mainnet settles AUSD to USDC. |
 
@@ -38,7 +45,7 @@ Turborepo over npm workspaces.
 | `apps/mobile`  | The Expo React Native app (`@ferry/mobile`). iOS first; Android shares the code.                                                                                   |
 | `apps/api`     | The NestJS API on Postgres (`@ferry/api`): auth, handles, balances and test funds, gasless transfers, cash-outs, the relayer, the indexer, push, the Agora client. |
 | `apps/site`    | The static site at `ferry.money`, which also serves the passkey association files.                                                                                 |
-| `contracts`    | `FerrySettlement` (Foundry): the one-transaction cash-out through Agora's pool. Deployed on Monad testnet at `0x7056D0D544b95ff1c004A588C42dE52e22011Da9`.         |
+| `contracts`    | Foundry contracts: deployed `FerrySettlement` for one-transaction cash-out, plus deployment-ready `FerryFlow` for atomic programmable incoming-money routing.      |
 | `apps/backend` | Xend's old backend, kept only until `apps/api` has ported what it needs, then deleted. Not part of the install.                                                    |
 | `packages/*`   | Shared ESLint and TypeScript configs.                                                                                                                              |
 
@@ -83,6 +90,8 @@ npm --workspace @ferry/mobile run ios   # a development build on the connected i
 npm run check-types
 npm run lint
 npm run test
+npm --workspace @ferry/api run build
+cd contracts && forge fmt --check && forge build --sizes && forge test
 ```
 
 The one test that must never be allowed to fail is
@@ -92,4 +101,5 @@ published vector. If it fails, addresses have changed and users cannot reach the
 ## Docs
 
 - [`docs/specs/cross-border-ausd-design.md`](docs/specs/cross-border-ausd-design.md): the system design, the on-chain facts it rests on, and the open decisions.
+- [`docs/specs/ferry-flows-design.md`](docs/specs/ferry-flows-design.md): the consumer model, signed intent protocol, contract execution, recovery rules, and activation checklist for Flows.
 - [`docs/adr/`](docs/adr/README.md): Xend's architecture decisions. Those about styling and the Expo setup still apply; those about Solana, Squads, Privy and Pay with Xend are history.

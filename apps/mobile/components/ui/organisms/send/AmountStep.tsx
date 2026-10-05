@@ -34,9 +34,9 @@ export default function AmountStep({
   const { total } = useBalances();
   const balance = total ?? 0;
   const availableToSend = Math.min(balance, MAX_DAILY_SEND);
-  const isDirect = Boolean(
-    recipient?.handle && recipient.homeCurrency && recipient.payoutReady
-  );
+  // A normal handle send always reaches the recipient's Ferry account so its
+  // Flow can execute. Local-bank delivery stays an explicit Cash out action.
+  const isDirect = false;
   const numericAmount = Number(amount);
   const quoteable =
     isDirect &&
@@ -93,6 +93,7 @@ export default function AmountStep({
       params: {
         amount,
         recipient: recipient.value,
+        recipientAddress: recipient.address,
         recipientName: recipient.displayName ?? "",
         type: isDirect ? "direct" : "wallet",
         title: isDirect ? "Ferry Direct" : "Confirm Send",

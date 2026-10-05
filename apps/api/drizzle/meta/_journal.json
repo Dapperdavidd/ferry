@@ -15,6 +15,20 @@
       "when": 1791120208331,
       "tag": "0001_overconfident_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791196374073,
+      "tag": "0002_glossy_rictor",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791206622615,
+      "tag": "0003_light_steel_serpent",
+      "breakpoints": true
     }
   ]
 }

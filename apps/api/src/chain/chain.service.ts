@@ -23,9 +23,9 @@ import { type Authorization, type TokenDomain } from "./authorization";
 export interface ChainAddresses {
   ausd: Address;
   faucet: Address | null;
-  ctk: Address;
-  pair: Address;
-  whitelister: Address;
+  ctk: Address | null;
+  pair: Address | null;
+  whitelister: Address | null;
   settlement: Address | null;
 }
 
@@ -79,11 +79,9 @@ export class ChainService implements OnModuleInit {
     this.addresses = {
       ausd: config.getOrThrow<Address>("AUSD_ADDRESS"),
       faucet: optional("AUSD_FAUCET_ADDRESS"),
-      ctk: config.getOrThrow<Address>("CTK_ADDRESS"),
-      pair: config.getOrThrow<Address>("STABLE_SWAP_PAIR_ADDRESS"),
-      whitelister: config.getOrThrow<Address>(
-        "STABLE_SWAP_WHITELISTER_ADDRESS",
-      ),
+      ctk: optional("CTK_ADDRESS"),
+      pair: optional("STABLE_SWAP_PAIR_ADDRESS"),
+      whitelister: optional("STABLE_SWAP_WHITELISTER_ADDRESS"),
       settlement: optional("SETTLEMENT_ADDRESS"),
     };
   }

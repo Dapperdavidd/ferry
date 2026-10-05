@@ -17,11 +17,14 @@ import { TransfersModule } from "./transfers/transfers.module";
 import { UsersModule } from "./users/users.module";
 import { WalletModule } from "./wallet/wallet.module";
 import { PayoutModule } from "./payout/payout.module";
+import { FlowsModule } from "./flows/flows.module";
+import { RelayerPolicyModule } from "./relayer/relayer-policy.module";
 
 @Module({
   imports: [
     ConfigModule,
     DbModule,
+    RelayerPolicyModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     HealthModule,
@@ -36,6 +39,7 @@ import { PayoutModule } from "./payout/payout.module";
     CashoutModule,
     PayoutModule,
     AgoraModule,
+    FlowsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

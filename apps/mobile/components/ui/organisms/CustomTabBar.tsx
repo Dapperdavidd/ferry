@@ -1,21 +1,26 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  type LayoutChangeEvent,
-  StyleSheet,
-  View,
-} from "react-native";
+import React, { useState } from "react";
+import { View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 
 import HapticPressable from "../atoms/HapticPressable";
 import History from "../atoms/icons/history";
 import Home from "../atoms/icons/home";
 import Settings from "../atoms/icons/settings";
-import { Typography } from "../atoms/Typography";
+import { ActionPill } from "../molecules";
+import { useAppLock } from "@/contexts/AppLockContext";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { ActionMenu } from "./ActionMenu";
 
 const iconMappings = {
   index: Home,
@@ -31,170 +36,172 @@ const iconMappings = {
   }>
 >;
 
-const activeShadow = {
-  shadowColor: "#000000",
-  shadowOffset: { width: 0, height: 5 },
-  shadowOpacity: 0.06,
-  shadowRadius: 16,
-  elevation: 4,
-};
-
 export function CustomTabBar({
   state,
   descriptors,
   navigation,
 }: BottomTabBarProps) {
   const segments = useSegments() as string[];
-  const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
-  const [barWidth, setBarWidth] = useState(0);
-  const position = useRef(new Animated.Value(state.index)).current;
+  const { isLocked, isObscured } = useAppLock();
+  const [isActionMenuVisible, setIsActionMenuVisible] = useState(false);
+  const fabScale = useSharedValue(1);
+  const fabOpacity = useSharedValue(1);
+  const isHome =
+    segments[0] === "(tabs)" &&
+    (segments[1] === undefined || segments[1] === "index");
   const isSettingsSubPage =
     segments[0] === "(tabs)" &&
     segments[1] === "settings" &&
     segments[2] !== undefined;
 
-  useEffect(() => {
-    Animated.spring(position, {
-      toValue: state.index,
-      speed: 18,
-      bounciness: 2,
-      useNativeDriver: true,
-    }).start();
-  }, [position, state.index]);
+  React.useEffect(() => {
+    fabOpacity.value = withTiming(isActionMenuVisible ? 0 : 1, {
+      duration: 200,
+    });
+  }, [fabOpacity, isActionMenuVisible]);
 
-  if (isSettingsSubPage) return null;
+  React.useEffect(() => {
+    if (isLocked || isObscured) setIsActionMenuVisible(false);
+  }, [isLocked, isObscured]);
 
-  const tabWidth = barWidth / state.routes.length;
+  const fabStyle = useAnimatedStyle(() => ({
+    opacity: fabOpacity.value,
+    transform: [{ scale: fabScale.value }],
+  }));
+
+  if (isLocked || isObscured || isSettingsSubPage) return null;
+
+  const handleFabPress = () => {
+    fabScale.value = withSequence(
+      withTiming(0.9, { duration: 100 }),
+      withSpring(1, { damping: 15, stiffness: 200 })
+    );
+    setIsActionMenuVisible(true);
+  };
 
   return (
-    <BlurView
-      intensity={26}
-      tint={theme.dark ? "dark" : "light"}
-      style={[
-        styles.chrome,
-        {
-          paddingBottom: Math.max(insets.bottom, 8),
-          backgroundColor: theme.chrome,
-        },
-      ]}
-    >
-      <View
-        className="relative flex-row"
-        style={{ height: 68 }}
-        onLayout={(event: LayoutChangeEvent) =>
-          setBarWidth(event.nativeEvent.layout.width)
-        }
-      >
-        {tabWidth > 0 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              activeShadow,
-              styles.activeTab,
-              { backgroundColor: theme.card },
-              {
-                width: tabWidth,
-                transform: [
-                  {
-                    translateX: Animated.multiply(position, tabWidth),
-                  },
-                ],
-              },
-            ]}
-          />
-        ) : null}
+    <>
+      <ContainerWrapper withBlur={!isHome}>
+        <ActionPill
+          items={state.routes.map((route, index) => {
+            const { options } = descriptors[route.key];
+            const isFocused = state.index === index;
 
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
-          const Icon = iconMappings[route.name];
-          const label = options.title ?? route.name;
+            const onPress = () => {
+              const event = navigation.emit({
+                type: "tabPress",
+                target: route.key,
+                canPreventDefault: true,
+              });
 
-          const onPress = () => {
-            const event = navigation.emit({
-              type: "tabPress",
-              target: route.key,
-              canPreventDefault: true,
-            });
+              if (event.defaultPrevented) return;
 
-            if (event.defaultPrevented) return;
+              if (route.name === "settings") {
+                (
+                  navigation.navigate as unknown as (
+                    name: string,
+                    params: { screen: string }
+                  ) => void
+                )(route.name, { screen: "index" });
+                return;
+              }
+              if (!isFocused) navigation.navigate(route.name);
+            };
 
-            if (route.name === "settings") {
-              (
-                navigation.navigate as unknown as (
-                  name: string,
-                  params: { screen: string }
-                ) => void
-              )(route.name, { screen: "index" });
-              return;
-            }
-            if (!isFocused) navigation.navigate(route.name);
-          };
-
-          return (
-            <HapticPressable
-              key={route.key}
-              accessibilityRole="button"
-              accessibilityState={isFocused ? { selected: true } : {}}
-              accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
-              feedback="selection"
-              scaleOnPress={false}
-              onPress={onPress}
-              onLongPress={() =>
+            return {
+              icon: iconMappings[route.name],
+              onPress,
+              onLongPress: () =>
                 navigation.emit({
                   type: "tabLongPress",
                   target: route.key,
-                })
-              }
+                }),
+              isActive: isFocused,
+              accessibilityLabel:
+                options.tabBarAccessibilityLabel ?? options.title,
+              testID: options.title,
+            };
+          })}
+          containerStyle={
+            isHome
+              ? {
+                  backgroundColor: "transparent",
+                  borderColor: "transparent",
+                  shadowColor: "transparent",
+                }
+              : undefined
+          }
+        />
+
+        {isHome ? (
+          <Animated.View
+            className="absolute right-4 top-3 z-[2]"
+            style={fabStyle}
+          >
+            <HapticPressable
+              accessibilityLabel="Money actions"
+              accessibilityRole="button"
+              feedback="impact"
+              onPress={handleFabPress}
+              className="h-[50px] w-[50px] items-center justify-center rounded-[28px]"
               style={{
-                alignItems: "center",
-                flex: 1,
-                gap: 4,
-                height: 68,
-                justifyContent: "center",
+                backgroundColor: theme.primary,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.28,
+                shadowRadius: 5,
+                elevation: 8,
               }}
             >
-              {Icon ? (
-                <Icon
-                  isActive={isFocused}
-                  size={24}
-                  color={isFocused ? theme.text : theme.faint}
-                  detailColor={theme.card}
-                />
-              ) : null}
-              <Typography
-                weight={isFocused ? "700" : "600"}
-                className="text-[13px]"
-                style={{ color: isFocused ? theme.text : theme.faint }}
-              >
-                {label}
-              </Typography>
+              <Ionicons name="add" size={28} color={theme.primaryText} />
             </HapticPressable>
-          );
-        })}
-      </View>
-    </BlurView>
+          </Animated.View>
+        ) : null}
+      </ContainerWrapper>
+
+      <ActionMenu
+        visible={isActionMenuVisible}
+        onClose={() => setIsActionMenuVisible(false)}
+      />
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  chrome: {
-    backgroundColor: "rgba(247,247,244,0.88)",
-    bottom: 0,
-    left: 0,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    position: "absolute",
-    right: 0,
-    zIndex: 2,
-  },
-  activeTab: {
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderRadius: 34,
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    top: 0,
-  },
-});
+function ContainerWrapper({
+  children,
+  withBlur,
+}: {
+  children: React.ReactNode;
+  withBlur?: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const bottom = insets.bottom + 8;
+  const style = {
+    bottom,
+    backgroundColor: withBlur ? theme.chrome : "transparent",
+  };
+
+  if (!withBlur) {
+    return (
+      <View
+        className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
+        style={style}
+      >
+        {children}
+      </View>
+    );
+  }
+
+  return (
+    <BlurView
+      intensity={18}
+      tint={theme.dark ? "dark" : "light"}
+      className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
+      style={style}
+    >
+      {children}
+    </BlurView>
+  );
+}

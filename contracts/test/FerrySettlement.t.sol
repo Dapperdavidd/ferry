@@ -25,7 +25,15 @@ interface IEip712 {
     function eip712Domain()
         external
         view
-        returns (bytes1, string memory name, string memory version, uint256 chainId, address verifyingContract, bytes32, uint256[] memory);
+        returns (
+            bytes1,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32,
+            uint256[] memory
+        );
 }
 
 /// Runs against a fork of Monad testnet, where AUSD, its faucet and Agora's CTK/AUSD pool are live.
@@ -36,11 +44,12 @@ contract FerrySettlementTest is Test {
     address constant PAIR = 0x1Aa8958Aa34cEC8096EF4381cb335effe977b0ae;
     address constant WHITELISTER = 0x7c10F56d6f04a51376393a1C3670e966863F6BD5;
 
-    bytes32 constant RECEIVE_TYPEHASH =
-        keccak256("ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)");
+    bytes32 constant RECEIVE_TYPEHASH = keccak256(
+        "ReceiveWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
+    );
 
     FerrySettlement settlement;
-    uint256 userKey = 0xA11CE;
+    uint256 userKey = 0x83cea2443a7c429300cb5ea4f988216d36574d68dc0f892cba7c8dcaa6f743be;
     address user;
     address relayer = address(0xBEEF);
     address payoutTo = address(0xCAFE);
@@ -58,7 +67,8 @@ contract FerrySettlementTest is Test {
         IFaucet(FAUCET).requestFunds(user);
         assertEq(IERC20View(AUSD).balanceOf(user), 10_000e6, "faucet paid");
 
-        (, string memory name, string memory version, uint256 chainId, address verifyingContract,,) = IEip712(AUSD).eip712Domain();
+        (, string memory name, string memory version, uint256 chainId, address verifyingContract,,) =
+            IEip712(AUSD).eip712Domain();
         domainSeparator = keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
@@ -71,7 +81,8 @@ contract FerrySettlementTest is Test {
     }
 
     function sign(uint256 value, uint256 validBefore, bytes32 nonce) internal view returns (bytes memory) {
-        bytes32 structHash = keccak256(abi.encode(RECEIVE_TYPEHASH, user, address(settlement), value, uint256(0), validBefore, nonce));
+        bytes32 structHash =
+            keccak256(abi.encode(RECEIVE_TYPEHASH, user, address(settlement), value, uint256(0), validBefore, nonce));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userKey, digest);
         return abi.encodePacked(r, s, v);
@@ -92,7 +103,9 @@ contract FerrySettlementTest is Test {
         vm.prank(relayer);
         vm.expectEmit(true, true, false, false, address(settlement));
         emit FerrySettlement.Settled(user, payoutTo, value, 0, nonce);
-        uint256 amountOut = settlement.settle(user, value, 0, validBefore, nonce, signature, payoutTo, minOut, salt, block.timestamp + 300);
+        uint256 amountOut = settlement.settle(
+            user, value, 0, validBefore, nonce, signature, payoutTo, minOut, salt, block.timestamp + 300
+        );
 
         assertGe(amountOut, minOut, "at least the minimum");
         assertEq(IERC20View(CTK).balanceOf(payoutTo), amountOut, "payout received the output");
@@ -111,7 +124,9 @@ contract FerrySettlementTest is Test {
 
         vm.startPrank(relayer);
         vm.expectRevert(FerrySettlement.TermsMismatch.selector);
-        settlement.settle(user, value, 0, validBefore, nonce, signature, address(0xBAD), minOut, salt, block.timestamp + 300);
+        settlement.settle(
+            user, value, 0, validBefore, nonce, signature, address(0xBAD), minOut, salt, block.timestamp + 300
+        );
         vm.expectRevert(FerrySettlement.TermsMismatch.selector);
         settlement.settle(user, value, 0, validBefore, nonce, signature, payoutTo, 1, salt, block.timestamp + 300);
         vm.stopPrank();

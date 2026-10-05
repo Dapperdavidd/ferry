@@ -1,18 +1,6 @@
 import { HttpStatus, Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { createId } from "@paralleldrive/cuid2";
-import {
-  and,
-  desc,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  lt,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { getAddress, isAddress, toHex, type Address, type Hex } from "viem";
 import {
   authorizationFrom,
@@ -26,6 +14,7 @@ import { ausdToUsd } from "../common/money";
 import { DbService } from "../db/db.service";
 import { cashouts, intents, transfers, users } from "../db/schema";
 import { UsersService } from "../users/users.service";
+import { RelayerPolicyService } from "../relayer/relayer-policy.service";
 import type { PrepareTransferRequest } from "./dtos";
 
 const INTENT_TTL_MS = 5 * 60_000;
@@ -66,22 +55,12 @@ export interface TransferRowView {
 @Injectable()
 export class TransfersService {
   private readonly logger = new Logger(TransfersService.name);
-  private readonly maxSendsPerDay: number;
-  private readonly maxAmountPerDay: bigint;
-
   constructor(
     private readonly db: DbService,
     private readonly chain: ChainService,
     private readonly users: UsersService,
-    config: ConfigService,
-  ) {
-    this.maxSendsPerDay =
-      config.get<number>("RELAYER_MAX_SENDS_PER_USER_PER_DAY") ?? 20;
-    this.maxAmountPerDay = BigInt(
-      config.get<string>("RELAYER_MAX_AMOUNT_PER_USER_PER_DAY_RAW") ??
-        "5000000000",
-    );
-  }
+    private readonly relayerPolicy: RelayerPolicyService,
+  ) {}
 
   /** Resolves the recipient, checks balance and caps, and pins the exact authorization the app will sign. */
   async prepare(userId: string, from: Address, body: PrepareTransferRequest) {
@@ -104,7 +83,7 @@ export class TransfersService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    await this.assertWithinCaps(userId, value);
+    await this.relayerPolicy.assertSendAllowed(userId, value);
 
     const now = Math.floor(Date.now() / 1000);
     const auth = {
@@ -391,34 +370,6 @@ export class TransfersService {
       displayName: user.displayName,
       userId: user.id,
     };
-  }
-
-  /** The relayer pays for every send, so each user gets a daily budget of count and amount. */
-  private async assertWithinCaps(userId: string, value: bigint): Promise<void> {
-    const since = new Date(Date.now() - 24 * 3600_000);
-    const [row] = await this.db.client
-      .select({
-        count: sql<number>`count(*)::int`,
-        total: sql<string>`coalesce(sum(${transfers.amountRaw}::numeric), 0)::text`,
-      })
-      .from(transfers)
-      .where(
-        and(
-          eq(transfers.userId, userId),
-          eq(transfers.direction, "SEND"),
-          ne(transfers.status, "FAILED"),
-          gt(transfers.createdAt, since),
-        ),
-      );
-    const count = row?.count ?? 0;
-    const total = BigInt((row?.total ?? "0").split(".")[0]);
-    if (count >= this.maxSendsPerDay || total + value > this.maxAmountPerDay) {
-      throw new ApiError(
-        "RELAYER_CAP",
-        "You've reached today's sending limit.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
   }
 }
 

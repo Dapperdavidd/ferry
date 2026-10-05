@@ -50,10 +50,7 @@ export function ReceiveModal({
   return (
     <ActionModal visible={visible} onClose={onClose}>
       <View className="mb-6 flex-col items-center justify-center">
-        <View
-          className="mb-4 size-16 items-center justify-center rounded-[22px]"
-          style={{ backgroundColor: theme.accentSoft }}
-        >
+        <View className="mb-4 size-16 items-center justify-center rounded-[22px]">
           <Ionicons name="qr-code-outline" size={28} color={theme.text} />
         </View>
         <Typography

@@ -1,5 +1,11 @@
 import React from "react";
-import { Linking, View, TouchableOpacity } from "react-native";
+import {
+  Linking,
+  ScrollView,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { FontAwesome6, Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { notificationAsync, NotificationFeedbackType } from "expo-haptics";
@@ -19,7 +25,6 @@ import {
 } from "@/utils/activity";
 import { formatUsdFromString, rawToNumber } from "@/utils/balances";
 import { cn } from "@/utils/cn";
-import { truncateAddress } from "@/utils/helper";
 import { describeToken, formatTokenAmount } from "@/utils/tokens";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 
@@ -62,6 +67,7 @@ export function TransactionDetailModal({
 }: TransactionDetailModalProps) {
   const { contacts } = useContacts();
   const { theme } = useAppTheme();
+  const { height } = useWindowDimensions();
   const copyIconColor = theme.muted;
 
   if (!item) return null;
@@ -89,165 +95,223 @@ export function TransactionDetailModal({
 
   return (
     <ActionModal visible={visible} onClose={onClose}>
-      <View className="items-center">
-        <HapticPressable
-          onPress={onClose}
-          className="absolute -right-4 -top-4 p-4"
-        >
-          <FontAwesome6 name="xmark" size={20} color={copyIconColor} />
-        </HapticPressable>
-
-        <View className="relative mb-3">
-          <TokenMark token={item.token} size={64} />
-          <View
-            className="absolute right-0 top-0 overflow-hidden rounded-full"
-            style={{ backgroundColor: theme.card }}
+      <ScrollView
+        style={{ maxHeight: Math.max(360, height * 0.72) }}
+        contentContainerStyle={{ paddingBottom: 4 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="items-center">
+          <HapticPressable
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Close payment details"
+            onPress={onClose}
+            className="absolute -right-4 -top-4 p-4"
           >
-            <Ionicons name={status.icon} size={16} color={status.color} />
+            <FontAwesome6 name="xmark" size={20} color={copyIconColor} />
+          </HapticPressable>
+
+          <View className="relative mb-3">
+            <TokenMark token={item.token} size={64} />
+            <View
+              className="absolute right-0 top-0 overflow-hidden rounded-full"
+              style={{ backgroundColor: theme.card }}
+            >
+              <Ionicons name={status.icon} size={16} color={status.color} />
+            </View>
           </View>
-        </View>
 
-        <Typography
-          weight="600"
-          className="mb-1 text-sm"
-          style={{ color: theme.muted }}
-        >
-          {statusLabel(item)}
-        </Typography>
-
-        <Typography
-          weight="700"
-          className="mb-1 text-3xl"
-          style={{ color: theme.text }}
-        >
-          {amount} {symbol}
-        </Typography>
-
-        {item.usdValue !== null && (
           <Typography
             weight="600"
-            className="mb-1 text-base"
+            className="mb-1 text-sm"
             style={{ color: theme.muted }}
           >
-            {formatUsdFromString(item.usdValue)}
+            {statusLabel(item)}
           </Typography>
-        )}
 
-        <Typography
-          weight="600"
-          className="mb-4 text-sm"
-          style={{ color: theme.muted }}
-        >
-          {date}
-        </Typography>
+          <Typography
+            weight="700"
+            className="mb-1 text-3xl"
+            style={{ color: theme.text }}
+          >
+            {amount} {symbol}
+          </Typography>
 
-        <View className="w-full pb-3">
-          <View className={rowClass}>
-            <Typography weight="600">Status</Typography>
-            <View className="flex-row items-center">
-              <Typography className={cn("mr-1", status.textClass)}>
-                {status.label}
-              </Typography>
-              <Ionicons name={status.icon} size={14} color={status.color} />
-            </View>
-          </View>
-
-          {item.kind !== "cashout" && item.kind !== "funding" && (
-            <View className={rowClass}>
-              <Typography weight="600" className="text-black/30">
-                {item.direction === "send" ? "To" : "From"}
-              </Typography>
-              <TouchableOpacity
-                className="flex-row items-center"
-                onPress={() => copyToClipboard(item.counterparty)}
-              >
-                <Typography weight="600" className="mr-1">
-                  {who}
-                </Typography>
-                <Ionicons name="copy-outline" size={14} color={copyIconColor} />
-              </TouchableOpacity>
-            </View>
+          {item.usdValue !== null && (
+            <Typography
+              weight="600"
+              className="mb-1 text-base"
+              style={{ color: theme.muted }}
+            >
+              {formatUsdFromString(item.usdValue)}
+            </Typography>
           )}
 
-          {item.cashout && (
-            <>
-              <View className={rowClass}>
-                <Typography weight="600" className="text-black/30">
-                  Settled through
+          <Typography
+            weight="600"
+            className="mb-4 text-sm"
+            style={{ color: theme.muted }}
+          >
+            {date}
+          </Typography>
+
+          <View className="w-full pb-3">
+            <View className={rowClass}>
+              <Typography weight="600" style={{ color: theme.muted }}>
+                Status
+              </Typography>
+              <View className="flex-row items-center">
+                <Typography className={cn("mr-1", status.textClass)}>
+                  {status.label}
                 </Typography>
-                <Typography weight="600">Agora Instant Settlement</Typography>
+                <Ionicons name={status.icon} size={14} color={status.color} />
               </View>
+            </View>
+
+            {item.kind !== "cashout" && item.kind !== "funding" && (
               <View className={rowClass}>
-                <Typography weight="600" className="text-black/30">
-                  Received
+                <Typography weight="600" style={{ color: theme.muted }}>
+                  {item.direction === "send" ? "To" : "From"}
                 </Typography>
-                <Typography weight="600">
-                  {formatTokenAmount(
-                    rawToNumber(
-                      item.cashout.outAmountRaw,
-                      item.cashout.outDecimals
-                    ),
-                    item.cashout.outDecimals
-                  )}{" "}
-                  {item.cashout.outToken}
-                </Typography>
-              </View>
-              {item.cashout.localAmount && item.cashout.localCurrency && (
-                <View className={rowClass}>
-                  <Typography weight="600" className="text-black/30">
-                    Bank payout
+                <TouchableOpacity
+                  accessible
+                  accessibilityRole="button"
+                  accessibilityLabel={`Copy ${item.direction === "send" ? "recipient" : "sender"} address for ${who}`}
+                  className="flex-row items-center"
+                  onPress={() => copyToClipboard(item.counterparty)}
+                >
+                  <Typography
+                    weight="600"
+                    className="mr-1"
+                    style={{ color: theme.text }}
+                  >
+                    {who}
                   </Typography>
-                  <Typography weight="600">
-                    {item.cashout.localCurrency} {item.cashout.localAmount} ·{" "}
-                    {item.cashout.payoutStatus === "SENT"
-                      ? "sent"
-                      : item.cashout.payoutStatus.toLowerCase()}
+                  <Ionicons
+                    name="copy-outline"
+                    size={14}
+                    color={copyIconColor}
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {item.flow ? (
+              <View className={rowClass}>
+                <Typography weight="600" style={{ color: theme.muted }}>
+                  Payment route
+                </Typography>
+                <View
+                  className="flex-row items-center gap-1.5 rounded-full border px-3 py-1.5"
+                  style={{ borderColor: theme.border }}
+                >
+                  <Ionicons
+                    name="git-branch-outline"
+                    size={13}
+                    color={theme.text}
+                  />
+                  <Typography weight="700" style={{ color: theme.text }}>
+                    Ferry Flow
                   </Typography>
                 </View>
-              )}
-            </>
-          )}
+              </View>
+            ) : null}
 
-          {item.memo ? (
-            <View className={rowClass}>
-              <Typography weight="600" className="text-black/30">
-                Note
-              </Typography>
-              <Typography weight="600">{item.memo}</Typography>
-            </View>
-          ) : null}
-
-          <View className={rowClass}>
-            <Typography weight="600" className="text-black/30">
-              On Monad
-            </Typography>
-            {item.txHash ? (
-              <TouchableOpacity
-                className="flex-row items-center"
-                onPress={() => Linking.openURL(txUrl(item.txHash as string))}
-              >
-                <Typography weight="600" className="mr-1">
-                  {truncateAddress(item.txHash, 6, 4)}
-                </Typography>
-                <Ionicons name="open-outline" size={14} color={copyIconColor} />
-              </TouchableOpacity>
-            ) : (
-              <Typography weight="600" className="text-black/30">
-                Pending
-              </Typography>
+            {item.cashout && (
+              <>
+                <View className={rowClass}>
+                  <Typography weight="600" style={{ color: theme.muted }}>
+                    Settled through
+                  </Typography>
+                  <Typography weight="600" style={{ color: theme.text }}>
+                    Agora Instant Settlement
+                  </Typography>
+                </View>
+                <View className={rowClass}>
+                  <Typography weight="600" style={{ color: theme.muted }}>
+                    Received
+                  </Typography>
+                  <Typography weight="600" style={{ color: theme.text }}>
+                    {formatTokenAmount(
+                      rawToNumber(
+                        item.cashout.outAmountRaw,
+                        item.cashout.outDecimals
+                      ),
+                      item.cashout.outDecimals
+                    )}{" "}
+                    {item.cashout.outToken}
+                  </Typography>
+                </View>
+                {item.cashout.localAmount && item.cashout.localCurrency && (
+                  <View className={rowClass}>
+                    <Typography weight="600" style={{ color: theme.muted }}>
+                      Bank payout
+                    </Typography>
+                    <Typography weight="600" style={{ color: theme.text }}>
+                      {item.cashout.localCurrency} {item.cashout.localAmount} ·{" "}
+                      {item.cashout.payoutStatus === "SENT"
+                        ? "sent"
+                        : item.cashout.payoutStatus.toLowerCase()}
+                    </Typography>
+                  </View>
+                )}
+              </>
             )}
-          </View>
 
-          <View className={rowClass}>
-            <Typography weight="600" className="text-black/30">
-              Network fee
-            </Typography>
-            <Typography weight="500" className="text-success">
-              Covered by Ferry
-            </Typography>
+            {item.memo && !item.flow ? (
+              <View className={rowClass}>
+                <Typography weight="600" style={{ color: theme.muted }}>
+                  Note
+                </Typography>
+                <Typography weight="600" style={{ color: theme.text }}>
+                  {item.memo}
+                </Typography>
+              </View>
+            ) : null}
+
+            <View className={rowClass}>
+              <Typography weight="600" style={{ color: theme.muted }}>
+                Receipt
+              </Typography>
+              {item.txHash ? (
+                <TouchableOpacity
+                  accessible
+                  accessibilityRole="link"
+                  accessibilityLabel="Open payment receipt on Monad"
+                  className="flex-row items-center"
+                  onPress={() => Linking.openURL(txUrl(item.txHash as string))}
+                >
+                  <Typography
+                    weight="600"
+                    className="mr-1"
+                    style={{ color: theme.text }}
+                  >
+                    View details
+                  </Typography>
+                  <Ionicons
+                    name="open-outline"
+                    size={14}
+                    color={copyIconColor}
+                  />
+                </TouchableOpacity>
+              ) : (
+                <Typography weight="600" style={{ color: theme.muted }}>
+                  Pending
+                </Typography>
+              )}
+            </View>
+
+            <View className={rowClass}>
+              <Typography weight="600" style={{ color: theme.muted }}>
+                Network fee
+              </Typography>
+              <Typography weight="500" className="text-success">
+                Covered by Ferry
+              </Typography>
+            </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </ActionModal>
   );
 }

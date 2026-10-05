@@ -3,6 +3,7 @@ import {
   defineChain,
   erc20Abi,
   http,
+  isAddress,
   type Address,
 } from "viem";
 
@@ -16,6 +17,12 @@ export const AUSD_ADDRESS = (process.env.EXPO_PUBLIC_AUSD_ADDRESS ??
 export const EXPLORER_URL = (
   process.env.EXPO_PUBLIC_EXPLORER_URL ?? "https://testnet.monadscan.com"
 ).replace(/\/$/, "");
+const configuredFlowAddress =
+  process.env.EXPO_PUBLIC_FLOW_CONTRACT_ADDRESS?.trim();
+export const FLOW_CONTRACT_ADDRESS: Address | null =
+  configuredFlowAddress && isAddress(configuredFlowAddress)
+    ? configuredFlowAddress
+    : null;
 
 export const monad = defineChain({
   id: CHAIN_ID,

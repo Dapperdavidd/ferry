@@ -16,17 +16,14 @@ import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { SettingsItem } from "@/components/ui/molecules";
 import { DeleteAccountModal } from "@/components/ui/organisms/modals/DeleteAccountModal";
-import { EditWalletModal } from "@/components/ui/organisms/modals/EditWalletModal";
 import { NotificationsSheet } from "@/components/ui/organisms/modals/NotificationsSheet";
 import { Spacing } from "@/constants/Spacing";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBalances } from "@/hooks/useBalances";
 import { useNotificationPreference } from "@/hooks/usePushRegistration";
-import { useWalletName } from "@/hooks/useWalletName";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { addressUrl, monad } from "@/lib/chain";
-import { cn } from "@/utils/cn";
 
 const SITE_URL = "https://ferry.money";
 const PRIVACY_POLICY_URL = `${SITE_URL}/privacy`;
@@ -40,8 +37,6 @@ const APP_BUILD =
 export default function SettingsScreen() {
   const router = useRouter();
   const { signOut, user, address } = useAuth();
-  const { name: walletName, setName: setWalletName } = useWalletName();
-  const [showEditWallet, setShowEditWallet] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const notificationsSheetRef = useRef<BottomSheetModal>(null);
   const notifications = useNotificationPreference();
@@ -67,7 +62,7 @@ export default function SettingsScreen() {
         {
           label: user?.handle ? `@${user.handle}` : "Edit account",
           icon: <Ionicons name="person-outline" size={19} color={theme.text} />,
-          onPress: () => setShowEditWallet(true),
+          onPress: () => router.push("/profile" as never),
         },
         {
           label: "Address book",
@@ -98,7 +93,7 @@ export default function SettingsScreen() {
       title: "Appearance",
       data: [
         {
-          label: `Theme · ${theme.name}`,
+          label: `Appearance · ${theme.dark ? "Dark" : "Light"}`,
           icon: (
             <Ionicons
               name="color-palette-outline"
@@ -163,21 +158,16 @@ export default function SettingsScreen() {
           }
           sections={sections}
           keyExtractor={(item, index) => item.label + index}
-          renderItem={({ item, index, section }) => (
+          renderItem={({ item }) => (
             <SettingsItem
               label={item.label}
               icon={item.icon}
               onPress={item.onPress}
               color={item.color}
-              className={cn(
-                index === 0 && "rounded-t-[24px]",
-                index === section.data.length - 1
-                  ? "rounded-b-[24px]"
-                  : "border-b border-black/[0.045]"
-              )}
-              backgroundColor={theme.card}
+              className="min-h-[64px] bg-transparent px-2 py-3.5"
+              backgroundColor="transparent"
               textColor={item.color ?? theme.text}
-              iconBackgroundColor={theme.accentSoft}
+              iconBackgroundColor="transparent"
               chevronColor={theme.faint}
             />
           )}
@@ -244,13 +234,6 @@ export default function SettingsScreen() {
         />
       </View>
 
-      <EditWalletModal
-        visible={showEditWallet}
-        onClose={() => setShowEditWallet(false)}
-        initialName={walletName}
-        address={address ?? ""}
-        onSave={setWalletName}
-      />
       <DeleteAccountModal
         visible={showDeleteAccount}
         onClose={() => setShowDeleteAccount(false)}

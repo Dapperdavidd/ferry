@@ -1,5 +1,11 @@
 import React from "react";
-import { ActivityIndicator, Image, Modal, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -76,6 +82,8 @@ export function SpendCheckModal({
   onRetry,
   onDismiss,
 }: SpendCheckModalProps) {
+  const { height } = useWindowDimensions();
+  const compact = height < 740;
   const steps = stepsFor(aboveDailyLimit);
   const settled = state === "paused" || state === "failed";
   const finished = step === "sent";
@@ -88,11 +96,19 @@ export function SpendCheckModal({
   const current = finished ? steps.length : found < 0 ? 0 : found;
 
   return (
-    <Modal visible={visible} animationType="slide" statusBarTranslucent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onDismiss}
+    >
       <StatusBar style="dark" />
       <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-[#F7F7F4]">
-        <View className="flex-1 px-5 pb-6 pt-5">
-          <View className="mb-5 px-1">
+        <View
+          accessibilityViewIsModal
+          className={`flex-1 px-5 ${compact ? "pb-4 pt-3" : "pb-6 pt-5"}`}
+        >
+          <View className={`${compact ? "mb-3" : "mb-5"} px-1`}>
             <View>
               <Typography
                 weight="700"
@@ -130,12 +146,12 @@ export function SpendCheckModal({
               </Typography>
             </View>
 
-            <View className="mt-9">
+            <View className={compact ? "mt-6" : "mt-9"}>
               <Typography
                 weight="700"
                 adjustsFontSizeToFit
                 numberOfLines={1}
-                className="text-[42px] tracking-[-1.7px] text-white"
+                className={`${compact ? "text-[36px]" : "text-[42px]"} tracking-[-1.7px] text-white`}
               >
                 {amount}
               </Typography>
@@ -144,7 +160,7 @@ export function SpendCheckModal({
               </Typography>
             </View>
 
-            <View className="my-8 h-px bg-white/10" />
+            <View className={`${compact ? "my-5" : "my-8"} h-px bg-white/10`} />
 
             <View className="flex-1">
               {steps.map((row, index) => {
@@ -181,6 +197,9 @@ export function SpendCheckModal({
               <View className="gap-3">
                 {onRetry && (
                   <HapticPressable
+                    accessible
+                    accessibilityRole="button"
+                    accessibilityLabel="Try payment again"
                     onPress={onRetry}
                     className="w-full items-center justify-center rounded-full bg-white py-4"
                   >
@@ -190,6 +209,9 @@ export function SpendCheckModal({
                   </HapticPressable>
                 )}
                 <HapticPressable
+                  accessible
+                  accessibilityRole="button"
+                  accessibilityLabel="Close payment progress"
                   onPress={onDismiss}
                   feedback="selection"
                   className="w-full items-center justify-center py-3"
@@ -316,12 +338,12 @@ function stepsFor(aboveDailyLimit: boolean): StepCopy[] {
 const CHECK_STEPS: StepCopy[] = [
   {
     key: "identity",
-    title: "Check it is you",
+    title: "Confirm with passkey",
     body: "Your phone asks for your face or your fingerprint.",
   },
   {
     key: "sending",
     title: "Sending",
-    body: "Handing the payment to the network.",
+    body: "Completing your payment securely.",
   },
 ];

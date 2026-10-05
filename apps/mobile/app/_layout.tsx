@@ -158,21 +158,31 @@ function AuthLayout() {
     isAuthenticated && !inAuthGroup && isObscured && !showLock;
 
   return (
-    <>
-      {screens}
+    <View style={styles.authRoot}>
+      <View
+        accessibilityElementsHidden={showLock || showObscure}
+        importantForAccessibility={
+          showLock || showObscure ? "no-hide-descendants" : "auto"
+        }
+        pointerEvents={showLock || showObscure ? "none" : "auto"}
+        style={styles.authContent}
+      >
+        {screens}
+      </View>
       {showObscure && (
         <View
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          style={[StyleSheet.absoluteFill, { backgroundColor: "#FAFAF8" }]}
+          pointerEvents="auto"
+          style={[styles.securityLayer, { backgroundColor: "#FAFAF8" }]}
         />
       )}
       {showLock && (
-        <View style={StyleSheet.absoluteFill}>
+        <View pointerEvents="auto" style={styles.securityLayer}>
           <LockScreen />
         </View>
       )}
-    </>
+    </View>
   );
 }
 
@@ -266,5 +276,23 @@ function ThemedRoot({ children }: { children: React.ReactNode }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  authRoot: {
+    flex: 1,
+  },
+  authContent: {
+    flex: 1,
+  },
+  securityLayer: {
+    bottom: 0,
+    elevation: 10_000,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 10_000,
+  },
+});
 
 export default SENTRY_ENABLED ? Sentry.wrap(RootLayout) : RootLayout;
