@@ -60,6 +60,7 @@ export default function ConfirmScreen() {
   const queryClient = useQueryClient();
   const pendingSubmission = useRef<PendingSubmission | null>(null);
   const [flow, setFlow] = useState<SendFlow | null>(null);
+  const [requiresPlus, setRequiresPlus] = useState(false);
   const attempt = useRef(0);
   const ausdAddress = getAusdAddress();
   const flowContractAddress = getFlowContractAddress();
@@ -126,17 +127,20 @@ export default function ConfirmScreen() {
         "failed",
         "You've reached today's $5,000 testnet sending limit. Nothing has been sent."
       );
-    if (code === "SPONSORED_SEND_LIMIT")
+    if (code === "SPONSORED_SEND_LIMIT") {
+      setRequiresPlus(true);
       return hold(
         "failed",
         "You've used your covered sends. Get Ferry Plus to keep sending."
       );
+    }
     const message = apiErrorMessage(error);
     if (message) return hold("failed", message);
     throw error;
   };
 
   const handleConfirm = async () => {
+    setRequiresPlus(false);
     if (!address) {
       showToast("Your account isn't ready yet. Try again.");
       return;
@@ -304,6 +308,7 @@ export default function ConfirmScreen() {
         }
         if (code === "SPONSORED_SEND_LIMIT") {
           pendingSubmission.current = null;
+          setRequiresPlus(true);
           return hold(
             "failed",
             "You've used your covered sends. Get Ferry Plus to keep sending."
@@ -324,6 +329,7 @@ export default function ConfirmScreen() {
       queryClient.invalidateQueries({ queryKey: ["transfers"] });
       queryClient.invalidateQueries({ queryKey: ["balances"] });
       queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: ["plus"] });
 
       if (run === attempt.current) {
         setFlow({ step: "sent", state: "done", message: null });
@@ -363,7 +369,16 @@ export default function ConfirmScreen() {
   const handleDismissFlow = () => {
     attempt.current += 1;
     setFlow(null);
+    setRequiresPlus(false);
     setIsLoading(false);
+  };
+
+  const handleOpenPlus = () => {
+    attempt.current += 1;
+    setFlow(null);
+    setRequiresPlus(false);
+    setIsLoading(false);
+    router.push("/plus");
   };
 
   return (
@@ -509,6 +524,8 @@ export default function ConfirmScreen() {
         amount={isDirect ? localDisplay : `$${formatAmount({ amount })}`}
         counterparty={recipientLabel}
         onRetry={handleConfirm}
+        primaryActionLabel={requiresPlus ? "Explore Ferry Plus" : undefined}
+        onPrimaryAction={requiresPlus ? handleOpenPlus : undefined}
         onDismiss={handleDismissFlow}
       />
     </ThemedScreen>

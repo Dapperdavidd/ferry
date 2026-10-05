@@ -268,10 +268,26 @@ function HomeScreenContent() {
           accessibilityRole="button"
           feedback="selection"
           onPress={() => router.push("/plus" as never)}
-          className="mb-2 flex-row items-center border-y py-4"
+          className="flex-row items-center border-t py-4"
           style={{ borderColor: theme.border }}
         >
-          <Ionicons name="diamond-outline" size={21} color={theme.text} />
+          <View className="relative size-9 items-center justify-center">
+            <Image
+              source={
+                theme.dark
+                  ? require("@/assets/images/logo/ferry-mark-white-2048.png")
+                  : require("@/assets/images/logo/ferry-mark-black-2048.png")
+              }
+              style={{ height: 27, width: 27 }}
+              contentFit="contain"
+            />
+            <View
+              className="absolute bottom-0 right-0 size-4 items-center justify-center rounded-full"
+              style={{ backgroundColor: theme.accent }}
+            >
+              <Ionicons name="add" size={12} color={theme.primaryText} />
+            </View>
+          </View>
           <View className="ml-3 flex-1">
             <Typography
               weight="700"

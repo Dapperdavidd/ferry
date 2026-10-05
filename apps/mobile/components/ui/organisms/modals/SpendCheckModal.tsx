@@ -48,6 +48,8 @@ interface SpendCheckModalProps {
    */
   aboveDailyLimit: boolean;
   onRetry?: () => void;
+  primaryActionLabel?: string;
+  onPrimaryAction?: () => void;
   onDismiss: () => void;
 }
 
@@ -80,6 +82,8 @@ export function SpendCheckModal({
   message,
   aboveDailyLimit,
   onRetry,
+  primaryActionLabel,
+  onPrimaryAction,
   onDismiss,
 }: SpendCheckModalProps) {
   const { height } = useWindowDimensions();
@@ -94,6 +98,7 @@ export function SpendCheckModal({
   // first, which is where the send has got to.
   const found = steps.findIndex((row) => row.key === step);
   const current = finished ? steps.length : found < 0 ? 0 : found;
+  const primaryAction = onPrimaryAction ?? onRetry;
 
   return (
     <Modal
@@ -195,16 +200,18 @@ export function SpendCheckModal({
 
             {settled ? (
               <View className="gap-3">
-                {onRetry && (
+                {primaryAction && (
                   <HapticPressable
                     accessible
                     accessibilityRole="button"
-                    accessibilityLabel="Try payment again"
-                    onPress={onRetry}
+                    accessibilityLabel={
+                      primaryActionLabel ?? "Try payment again"
+                    }
+                    onPress={primaryAction}
                     className="w-full items-center justify-center rounded-full bg-white py-4"
                   >
                     <Typography weight="700" className="text-base text-black">
-                      Try again
+                      {primaryActionLabel ?? "Try again"}
                     </Typography>
                   </HapticPressable>
                 )}
