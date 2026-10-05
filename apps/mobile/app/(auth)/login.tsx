@@ -67,14 +67,6 @@ function TypewriterHeadline() {
         className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
       >
         {visibleText}
-        {visibleText === message ? null : (
-          <Typography
-            weight="600"
-            className="text-lg tracking-[2px] text-[#D8D29B]"
-          >
-            ···
-          </Typography>
-        )}
       </Typography>
     </View>
   );
@@ -129,10 +121,13 @@ function WelcomeScreen() {
         <View>
           <View className="mb-5 items-center">
             <Typography
-              weight="500"
-              className="text-center text-xs leading-[18px] text-white/60"
+              weight="600"
+              className="text-center text-sm leading-[20px] text-white/70"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
             >
-              Settled in a second, on Monad.{"\n"}Your face is the only key.
+              One-second settlement · Your face is the only key
             </Typography>
           </View>
           {authError ? (
