@@ -5,11 +5,12 @@ import {
   Easing,
   Image,
   Linking,
+  Pressable,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { Link } from "expo-router";
 import { useReducedMotion } from "react-native-reanimated";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
@@ -155,22 +156,17 @@ function TypewriterHeadline() {
 }
 
 function WelcomeScreen() {
-  const { createAccount, signIn, signInDemo, account, authError } = useAuth();
+  const { createAccount, signIn, account, authError } = useAuth();
   const [busy, setBusy] = useState<
-    "create" | "resume" | "signIn" | "choose" | "demo" | null
+    "create" | "resume" | "signIn" | "choose" | null
   >(null);
   const authErrorMessage = authError?.split("\n", 1)[0];
 
-  const run = async (
-    which: "create" | "resume" | "signIn" | "choose" | "demo"
-  ) => {
+  const run = async (which: "create" | "resume" | "signIn" | "choose") => {
     if (busy) return;
     setBusy(which);
     try {
-      if (which === "demo") {
-        await signInDemo();
-        router.replace("/(tabs)");
-      } else if (which === "create" || which === "resume") {
+      if (which === "create" || which === "resume") {
         await createAccount({ resumePending: which === "resume" });
       } else {
         const { isNew } = await signIn({
@@ -295,22 +291,24 @@ function WelcomeScreen() {
             ) : null}
 
             {SHOW_DEVELOPMENT_PREVIEW ? (
-              <HapticPressable
-                feedback="selection"
-                onPress={() => run("demo")}
-                disabled={busy !== null}
-                accessibilityRole="button"
-                className="flex-row items-center justify-center gap-2 py-2"
-              >
-                <Ionicons
-                  name="phone-portrait-outline"
-                  size={14}
-                  color="#D8D29B"
-                />
-                <Typography weight="600" className="text-sm text-[#D8D29B]">
-                  Preview Ada in development
-                </Typography>
-              </HapticPressable>
+              <Link href="/dev-preview" asChild>
+                <Pressable
+                  onPressIn={() => void Haptics.selectionAsync()}
+                  disabled={busy !== null}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  className="mt-1 min-h-12 flex-row items-center justify-center gap-2 rounded-full border border-[#D8D29B]/25 bg-[#D8D29B]/10 px-4 py-3 active:opacity-70"
+                >
+                  <Ionicons
+                    name="phone-portrait-outline"
+                    size={16}
+                    color="#D8D29B"
+                  />
+                  <Typography weight="600" className="text-sm text-[#D8D29B]">
+                    Preview Ada in development
+                  </Typography>
+                </Pressable>
+              </Link>
             ) : null}
           </View>
 
