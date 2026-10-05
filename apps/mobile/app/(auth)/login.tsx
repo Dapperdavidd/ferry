@@ -1,13 +1,79 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Image, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
-import { WordWheel } from "@/components/ui/molecules/WordWheel";
 import { WithScreenTheme } from "@/components/WithScreenTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/utils/toast";
+
+const WELCOME_MESSAGES = [
+  "Send dollars across borders.",
+  "Cash out straight to your bank.",
+  "Receive money in seconds.",
+];
+
+function TypewriterHeadline() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [visibleText, setVisibleText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const message = WELCOME_MESSAGES[messageIndex];
+
+  useEffect(() => {
+    const isComplete = visibleText === message;
+    const isEmpty = visibleText.length === 0;
+    const delay = isComplete
+      ? 1600
+      : isDeleting && isEmpty
+        ? 260
+        : isDeleting
+          ? 32
+          : 58;
+
+    const timer = setTimeout(() => {
+      if (!isDeleting && isComplete) {
+        setIsDeleting(true);
+        return;
+      }
+
+      if (isDeleting && isEmpty) {
+        setIsDeleting(false);
+        setMessageIndex((current) => (current + 1) % WELCOME_MESSAGES.length);
+        return;
+      }
+
+      setVisibleText(
+        isDeleting
+          ? message.slice(0, visibleText.length - 1)
+          : message.slice(0, visibleText.length + 1)
+      );
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isDeleting, message, visibleText]);
+
+  return (
+    <View
+      className="min-h-[150px] justify-center"
+      accessible
+      accessibilityLabel={message}
+    >
+      <Typography
+        weight="500"
+        className="max-w-[330px] text-[40px] leading-[46px] tracking-[-1.2px] text-white"
+      >
+        {visibleText}
+        <Typography
+          weight="400"
+          className="text-[40px] leading-[46px] text-[#C9C38C]"
+        >
+          |
+        </Typography>
+      </Typography>
+    </View>
+  );
+}
 
 function WelcomeScreen() {
   const { createAccount, signIn, account, authError } = useAuth();
@@ -34,40 +100,23 @@ function WelcomeScreen() {
   };
 
   return (
-    <View className="flex-1">
+    <View className="flex-1 bg-[#11110F]">
       <CharcoalBackground />
 
-      <View className="flex-1 justify-between px-8 py-16">
-        <View className="h-full flex-1 justify-center">
-          <WordWheel />
-        </View>
-
-        <View className="h-full flex-1 justify-end">
+      <View className="flex-1 justify-between px-8 pb-12 pt-16">
+        <View>
           <Image
             source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
-            className="h-16 w-20"
+            className="h-14 w-[72px]"
             resizeMode="contain"
           />
-          <Typography
-            weight="500"
-            className="my-[18px] w-full max-w-[300px] text-3xl text-white"
-          >
-            Send dollars across borders
-          </Typography>
-          <View className="mb-10">
-            <Typography
-              weight="500"
-              className="w-full max-w-[311px] text-lg text-white/55"
-            >
-              Settled in a second, on Monad.
-            </Typography>
-            <Typography
-              weight="500"
-              className="w-full max-w-[311px] text-lg text-white/55"
-            >
-              Your face is the only key.
-            </Typography>
-          </View>
+        </View>
+
+        <View className="flex-1 justify-center py-8">
+          <TypewriterHeadline />
+        </View>
+
+        <View>
           {authError ? (
             <Typography weight="500" className="mb-4 text-base text-[#FFB4B4]">
               {authError}
@@ -133,7 +182,7 @@ const CharcoalBackground = () => (
 );
 
 export default WithScreenTheme(WelcomeScreen, {
-  backgroundColor: "#FFFFFF",
-  textColor: "#000000",
-  primaryColor: "#000000",
+  backgroundColor: "#11110F",
+  textColor: "#FFFFFF",
+  primaryColor: "#FFFFFF",
 });
