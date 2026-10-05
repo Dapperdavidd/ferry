@@ -37,6 +37,7 @@ import { isJwtExpired } from "@/utils/jwt";
 import { AppError, ErrorCode } from "@/utils/errors";
 import { SEED_ADDRESS, SEED_DEMO, SEED_USER } from "@/utils/devSeed";
 import { forgetThisDevice } from "@/utils/pushDevice";
+import { useNetwork } from "@/contexts/NetworkContext";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -59,10 +60,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { network } = useNetwork();
   const busy = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    busy.current = false;
+    setStatus("loading");
+    setUserState(null);
+    setAuthError(null);
+    void queryClient.cancelQueries();
+    queryClient.clear();
     (async () => {
       try {
         if (SEED_DEMO) {
@@ -126,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [network, queryClient]);
 
   const setUser = useCallback(
     (next: User) => {
@@ -149,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (
       prfOutput: Uint8Array,
       credentialId: string,
-      intent: "create" | "signIn",
+      intent: "create" | "signIn" | "connect",
       expectAddress?: Address
     ) =>
       withSigner(prfOutput, async (signer) => {
@@ -255,13 +263,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ? { credentialId: rememberedAccount.credentialId }
             : undefined
         );
+        const hasNetworkSession = Boolean(await AuthStorage.getToken());
+        const intent =
+          rememberedAccount && !hasNetworkSession ? "connect" : "signIn";
         const verified = await openSession(
           asserted.prfOutput,
           asserted.credentialId,
-          "signIn",
+          intent,
           rememberedAccount?.address
         );
-        return { isNew: verified.isNew };
+        return { isNew: intent === "signIn" && verified.isNew };
       }),
     [account, guarded, openSession]
   );

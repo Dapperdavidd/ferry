@@ -18,7 +18,7 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { FLOW_QUERY_KEY, useFlow } from "@/hooks/useFlow";
-import { FLOW_CONTRACT_ADDRESS, monad } from "@/lib/chain";
+import { getFlowContractAddress, getMonadChain } from "@/lib/chain";
 import { PasskeyFailure } from "@/lib/mera";
 import { apiClient, apiErrorMessage, type Flow } from "@/utils/apiClient";
 import { SEED_DEMO } from "@/utils/devSeed";
@@ -57,8 +57,10 @@ export default function FlowsScreen() {
   const [completion, setCompletion] = useState<Completion>("active");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const flowContractAddress = getFlowContractAddress();
+  const chain = getMonadChain();
   const compact = height < 760 || width < 360;
-  const productionAvailable = SEED_DEMO || Boolean(FLOW_CONTRACT_ADDRESS);
+  const productionAvailable = SEED_DEMO || Boolean(flowContractAddress);
 
   useEffect(() => {
     if (hydrated.current || flowQuery.isLoading || !address) return;
@@ -129,7 +131,7 @@ export default function FlowsScreen() {
       const resolved = await resolvePeople(drafts);
       setDrafts(resolved);
       const destinations = draftsToDestinations(resolved);
-      if (!FLOW_CONTRACT_ADDRESS) {
+      if (!flowContractAddress) {
         throw new Error(
           "Flows are not connected in this build yet. Nothing changed."
         );
@@ -138,8 +140,8 @@ export default function FlowsScreen() {
       const mismatch = checkFlowConfiguration(prepared.typedData, {
         owner: address,
         destinations,
-        chainId: monad.id,
-        verifyingContract: FLOW_CONTRACT_ADDRESS,
+        chainId: chain.id,
+        verifyingContract: flowContractAddress,
         expiresAt: prepared.expiresAt,
       });
       if (mismatch) {
@@ -189,7 +191,7 @@ export default function FlowsScreen() {
         queryClient.setQueryData(FLOW_QUERY_KEY("seed-user"), preview);
         setCompletion("disabled");
       } else {
-        if (!FLOW_CONTRACT_ADDRESS) {
+        if (!flowContractAddress) {
           throw new Error(
             "Flows are not connected in this build yet. Your Flow is still active."
           );
@@ -200,8 +202,8 @@ export default function FlowsScreen() {
         });
         const mismatch = checkFlowDisable(prepared.typedData, {
           owner: address,
-          chainId: monad.id,
-          verifyingContract: FLOW_CONTRACT_ADDRESS,
+          chainId: chain.id,
+          verifyingContract: flowContractAddress,
           expiresAt: prepared.expiresAt,
         });
         if (mismatch) {

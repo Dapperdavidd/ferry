@@ -10,6 +10,6 @@ export const VerifySchema = z.object({
   signature: z
     .string()
     .regex(/^0x[0-9a-fA-F]{130}$/, "A signature is required."),
-  intent: z.enum(["create", "signIn"]).default("create"),
+  intent: z.enum(["create", "signIn", "connect"]).default("create"),
 });
 export type VerifyRequest = z.infer<typeof VerifySchema>;

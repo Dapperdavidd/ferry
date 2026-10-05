@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/organisms/modals/SpendCheckModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { AUSD_ADDRESS, FLOW_CONTRACT_ADDRESS, monad } from "@/lib/chain";
+import {
+  getAusdAddress,
+  getFlowContractAddress,
+  getMonadChain,
+} from "@/lib/chain";
 import { PasskeyFailure } from "@/lib/mera";
 import {
   apiClient,
@@ -57,6 +61,9 @@ export default function ConfirmScreen() {
   const pendingSubmission = useRef<PendingSubmission | null>(null);
   const [flow, setFlow] = useState<SendFlow | null>(null);
   const attempt = useRef(0);
+  const ausdAddress = getAusdAddress();
+  const flowContractAddress = getFlowContractAddress();
+  const chain = getMonadChain();
 
   const {
     amount,
@@ -87,7 +94,7 @@ export default function ConfirmScreen() {
   // rail. Once configured, handles route through FerryFlow while raw wallet
   // addresses continue to use the direct transfer authorization.
   const isFlowPayment = Boolean(
-    FLOW_CONTRACT_ADDRESS && !isDirect && !isAddress(recipient ?? "")
+    flowContractAddress && !isDirect && !isAddress(recipient ?? "")
   );
   const recipientLabel = isAddress(recipient ?? "")
     ? truncateAddress(recipient)
@@ -163,7 +170,7 @@ export default function ConfirmScreen() {
             return holdKnownError(hold, error);
           }
         } else if (isFlowPayment) {
-          if (!FLOW_CONTRACT_ADDRESS) {
+          if (!flowContractAddress) {
             return hold(
               "failed",
               "Flows are not connected in this build yet. Nothing has been sent."
@@ -176,11 +183,11 @@ export default function ConfirmScreen() {
             });
             const mismatch = checkFlowPaymentAuthorization(prep.typedData, {
               from: address,
-              flowContract: FLOW_CONTRACT_ADDRESS,
+              flowContract: flowContractAddress,
               recipientOwner: prep.recipient.address,
               amountRaw,
-              token: AUSD_ADDRESS,
-              chainId: monad.id,
+              token: ausdAddress,
+              chainId: chain.id,
               expiresAt: prep.expiresAt,
             });
             if (
@@ -221,8 +228,8 @@ export default function ConfirmScreen() {
             from: address,
             to: prep.recipient.address,
             amountRaw,
-            token: AUSD_ADDRESS,
-            chainId: monad.id,
+            token: ausdAddress,
+            chainId: chain.id,
           });
           if (
             mismatch ||

@@ -60,7 +60,7 @@ export class AuthService {
   async verify(
     rawAddress: string,
     signature: `0x${string}`,
-    intent: "create" | "signIn" = "create",
+    intent: "create" | "signIn" | "connect" = "create",
   ) {
     const address = getAddress(rawAddress);
     const [challenge] = await this.db.client

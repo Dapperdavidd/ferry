@@ -42,14 +42,15 @@ no passkey.
 `example.env` is the template. Every `EXPO_PUBLIC_*` value ships in the bundle, so nothing
 secret belongs there.
 
-| Variable                                                  | What it is                                                                          |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `EXPO_PUBLIC_BACKEND_URL`                                 | The Ferry API                                                                       |
-| `EXPO_PUBLIC_MONAD_RPC_URL`, `EXPO_PUBLIC_MONAD_CHAIN_ID` | Monad, for the fallback balance read and explorer links. A keyless public endpoint. |
-| `EXPO_PUBLIC_AUSD_ADDRESS`                                | The AUSD contract on that chain                                                     |
-| `EXPO_PUBLIC_EXPLORER_URL`                                | MonadScan for that chain                                                            |
-| `EXPO_PUBLIC_DISABLE_APP_LOCK`                            | Dev only: skip the biometric app lock                                               |
-| `EXPO_PUBLIC_SEED_DEMO`                                   | Dev only: the seeded UI                                                             |
+| Variable                                              | What it is                                          |
+| ----------------------------------------------------- | --------------------------------------------------- |
+| `EXPO_PUBLIC_{MAINNET,TESTNET}_BACKEND_URL`           | The isolated Ferry API for each network             |
+| `EXPO_PUBLIC_{MAINNET,TESTNET}_MONAD_RPC_URL`         | Keyless Monad endpoints for fallback balance reads  |
+| `EXPO_PUBLIC_{MAINNET,TESTNET}_AUSD_ADDRESS`          | The AUSD contract on each chain                     |
+| `EXPO_PUBLIC_{MAINNET,TESTNET}_FLOW_CONTRACT_ADDRESS` | Optional audited FerryFlow deployment on each chain |
+| `EXPO_PUBLIC_{MAINNET,TESTNET}_EXPLORER_URL`          | MonadScan for each chain                            |
+| `EXPO_PUBLIC_DISABLE_APP_LOCK`                        | Dev only: skip the biometric app lock               |
+| `EXPO_PUBLIC_SEED_DEMO`                               | Dev only: the seeded UI                             |
 
 The passkey relying party is `ferry.money`, fixed in `app.json` and read by `lib/mera/config.ts`.
 Changing it would orphan every account.

@@ -64,6 +64,7 @@ import {
   usePushRegistration,
 } from "@/hooks/usePushRegistration";
 import { useRewardLifecycle } from "@/hooks/useRewardLifecycle";
+import { NetworkProvider, useNetwork } from "@/contexts/NetworkContext";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2 } },
@@ -235,20 +236,29 @@ function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AppThemeProvider>
           <ThemedRoot>
-            <AuthProvider>
-              <ActivityWatch />
-              <AppLockProvider>
-                <BlurTargetProvider>
-                  <BottomSheetModalProvider>
-                    <AuthLayout />
-                  </BottomSheetModalProvider>
-                </BlurTargetProvider>
-              </AppLockProvider>
-            </AuthProvider>
+            <NetworkProvider>
+              <NetworkSession />
+            </NetworkProvider>
           </ThemedRoot>
         </AppThemeProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
+  );
+}
+
+function NetworkSession() {
+  const { network } = useNetwork();
+  return (
+    <AuthProvider key={network}>
+      <ActivityWatch />
+      <AppLockProvider>
+        <BlurTargetProvider>
+          <BottomSheetModalProvider>
+            <AuthLayout />
+          </BottomSheetModalProvider>
+        </BlurTargetProvider>
+      </AppLockProvider>
+    </AuthProvider>
   );
 }
 

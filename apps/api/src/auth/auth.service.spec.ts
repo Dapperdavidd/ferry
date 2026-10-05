@@ -77,4 +77,19 @@ describe("AuthService account intent", () => {
     expect(result).toMatchObject({ token: "token", isNew: false });
     expect(findOrCreateByAddress).not.toHaveBeenCalled();
   });
+
+  it("creates the network-local profile when connecting an existing passkey", async () => {
+    const user = {
+      id: "user_2",
+      address: account.address,
+      deletedAt: null,
+    } as UserRow;
+    const { service, signature, findOrCreateByAddress } = await setup(null);
+    findOrCreateByAddress.mockResolvedValue({ user, isNew: true });
+
+    const result = await service.verify(account.address, signature, "connect");
+
+    expect(result).toMatchObject({ token: "token", isNew: true });
+    expect(findOrCreateByAddress).toHaveBeenCalledWith(account.address);
+  });
 });

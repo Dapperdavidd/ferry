@@ -4,8 +4,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 
 import { Typography } from "@/components/ui/atoms/Typography";
-import { monad } from "@/lib/chain";
 import { apiClient } from "@/utils/apiClient";
+import { useNetwork } from "@/contexts/NetworkContext";
 
 function compact(value: string | null): string | null {
   if (!value) return null;
@@ -18,13 +18,14 @@ function compact(value: string | null): string | null {
 
 /** One line of context under the balance: the money is AUSD, the rail is Monad, and which network. */
 export function HomeBanners() {
+  const { config } = useNetwork();
   const { data } = useQuery({
     queryKey: ["agora", "overview"],
     queryFn: () => apiClient.getAgoraOverview(),
     staleTime: 5 * 60_000,
     retry: 1,
   });
-  const testnet = monad.id !== 143;
+  const testnet = config.id === "testnet";
   const supply = compact(data?.monadSupply ?? null);
 
   return (
@@ -34,7 +35,7 @@ export function HomeBanners() {
       </View>
       <View className="flex-1">
         <Typography weight="600" className="text-sm">
-          AUSD by Agora, on {monad.name}
+          AUSD by Agora, on {testnet ? "Monad Testnet" : "Monad"}
         </Typography>
         <Typography weight="500" className="text-xs text-black/40">
           {testnet ? "Test network: balances are test dollars. " : ""}

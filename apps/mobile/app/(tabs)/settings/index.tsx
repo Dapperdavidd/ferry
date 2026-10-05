@@ -23,7 +23,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { useBalances } from "@/hooks/useBalances";
 import { useNotificationPreference } from "@/hooks/usePushRegistration";
 import { useAppTheme } from "@/contexts/AppThemeContext";
-import { addressUrl, monad } from "@/lib/chain";
+import { addressUrl } from "@/lib/chain";
+import { useNetwork } from "@/contexts/NetworkContext";
 
 const SITE_URL = "https://ferry.money";
 const PRIVACY_POLICY_URL = `${SITE_URL}/privacy`;
@@ -43,6 +44,7 @@ export default function SettingsScreen() {
   const { showToast } = useToast();
   const { total: balanceTotal, totalDisplay: balanceDisplay } = useBalances();
   const { theme } = useAppTheme();
+  const { config } = useNetwork();
 
   const handleAccountDeleted = async () => {
     showToast("Your account has been deleted");
@@ -114,7 +116,7 @@ export default function SettingsScreen() {
           onPress: () => router.push("/settings/recovery-phrase" as never),
         },
         {
-          label: `View on ${monad.name}`,
+          label: `View on ${config.id === "mainnet" ? "Monad" : "Monad Testnet"}`,
           icon: <Ionicons name="open-outline" size={19} color={theme.text} />,
           onPress: () => address && Linking.openURL(addressUrl(address)),
         },
@@ -195,7 +197,7 @@ export default function SettingsScreen() {
                 style={{ color: theme.muted }}
               >
                 Ferry {APP_VERSION}
-                {APP_BUILD ? ` (${APP_BUILD})` : ""} · {monad.name}
+                {APP_BUILD ? ` (${APP_BUILD})` : ""} · {config.label}
               </Typography>
               <View className="mt-3 flex-row items-center">
                 <TouchableOpacity

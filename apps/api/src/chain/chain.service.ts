@@ -91,18 +91,19 @@ export class ChainService implements OnModuleInit {
       name: "chain",
       run: async () => void (await this.publicClient.getBlockNumber()),
     });
-    this.health.register({
-      name: "relayer",
-      run: async () => {
-        if (!this.relayer) throw new Error("no relayer key");
-        const balance = await this.publicClient.getBalance({
-          address: this.relayer.address,
-        });
-        if (balance === 0n) throw new Error("relayer has no MON");
-        if (balance < this.lowBalanceWei)
-          this.logger.warn(`relayer.low_balance wei=${balance}`);
-      },
-    });
+    if (this.relayer) {
+      this.health.register({
+        name: "relayer",
+        run: async () => {
+          const balance = await this.publicClient.getBalance({
+            address: this.relayer!.address,
+          });
+          if (balance === 0n) throw new Error("relayer has no MON");
+          if (balance < this.lowBalanceWei)
+            this.logger.warn(`relayer.low_balance wei=${balance}`);
+        },
+      });
+    }
     try {
       const domain = await this.domain();
       this.logger.log(
@@ -335,6 +336,19 @@ export class ChainService implements OnModuleInit {
   relayerBalance(): Promise<bigint> {
     const { account } = this.requireRelayer();
     return this.publicClient.getBalance({ address: account.address });
+  }
+
+  async relayerReady(): Promise<boolean> {
+    if (!this.relayer) return false;
+    try {
+      return (
+        (await this.publicClient.getBalance({
+          address: this.relayer.address,
+        })) > 0n
+      );
+    } catch {
+      return false;
+    }
   }
 
   /** A revert by name where the contract names it; otherwise the network's own words, shortened. */

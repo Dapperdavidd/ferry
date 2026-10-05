@@ -15,6 +15,7 @@ import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { WithScreenTheme } from "@/components/WithScreenTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNetwork } from "@/contexts/NetworkContext";
 import { showToast } from "@/utils/toast";
 
 const WELCOME_MESSAGES = [
@@ -154,6 +155,7 @@ function TypewriterHeadline() {
 
 function WelcomeScreen() {
   const { createAccount, signIn, account, authError } = useAuth();
+  const { config } = useNetwork();
   const [busy, setBusy] = useState<
     "create" | "resume" | "signIn" | "choose" | null
   >(null);
@@ -256,7 +258,7 @@ function WelcomeScreen() {
                 {account?.registrationPending
                   ? "Finish with passkey"
                   : account
-                    ? "Unlock with passkey"
+                    ? `Unlock on ${config.label}`
                     : "Continue with passkey"}
               </Typography>
             </HapticPressable>

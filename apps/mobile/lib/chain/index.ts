@@ -3,46 +3,40 @@ import {
   defineChain,
   erc20Abi,
   http,
-  isAddress,
   type Address,
 } from "viem";
 
 import type { BalancesResponse } from "@/utils/apiClient";
+import { getActiveNetworkConfig } from "@/utils/network";
 
-const CHAIN_ID = Number(process.env.EXPO_PUBLIC_MONAD_CHAIN_ID ?? 10143);
-const RPC_URL =
-  process.env.EXPO_PUBLIC_MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
-export const AUSD_ADDRESS = (process.env.EXPO_PUBLIC_AUSD_ADDRESS ??
-  "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC") as Address;
-export const EXPLORER_URL = (
-  process.env.EXPO_PUBLIC_EXPLORER_URL ?? "https://testnet.monadscan.com"
-).replace(/\/$/, "");
-const configuredFlowAddress =
-  process.env.EXPO_PUBLIC_FLOW_CONTRACT_ADDRESS?.trim();
-export const FLOW_CONTRACT_ADDRESS: Address | null =
-  configuredFlowAddress && isAddress(configuredFlowAddress)
-    ? configuredFlowAddress
-    : null;
+export function getMonadChain() {
+  const config = getActiveNetworkConfig();
+  return defineChain({
+    id: config.chainId,
+    name: config.id === "mainnet" ? "Monad" : "Monad Testnet",
+    nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
+    rpcUrls: { default: { http: [config.rpcUrl] } },
+    blockExplorers: {
+      default: { name: "MonadScan", url: config.explorerUrl },
+    },
+  });
+}
 
-export const monad = defineChain({
-  id: CHAIN_ID,
-  name: CHAIN_ID === 143 ? "Monad" : "Monad Testnet",
-  nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
-  rpcUrls: { default: { http: [RPC_URL] } },
-  blockExplorers: { default: { name: "MonadScan", url: EXPLORER_URL } },
-});
-
-export const publicClient = createPublicClient({
-  chain: monad,
-  transport: http(RPC_URL),
-});
+export const getAusdAddress = () => getActiveNetworkConfig().ausdAddress;
+export const getFlowContractAddress = () =>
+  getActiveNetworkConfig().flowContractAddress;
 
 /** Direct read, used only when the API is unreachable. */
 export async function readAusdBalance(
   address: Address
 ): Promise<BalancesResponse> {
+  const config = getActiveNetworkConfig();
+  const publicClient = createPublicClient({
+    chain: getMonadChain(),
+    transport: http(config.rpcUrl),
+  });
   const raw = await publicClient.readContract({
-    address: AUSD_ADDRESS,
+    address: config.ausdAddress,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: [address],
@@ -56,9 +50,10 @@ export async function readAusdBalance(
   };
 }
 
-export const txUrl = (hash: string) => `${EXPLORER_URL}/tx/${hash}`;
+export const txUrl = (hash: string) =>
+  `${getActiveNetworkConfig().explorerUrl}/tx/${hash}`;
 export const addressUrl = (address: string) =>
-  `${EXPLORER_URL}/address/${address}`;
+  `${getActiveNetworkConfig().explorerUrl}/address/${address}`;
 
 export function shortAddress(address: string, chars = 4): string {
   return `${address.slice(0, 2 + chars)}…${address.slice(-chars)}`;

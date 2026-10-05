@@ -8,7 +8,7 @@ import {
   SEED_TRANSFERS,
   SEED_USER,
 } from "@/utils/devSeed";
-import { BACKEND_URL } from "@/utils/runtimeConfig";
+import { getBackendUrl } from "@/utils/runtimeConfig";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -26,6 +26,22 @@ export const UserSchema = z.object({
   payoutReady: z.boolean(),
 });
 export type User = z.infer<typeof UserSchema>;
+
+export const NetworkStatusSchema = z.object({
+  network: z.enum(["mainnet", "testnet"]),
+  chainId: z.number().int(),
+  ausdAddress: address,
+  explorerUrl: z.string().url(),
+  capabilities: z.object({
+    receive: z.boolean(),
+    send: z.boolean(),
+    faucet: z.boolean(),
+    flows: z.boolean(),
+    cashout: z.boolean(),
+    usdcDeposit: z.boolean(),
+  }),
+});
+export type NetworkStatus = z.infer<typeof NetworkStatusSchema>;
 
 export const ChallengeSchema = z.object({
   nonce: z.string(),
@@ -440,7 +456,7 @@ class BackendClient {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(`${BACKEND_URL}${path}`, {
+      response = await fetch(`${getBackendUrl()}${path}`, {
         method,
         headers: {
           Accept: "application/json",
@@ -499,6 +515,10 @@ class BackendClient {
     );
   }
 
+  network() {
+    return this.request("GET", "/network", NetworkStatusSchema);
+  }
+
   // Auth
   challenge(addr: string) {
     return this.request(
@@ -510,7 +530,7 @@ class BackendClient {
   verify(body: {
     address: string;
     signature: string;
-    intent: "create" | "signIn";
+    intent: "create" | "signIn" | "connect";
   }) {
     return this.request("POST", "/auth/verify", VerifySchema, body);
   }

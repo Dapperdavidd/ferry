@@ -9,6 +9,10 @@ import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useModalFlow } from "@/contexts/ModalFlowContext";
 import { Typography } from "../atoms/Typography";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/utils/apiClient";
+import { showToast } from "@/utils/toast";
 
 type ActionMenuProps = {
   visible: boolean;
@@ -20,6 +24,13 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
   const { showReceiveModal, showSendModal } = useModalFlow();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { network, config } = useNetwork();
+  const { data: networkStatus } = useQuery({
+    queryKey: ["network-status", network],
+    queryFn: () => apiClient.network(),
+    staleTime: 30_000,
+  });
+  const flowsAvailable = networkStatus?.capabilities.flows === true;
 
   const actions = useMemo(
     () => [
@@ -41,10 +52,13 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
       {
         title: "Flow",
         icon: require("@/assets/icons/earn.png"),
-        onPress: () => router.push("/flows" as never),
+        onPress: () =>
+          flowsAvailable
+            ? router.push("/flows" as never)
+            : showToast(`Flow is coming soon on ${config.label}`),
       },
     ],
-    [router, showReceiveModal, showSendModal]
+    [config.label, flowsAvailable, router, showReceiveModal, showSendModal]
   );
 
   return (

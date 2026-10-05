@@ -15,4 +15,10 @@ describe("auth DTOs", () => {
       "signIn",
     );
   });
+
+  it("accepts connecting the same passkey to another network", () => {
+    expect(VerifySchema.parse({ ...request, intent: "connect" }).intent).toBe(
+      "connect",
+    );
+  });
 });

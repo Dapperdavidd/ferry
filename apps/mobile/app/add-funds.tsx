@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { TokenMark } from "@/components/ui/atoms/TokenMark";
@@ -14,9 +14,9 @@ import { QRCodeModal } from "@/components/ui/organisms/modals/QRCodeModal";
 import { ReceiveModal } from "@/components/ui/organisms/modals/ReceiveModal";
 import { useToast } from "@/contexts/ToastContext";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
-import { monad } from "@/lib/chain";
 import { apiClient, apiErrorMessage } from "@/utils/apiClient";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { useNetwork } from "@/contexts/NetworkContext";
 
 export default function AddFundsScreen() {
   const { theme } = useAppTheme();
@@ -26,7 +26,13 @@ export default function AddFundsScreen() {
   const qrCodeModalRef = useRef<BottomSheetModal>(null);
   const [funding, setFunding] = useState(false);
   const [receiveVisible, setReceiveVisible] = useState(false);
-  const testnet = monad.id !== 143;
+  const { network } = useNetwork();
+  const testnet = network === "testnet";
+  const { data: networkStatus } = useQuery({
+    queryKey: ["network-status", network],
+    queryFn: () => apiClient.network(),
+    staleTime: 30_000,
+  });
 
   const addTestFunds = async () => {
     if (funding) return;
@@ -135,8 +141,16 @@ export default function AddFundsScreen() {
                 />
               }
               title="USDC"
-              tags={["Base", "Arbitrum", "Ethereum"]}
-              onPress={() => router.push("/deposit-usdc")}
+              tags={
+                networkStatus?.capabilities.usdcDeposit
+                  ? ["Base", "Arbitrum", "Ethereum"]
+                  : ["Coming soon"]
+              }
+              onPress={() =>
+                networkStatus?.capabilities.usdcDeposit
+                  ? router.push("/deposit-usdc")
+                  : showToast("USDC deposits are coming soon on Mainnet.")
+              }
               trailing={
                 <Ionicons
                   name="chevron-forward"

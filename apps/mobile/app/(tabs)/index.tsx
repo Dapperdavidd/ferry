@@ -27,19 +27,18 @@ import { useTransfersInfinite } from "@/hooks/useTransfers";
 import { useProfilePhoto } from "@/hooks/useProfilePhoto";
 import { useRewards } from "@/hooks/useRewards";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
-import { monad } from "@/lib/chain";
 import {
   mapTransferRowToActivityEntry,
   type ActivityEntry,
 } from "@/utils/activity";
 import { cn } from "@/utils/cn";
-import { StorageService } from "@/utils/storage";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { useNetwork } from "@/contexts/NetworkContext";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@/utils/apiClient";
+import type { FerryNetwork } from "@/utils/network";
 
 const HOME_CHROME_SPACE = 140;
-const NETWORK_PREFERENCE_KEY = "ferry.network-preference";
-
-type NetworkPreference = "mainnet" | "testnet";
 
 function HomeScreenContent() {
   const { theme } = useAppTheme();
@@ -52,6 +51,7 @@ function HomeScreenContent() {
     isSendModalVisible,
   } = useModalFlow();
   const { showToast } = useToast();
+  const { network, switchNetwork } = useNetwork();
   const { user } = useAuth();
   const { photoUri } = useProfilePhoto();
   const {
@@ -68,30 +68,11 @@ function HomeScreenContent() {
   const [selectedActivity, setSelectedActivity] =
     useState<ActivityEntry | null>(null);
   const [isNetworkPickerVisible, setIsNetworkPickerVisible] = useState(false);
-  const testnet = monad.id !== 143;
-  const configuredNetwork: NetworkPreference = testnet ? "testnet" : "mainnet";
-  const [selectedNetwork, setSelectedNetwork] =
-    useState<NetworkPreference>(configuredNetwork);
-  const isSelectedNetworkConnected = selectedNetwork === configuredNetwork;
-
-  useEffect(() => {
-    let mounted = true;
-
-    void StorageService.getItem<NetworkPreference>(NETWORK_PREFERENCE_KEY).then(
-      (storedNetwork) => {
-        if (
-          mounted &&
-          (storedNetwork === "mainnet" || storedNetwork === "testnet")
-        ) {
-          setSelectedNetwork(storedNetwork);
-        }
-      }
-    );
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const { data: networkStatus } = useQuery({
+    queryKey: ["network-status", network],
+    queryFn: () => apiClient.network(),
+    staleTime: 30_000,
+  });
 
   useEffect(() => {
     if (!isSendModalVisible) return;
@@ -114,26 +95,25 @@ function HomeScreenContent() {
   ).toUpperCase();
   const homeCurrency = user?.homeCurrency ?? "USD";
 
-  const selectNetwork = (network: NetworkPreference) => {
-    setSelectedNetwork(network);
+  const selectNetwork = (next: FerryNetwork) => {
     setIsNetworkPickerVisible(false);
-    void StorageService.setItem(NETWORK_PREFERENCE_KEY, network);
-
-    if (network !== configuredNetwork) {
-      showToast(
-        `${network === "mainnet" ? "Mainnet" : "Testnet"} preview selected`
-      );
-    }
+    if (next === network) return;
+    void switchNetwork(next);
   };
 
-  const runOnConnectedNetwork = (action: () => void) => {
-    if (!isSelectedNetworkConnected) {
+  const runWhenAvailable = (
+    capability: "receive" | "send" | "cashout",
+    action: () => void
+  ) => {
+    if (
+      capability !== "receive" &&
+      networkStatus?.capabilities[capability] !== true
+    ) {
       showToast(
-        `${selectedNetwork === "mainnet" ? "Mainnet" : "Testnet"} transactions are not connected yet`
+        `${capability === "cashout" ? "Cash out" : capability} is coming soon on ${network === "mainnet" ? "Mainnet" : "Testnet"}`
       );
       return;
     }
-
     action();
   };
 
@@ -180,7 +160,7 @@ function HomeScreenContent() {
           <HapticPressable
             feedback="selection"
             accessibilityLabel="Receive money"
-            onPress={() => runOnConnectedNetwork(showReceiveModal)}
+            onPress={() => runWhenAvailable("receive", showReceiveModal)}
             className="size-12 items-center justify-center rounded-full"
             style={{ backgroundColor: theme.card }}
           >
@@ -196,15 +176,7 @@ function HomeScreenContent() {
           >
             Spendable
           </Typography>
-          {!isSelectedNetworkConnected ? (
-            <BalanceView
-              amount="—"
-              weight="700"
-              className="w-full text-center text-[54px] leading-[64px] tracking-[-2.7px] text-[#111111]"
-              style={{ color: theme.text }}
-              decimalColor={theme.faint}
-            />
-          ) : isBalanceError ? (
+          {isBalanceError ? (
             <HapticPressable
               feedback="selection"
               onPress={() => void refetchBalances()}
@@ -237,7 +209,7 @@ function HomeScreenContent() {
           <HapticPressable
             accessible
             feedback="selection"
-            accessibilityLabel={`Change network. ${selectedNetwork} selected`}
+            accessibilityLabel={`Change network. ${network} selected`}
             accessibilityHint="Opens mainnet and testnet options"
             accessibilityRole="button"
             onPress={() => setIsNetworkPickerVisible(true)}
@@ -253,7 +225,7 @@ function HomeScreenContent() {
               className="text-sm"
               style={{ color: theme.muted }}
             >
-              AUSD · {selectedNetwork === "mainnet" ? "Mainnet" : "Testnet"}
+              AUSD · {network === "mainnet" ? "Mainnet" : "Testnet"}
             </Typography>
             <Ionicons
               name="chevron-down"
@@ -270,15 +242,20 @@ function HomeScreenContent() {
             tone="ink"
             style={{ flex: 1 }}
             onPress={() =>
-              runOnConnectedNetwork(() => router.push("/add-funds" as never))
+              runWhenAvailable("receive", () =>
+                router.push("/add-funds" as never)
+              )
             }
           />
           <PremiumActionButton
             label="Send"
             tone="pearl"
             style={{ flex: 1 }}
+            disabled={networkStatus?.capabilities.send !== true}
             onPress={() =>
-              runOnConnectedNetwork(() => sendFlowModalRef.current?.present())
+              runWhenAvailable("send", () =>
+                sendFlowModalRef.current?.present()
+              )
             }
           />
         </View>
@@ -293,7 +270,7 @@ function HomeScreenContent() {
           compact={compact}
           currency={homeCurrency}
           onPress={() =>
-            runOnConnectedNetwork(() => router.push("/cashout" as never))
+            runWhenAvailable("cashout", () => router.push("/cashout" as never))
           }
         />
 
@@ -307,11 +284,7 @@ function HomeScreenContent() {
           </Typography>
           <HapticPressable
             feedback="selection"
-            onPress={() =>
-              runOnConnectedNetwork(() =>
-                router.push("/(tabs)/history" as never)
-              )
-            }
+            onPress={() => router.push("/(tabs)/history" as never)}
             style={{ paddingHorizontal: 2, paddingVertical: 8 }}
           >
             <Typography
@@ -324,7 +297,7 @@ function HomeScreenContent() {
           </HapticPressable>
         </View>
 
-        {isSelectedNetworkConnected && recentActivity.length ? (
+        {recentActivity.length ? (
           <View>
             {recentActivity.map((entry, index) => (
               <View
@@ -352,9 +325,7 @@ function HomeScreenContent() {
               className="text-sm"
               style={{ color: theme.muted }}
             >
-              {isSelectedNetworkConnected
-                ? "No activity yet"
-                : `No ${selectedNetwork} activity in this build`}
+              No activity yet
             </Typography>
           </View>
         )}
@@ -374,8 +345,7 @@ function HomeScreenContent() {
       />
       <NetworkPicker
         visible={isNetworkPickerVisible}
-        selected={selectedNetwork}
-        configured={configuredNetwork}
+        selected={network}
         onClose={() => setIsNetworkPickerVisible(false)}
         onSelect={selectNetwork}
       />
@@ -386,15 +356,13 @@ function HomeScreenContent() {
 function NetworkPicker({
   visible,
   selected,
-  configured,
   onClose,
   onSelect,
 }: {
   visible: boolean;
-  selected: NetworkPreference;
-  configured: NetworkPreference;
+  selected: FerryNetwork;
   onClose: () => void;
-  onSelect: (network: NetworkPreference) => void;
+  onSelect: (network: FerryNetwork) => void;
 }) {
   return (
     <Modal
@@ -449,25 +417,17 @@ function NetworkPicker({
           <View className="overflow-hidden rounded-[24px] border border-black/[0.06] bg-white">
             <NetworkOption
               label="Mainnet"
-              description={
-                configured === "mainnet"
-                  ? "Live AUSD on Monad"
-                  : "Requires the production connection"
-              }
+              description="Live AUSD on Monad"
               selected={selected === "mainnet"}
-              connected={configured === "mainnet"}
+              connected
               onPress={() => onSelect("mainnet")}
             />
             <View className="ml-[68px] h-px bg-black/[0.06]" />
             <NetworkOption
               label="Testnet"
-              description={
-                configured === "testnet"
-                  ? "Demo AUSD on Monad Testnet"
-                  : "Requires the test build"
-              }
+              description="Demo AUSD on Monad Testnet"
               selected={selected === "testnet"}
-              connected={configured === "testnet"}
+              connected
               onPress={() => onSelect("testnet")}
             />
           </View>
@@ -530,7 +490,7 @@ function NetworkOption({
                 connected ? "text-[#6D704D]" : "text-black/35"
               )}
             >
-              {connected ? "Connected" : "Preview"}
+              {connected ? "Available" : "Unavailable"}
             </Typography>
           </View>
         </View>
