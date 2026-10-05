@@ -20,6 +20,7 @@ import {
 } from "../db/schema";
 import { ferryFlowAbi } from "../flows/flow.abi";
 import { NotificationsService } from "../notifications/notifications.service";
+import { RewardsService } from "../rewards/rewards.service";
 import { UsersService } from "../users/users.service";
 
 const TICK_MS = 2_000;
@@ -42,6 +43,7 @@ export class IndexerService {
     private readonly users: UsersService,
     private readonly notifications: NotificationsService,
     @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly rewards?: RewardsService,
   ) {}
 
   @Interval(TICK_MS)
@@ -152,6 +154,10 @@ export class IndexerService {
             .update(flowConfigurations)
             .set({ status: "CONFIRMED", confirmedAt: now, updatedAt: now })
             .where(eq(flowConfigurations.id, configuration.id));
+          await this.reconcileRewards(
+            configuration.userId,
+            `flow:${configuration.id}`,
+          );
         } else {
           await this.db.client
             .update(flowConfigurations)
@@ -302,7 +308,24 @@ export class IndexerService {
         .where(
           and(eq(cashouts.txHash, txHash), eq(cashouts.status, "PENDING")),
         );
+      const senders = new Set(
+        rows.filter((row) => row.direction === "SEND").map((row) => row.userId),
+      );
+      for (const userId of senders) {
+        await this.reconcileRewards(userId, `transfer:${txHash}`);
+      }
       this.logger.log(`indexer.confirmed tx=${txHash} rows=${rows.length}`);
+    }
+  }
+
+  private async reconcileRewards(userId: string, source: string) {
+    if (!this.rewards) return;
+    try {
+      await this.rewards.reconcileUser(userId);
+    } catch (error) {
+      this.logger.warn(
+        `indexer.rewards_reconcile_failed user=${userId} source=${source} error=${(error as Error).message}`,
+      );
     }
   }
 

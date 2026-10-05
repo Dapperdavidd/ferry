@@ -17,6 +17,7 @@ import {
 } from "../db/schema";
 import { ferryFlowAbi } from "../flows/flow.abi";
 import type { NotificationsService } from "../notifications/notifications.service";
+import type { RewardsService } from "../rewards/rewards.service";
 import type { UsersService } from "../users/users.service";
 import { IndexerService } from "./indexer.service";
 
@@ -207,23 +208,27 @@ function setup(receiptStatus: "success" | "reverted" | "missing") {
       ),
     },
   } as unknown as ChainService;
+  const reconcileUser = jest.fn().mockResolvedValue(undefined);
   const service = new IndexerService(
     db,
     chain,
     {} as UsersService,
     {} as NotificationsService,
+    undefined,
+    { reconcileUser } as unknown as RewardsService,
   );
-  return { service, configuration, payment };
+  return { service, configuration, payment, reconcileUser };
 }
 
 describe("IndexerService Flow reconciliation", () => {
   it("confirms configuration and payment only from their auditable Flow events", async () => {
-    const { service, configuration, payment } = setup("success");
+    const { service, configuration, payment, reconcileUser } = setup("success");
 
     await service.confirmPendingFlows();
 
     expect(configuration.status).toBe("CONFIRMED");
     expect(payment.status).toBe("CONFIRMED");
+    expect(reconcileUser).toHaveBeenCalledWith("owner_user");
   });
 
   it("marks both records failed when the relayed transaction reverts", async () => {

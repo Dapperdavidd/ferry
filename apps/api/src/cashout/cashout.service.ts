@@ -26,6 +26,7 @@ import { DbService } from "../db/db.service";
 import { cashouts, intents, transfers, users } from "../db/schema";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PayoutService } from "../payout/payout.service";
+import { RewardsService } from "../rewards/rewards.service";
 import { UsersService } from "../users/users.service";
 import type { DirectQuoteRequest } from "./dtos";
 import {
@@ -60,6 +61,7 @@ export class CashoutService {
     private readonly usersService: UsersService,
     private readonly payout: PayoutService,
     config: ConfigService,
+    private readonly rewards: RewardsService,
   ) {
     this.quoteSecret = config
       .getOrThrow<string>("JWT_SECRETS")
@@ -474,6 +476,7 @@ export class CashoutService {
           );
           continue;
         }
+        await this.reconcileRewards(row.userId, row.id);
         const amount =
           row.localAmount && row.localCurrency
             ? `${row.localCurrency} ${row.localAmount}`
@@ -535,6 +538,7 @@ export class CashoutService {
       )
       .returning();
     if (updated && terminal === "SENT" && updated.payoutData) {
+      await this.reconcileRewards(updated.userId, updated.id);
       const amount =
         updated.localAmount && updated.localCurrency
           ? `${updated.localCurrency} ${updated.localAmount}`
@@ -545,6 +549,16 @@ export class CashoutService {
       );
     }
     return { received: true };
+  }
+
+  private async reconcileRewards(userId: string, cashoutId: string) {
+    try {
+      await this.rewards.reconcileUser(userId);
+    } catch (error) {
+      this.logger.warn(
+        `cashout.rewards_reconcile_failed user=${userId} cashout=${cashoutId} error=${(error as Error).message}`,
+      );
+    }
   }
 }
 

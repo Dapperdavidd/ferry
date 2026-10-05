@@ -24,6 +24,7 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { BlurBackdrop } from "@/components/ui/molecules/BlurBackdrop";
 import { PremiumActionButton } from "@/components/ui/molecules/PremiumActionButton";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { useModalFlow } from "@/contexts/ModalFlowContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useApplyReferral, useRewards } from "@/hooks/useRewards";
 import { apiErrorMessage, type RewardSummary } from "@/utils/apiClient";
@@ -31,6 +32,7 @@ import { apiErrorMessage, type RewardSummary } from "@/utils/apiClient";
 export default function RewardsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { showSendModal } = useModalFlow();
   const { showToast } = useToast();
   const rewards = useRewards();
   const applyReferral = useApplyReferral();
@@ -39,6 +41,21 @@ export default function RewardsScreen() {
   const [showCodeEntry, setShowCodeEntry] = useState(false);
   const [code, setCode] = useState("");
   const summary = rewards.data;
+
+  const openEarningRule = (ruleId: string) => {
+    if (ruleId === "first-transfer") {
+      router.replace("/(tabs)" as never);
+      setTimeout(showSendModal, 150);
+      return;
+    }
+    if (ruleId === "first-flow") {
+      router.push("/flows" as never);
+      return;
+    }
+    if (ruleId === "first-cashout") {
+      router.push("/cashout" as never);
+    }
+  };
 
   const submitCode = async () => {
     const value = code.trim();
@@ -178,8 +195,16 @@ export default function RewardsScreen() {
           style={{ marginHorizontal: -24, paddingHorizontal: 24 }}
         >
           {(summary?.earningRules ?? []).map((rule) => (
-            <View
+            <HapticPressable
               key={rule.id}
+              accessibilityLabel={
+                rule.earned ? `${rule.title}, earned` : `${rule.title}, start`
+              }
+              accessibilityRole="button"
+              accessibilityState={{ disabled: rule.earned }}
+              disabled={rule.earned}
+              feedback="selection"
+              onPress={() => openEarningRule(rule.id)}
               className="w-[255px] justify-between rounded-[28px] border p-5"
               style={{ backgroundColor: theme.card, borderColor: theme.border }}
             >
@@ -216,7 +241,24 @@ export default function RewardsScreen() {
               >
                 {rule.detail}
               </Typography>
-            </View>
+              {!rule.earned ? (
+                <View className="mt-5 flex-row items-center">
+                  <Typography
+                    weight="700"
+                    className="text-[13px]"
+                    style={{ color: theme.text }}
+                  >
+                    Start
+                  </Typography>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={15}
+                    color={theme.text}
+                    style={{ marginLeft: 6 }}
+                  />
+                </View>
+              ) : null}
+            </HapticPressable>
           ))}
         </ScrollView>
 

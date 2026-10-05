@@ -5,6 +5,7 @@ import { FxModule } from "../fx/fx.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { UsersModule } from "../users/users.module";
 import { PayoutModule } from "../payout/payout.module";
+import { RewardsModule } from "../rewards/rewards.module";
 import { CashoutController } from "./cashout.controller";
 import { CashoutService } from "./cashout.service";
 import { PayoutWebhookController } from "./payout-webhook.controller";
@@ -17,6 +18,7 @@ import { PayoutWebhookController } from "./payout-webhook.controller";
     AgoraModule,
     UsersModule,
     PayoutModule,
+    RewardsModule,
   ],
   controllers: [CashoutController, PayoutWebhookController],
   providers: [CashoutService],

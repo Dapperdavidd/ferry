@@ -64,7 +64,7 @@ export class RewardsService {
 
   async me(userId: string) {
     const account = await this.ensureAccount(userId);
-    await this.syncMilestones(userId);
+    await this.reconcileUser(userId);
 
     const monthStart = new Date();
     monthStart.setUTCDate(1);
@@ -253,7 +253,11 @@ export class RewardsService {
     return referralView(saved);
   }
 
-  private async syncMilestones(userId: string) {
+  /**
+   * Reconciles idempotent ledger events from confirmed product state.
+   * Called by settlement services for immediacy and by `me` as a repair path.
+   */
+  async reconcileUser(userId: string) {
     const [transfer, flow, cashout] = await Promise.all([
       this.firstConfirmedTransfer(userId),
       this.firstConfirmedFlow(userId),
