@@ -31,7 +31,11 @@ export class AuthController {
   @Post("verify")
   @HttpCode(200)
   verify(@Body(new ZodValidationPipe(VerifySchema)) body: VerifyRequest) {
-    return this.auth.verify(body.address, body.signature as `0x${string}`);
+    return this.auth.verify(
+      body.address,
+      body.signature as `0x${string}`,
+      body.intent,
+    );
   }
 
   /** Sessions are stateless tokens; the app forgets its copy. Kept so the app has one place to call. */

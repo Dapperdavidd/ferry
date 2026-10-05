@@ -7,10 +7,9 @@ import {
   SEED_TRANSFERS,
   SEED_USER,
 } from "@/utils/devSeed";
+import { BACKEND_URL } from "@/utils/runtimeConfig";
 
-const BACKEND_URL = (
-  process.env.EXPO_PUBLIC_BACKEND_URL ?? "http://localhost:8000"
-).replace(/\/$/, "");
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const rawAmount = z.string().regex(/^\d+$/);
@@ -276,15 +275,34 @@ class BackendClient {
     body?: unknown
   ): Promise<T> {
     const token = await AuthStorage.getToken();
-    const response = await fetch(`${BACKEND_URL}${path}`, {
-      method,
-      headers: {
-        Accept: "application/json",
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(`${BACKEND_URL}${path}`, {
+        method,
+        headers: {
+          Accept: "application/json",
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const timedOut =
+        controller.signal.aborted ||
+        (error instanceof Error && error.name === "AbortError");
+      throw new ApiError(
+        0,
+        timedOut ? "REQUEST_TIMEOUT" : "NETWORK_UNAVAILABLE",
+        timedOut
+          ? "Ferry is taking too long to respond. Check your connection and try again."
+          : "Ferry couldn't reach its service. Check your connection and try again."
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
     const text = await response.text();
     const json = text ? safeJson(text) : null;
     if (!response.ok) {
@@ -301,7 +319,23 @@ class BackendClient {
           `Request failed (${response.status})`
       );
     }
-    return schema.parse(json);
+    const parsed = schema.safeParse(json);
+    if (!parsed.success) {
+      throw new ApiError(
+        0,
+        "API_RESPONSE_INVALID",
+        "This version of Ferry couldn't read the server response. Update the app and try again."
+      );
+    }
+    return parsed.data;
+  }
+
+  health() {
+    return this.request(
+      "GET",
+      "/health",
+      z.object({ status: z.literal("ok") }).passthrough()
+    );
   }
 
   // Auth
@@ -312,7 +346,11 @@ class BackendClient {
       ChallengeSchema
     );
   }
-  verify(body: { address: string; signature: string }) {
+  verify(body: {
+    address: string;
+    signature: string;
+    intent: "create" | "signIn";
+  }) {
     return this.request("POST", "/auth/verify", VerifySchema, body);
   }
   signOut() {

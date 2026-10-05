@@ -8,6 +8,8 @@ export type StoredAccount = {
   address: Address;
   credentialId: string;
   handle?: string;
+  /** A passkey exists locally, but its Ferry account may not exist server-side yet. */
+  registrationPending?: boolean;
 };
 
 const OPTIONS = {
@@ -42,10 +44,12 @@ function parse(raw: string): StoredAccount | null {
       return null;
     }
     const handle = typeof value.handle === "string" ? value.handle : undefined;
+    const registrationPending = value.registrationPending === true;
     return {
       address: value.address as Address,
       credentialId: value.credentialId,
       handle,
+      registrationPending,
     };
   } catch {
     return null;

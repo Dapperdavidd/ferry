@@ -74,16 +74,20 @@ function TypewriterHeadline() {
 
 function WelcomeScreen() {
   const { createAccount, signIn, account, authError } = useAuth();
-  const [busy, setBusy] = useState<"create" | "signIn" | null>(null);
+  const [busy, setBusy] = useState<
+    "create" | "resume" | "signIn" | "choose" | null
+  >(null);
 
-  const run = async (which: "create" | "signIn") => {
+  const run = async (which: "create" | "resume" | "signIn" | "choose") => {
     if (busy) return;
     setBusy(which);
     try {
-      if (which === "create") {
-        await createAccount();
+      if (which === "create" || which === "resume") {
+        await createAccount({ resumePending: which === "resume" });
       } else {
-        const { isNew } = await signIn();
+        const { isNew } = await signIn({
+          useRememberedAccount: which === "signIn",
+        });
         if (isNew)
           showToast(
             "That passkey hadn't been used with Ferry before, so a new account was opened."
@@ -137,7 +141,15 @@ function WelcomeScreen() {
           ) : null}
           <View className="gap-2.5">
             <HapticPressable
-              onPress={() => run(account ? "signIn" : "create")}
+              onPress={() =>
+                run(
+                  account?.registrationPending
+                    ? "resume"
+                    : account
+                      ? "signIn"
+                      : "create"
+                )
+              }
               disabled={busy !== null}
               className="w-full flex-row items-center justify-center gap-3 rounded-full border border-white bg-white p-4"
             >
@@ -147,23 +159,39 @@ function WelcomeScreen() {
                 <Ionicons name="scan-outline" size={22} color="#000000" />
               )}
               <Typography weight="600" className="text-lg text-black">
-                {account
-                  ? "Unlock with Face ID"
-                  : "Create account with Face ID"}
+                {account?.registrationPending
+                  ? "Finish creating account"
+                  : account
+                    ? "Unlock with Face ID"
+                    : "Create account with Face ID"}
               </Typography>
             </HapticPressable>
 
             <HapticPressable
-              onPress={() => run(account ? "create" : "signIn")}
+              onPress={() => run("choose")}
               disabled={busy !== null}
               className="w-full flex-row items-center justify-center gap-3 rounded-full border border-white/20 bg-white/20 p-4"
             >
               <Typography weight="600" className="text-lg text-white">
-                {account
-                  ? "Use a different account"
-                  : "I already have an account"}
+                {account ? "Use another passkey" : "I already have an account"}
               </Typography>
             </HapticPressable>
+
+            {account ? (
+              <HapticPressable
+                feedback="selection"
+                onPress={() => run("create")}
+                disabled={busy !== null}
+                className="items-center justify-center py-2"
+              >
+                <Typography
+                  weight="500"
+                  className="text-sm text-white/65 underline"
+                >
+                  Create a new account instead
+                </Typography>
+              </HapticPressable>
+            ) : null}
           </View>
 
           <Typography

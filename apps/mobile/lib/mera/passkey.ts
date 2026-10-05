@@ -17,7 +17,12 @@ export type PasskeyResult = {
 
 export class PasskeyFailure extends Error {
   constructor(
-    readonly kind: "cancelled" | "unsupported" | "association" | "failed",
+    readonly kind:
+      | "cancelled"
+      | "unsupported"
+      | "association"
+      | "notFound"
+      | "failed",
     message: string
   ) {
     super(message);
@@ -90,11 +95,35 @@ function classify(error: unknown): PasskeyFailure {
     if (/cancel|abort/i.test(cause)) {
       return new PasskeyFailure("cancelled", "Face ID was cancelled.");
     }
+    if (
+      /no viable credential|no credentials|credential.*not found/i.test(cause)
+    ) {
+      return new PasskeyFailure(
+        "notFound",
+        "No Ferry passkey was found. Make sure Passwords and iCloud Keychain are enabled, or create a new account."
+      );
+    }
+    if (/not supported|no credential provider|PRF_UNAVAILABLE/i.test(cause)) {
+      return new PasskeyFailure(
+        "unsupported",
+        "This phone's passkeys can't derive an account. Ferry needs iOS 18.4 or Android 9 with Google Password Manager."
+      );
+    }
     // react-native-passkey reports a missing or stale association file as 1004.
-    if (/1004|webcredentials|association/i.test(cause)) {
+    if (
+      /1004|webcredentials|association|bad configuration|properly configured|RP ID|relying party/i.test(
+        cause
+      )
+    ) {
       return new PasskeyFailure(
         "association",
         "Ferry couldn't verify its passkey domain. Check your connection and try again."
+      );
+    }
+    if (/already exists/i.test(cause)) {
+      return new PasskeyFailure(
+        "failed",
+        "A Ferry passkey already exists for this account. Choose I already have an account instead."
       );
     }
     return new PasskeyFailure(

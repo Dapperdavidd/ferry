@@ -7,8 +7,8 @@ let cachedToken: string | null | undefined;
 
 export const AuthStorage = {
   async saveToken(token: string) {
-    cachedToken = token;
     await SecureStore.setItemAsync(AUTH_STORAGE_KEYS.TOKEN, token);
+    cachedToken = token;
   },
 
   async getToken() {

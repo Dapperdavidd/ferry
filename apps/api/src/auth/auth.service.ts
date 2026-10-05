@@ -57,7 +57,11 @@ export class AuthService {
   }
 
   /** The newest unused, unexpired challenge for the address must carry this signature. */
-  async verify(rawAddress: string, signature: `0x${string}`) {
+  async verify(
+    rawAddress: string,
+    signature: `0x${string}`,
+    intent: "create" | "signIn" = "create",
+  ) {
     const address = getAddress(rawAddress);
     const [challenge] = await this.db.client
       .select()
@@ -107,7 +111,25 @@ export class AuthService {
         HttpStatus.UNAUTHORIZED,
       );
 
-    const { user, isNew } = await this.users.findOrCreateByAddress(address);
+    const existing = await this.users.findByAddress(address);
+    if (intent === "signIn" && !existing) {
+      throw new ApiError(
+        "ACCOUNT_NOT_FOUND",
+        "That passkey does not open an existing Ferry account on this device. Try another passkey or use the original device.",
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (intent === "signIn" && existing?.deletedAt) {
+      throw new ApiError(
+        "ACCOUNT_DELETED",
+        "This account was deleted.",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    const { user, isNew } =
+      intent === "signIn" && existing
+        ? { user: existing, isNew: false }
+        : await this.users.findOrCreateByAddress(address);
     // Agora learns about the wallet in the background; sign-in never waits on it.
     if (isNew) void this.agora.onboardWallet(user.address);
     const token = await this.jwt.signAsync(

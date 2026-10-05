@@ -5,6 +5,16 @@ import type { User } from "@/utils/apiClient";
 
 export type AuthStatus = "loading" | "signedOut" | "signedIn";
 
+export type SignInOptions = {
+  /** False opens the passkey chooser instead of pinning this phone's last account. */
+  useRememberedAccount?: boolean;
+};
+
+export type CreateAccountOptions = {
+  /** True resumes a passkey ceremony that succeeded before registration finished. */
+  resumePending?: boolean;
+};
+
 export interface AuthContextType {
   status: AuthStatus;
   /** Null while loading, for screens that branch on it. */
@@ -17,9 +27,9 @@ export interface AuthContextType {
   address: Address | null;
   authError: string | null;
   /** One Face ID: creates the passkey, derives the account, opens a session. */
-  createAccount: () => Promise<void>;
+  createAccount: (options?: CreateAccountOptions) => Promise<void>;
   /** One Face ID against the remembered passkey, or the chooser on a fresh phone. */
-  signIn: () => Promise<{ isNew: boolean }>;
+  signIn: (options?: SignInOptions) => Promise<{ isNew: boolean }>;
   signOut: () => Promise<void>;
   /** Face ID, then `work` runs with a signing account that is wiped afterwards. */
   authorize: <T>(work: (signer: LocalAccount) => Promise<T>) => Promise<T>;

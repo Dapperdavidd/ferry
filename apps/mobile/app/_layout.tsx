@@ -139,7 +139,7 @@ function AuthLayout() {
   const inAuthGroup = segments[0] === "(auth)";
   const atOnboarding = segments[0] === "onboarding";
   // A handle is the identity people send to, so an account without one stays on onboarding.
-  const needsHandle = isAuthenticated && user !== null && !user.handle;
+  const needsHandle = isAuthenticated && (!user || !user.handle);
 
   if (!isAuthenticated && !inAuthGroup) {
     return <Redirect href="/login" withAnchor />;

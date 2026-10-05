@@ -12,6 +12,7 @@ export enum ErrorCode {
   PASSKEY_CANCELLED = "PASSKEY_CANCELLED",
   PASSKEY_UNSUPPORTED = "PASSKEY_UNSUPPORTED",
   PASSKEY_MISMATCH = "PASSKEY_MISMATCH",
+  PASSKEY_ACCOUNT_NOT_FOUND = "PASSKEY_ACCOUNT_NOT_FOUND",
   UNKNOWN_ERROR = "UNKNOWN_ERROR",
 }
 
@@ -30,6 +31,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
     "This phone's passkeys can't open a Ferry account. iOS 18.4 or newer is needed.",
   [ErrorCode.PASSKEY_MISMATCH]:
     "That passkey belongs to a different Ferry account. Sign out to switch accounts.",
+  [ErrorCode.PASSKEY_ACCOUNT_NOT_FOUND]:
+    "That passkey does not open an existing Ferry account on this device. Try another passkey or use the original device.",
   [ErrorCode.UNKNOWN_ERROR]: "Something went wrong. Try again.",
 };
 

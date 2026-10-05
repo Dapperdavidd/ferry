@@ -16,8 +16,17 @@ import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDebounce } from "@/hooks/useDebounce";
-import { apiClient, apiErrorMessage } from "@/utils/apiClient";
+import {
+  apiClient,
+  apiErrorCode,
+  apiErrorMessage,
+  apiErrorStatus,
+} from "@/utils/apiClient";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import {
+  canFinishOnboarding,
+  type HandleAvailability,
+} from "@/utils/onboarding";
 
 const HANDLE = /^[a-z0-9_]{3,20}$/;
 
@@ -39,8 +48,8 @@ export default function OnboardingScreen() {
   const { signOut, setUser } = useAuth();
   const [handle, setHandle] = useState("");
   const [home, setHome] = useState<Home | null>(null);
-  const [available, setAvailable] = useState<boolean | null>(null);
-  const [checking, setChecking] = useState(false);
+  const [availability, setAvailability] = useState<HandleAvailability>("idle");
+  const [checkAttempt, setCheckAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,39 +61,44 @@ export default function OnboardingScreen() {
     let cancelled = false;
 
     if (!HANDLE.test(debounced)) {
-      setAvailable(null);
-      setChecking(false);
+      setAvailability("idle");
       return;
     }
 
-    setChecking(true);
+    setAvailability("checking");
     apiClient
       .handleAvailable(debounced)
       .then((result) => {
-        if (!cancelled) setAvailable(result.available);
+        if (!cancelled)
+          setAvailability(result.available ? "available" : "taken");
       })
       .catch(() => {
-        if (!cancelled) setAvailable(null);
-      })
-      .finally(() => {
-        if (!cancelled) setChecking(false);
+        if (!cancelled) setAvailability("unverified");
       });
 
     return () => {
       cancelled = true;
     };
-  }, [debounced]);
+  }, [checkAttempt, debounced]);
 
   const handleHint = useMemo(() => {
     if (!cleaned) return "3–20 characters";
     if (!valid) return "Use letters, numbers, or underscores";
-    if (checking || cleaned !== debounced) return "Checking…";
-    if (available === false) return `@${cleaned} is taken`;
-    if (available === true) return "Available";
-    return "Couldn’t check right now";
-  }, [available, checking, cleaned, debounced, valid]);
+    if (availability === "checking" || cleaned !== debounced)
+      return "Checking…";
+    if (availability === "taken") return `@${cleaned} is taken`;
+    if (availability === "available") return "Available";
+    if (availability === "unverified")
+      return "Couldn’t pre-check it. You can still continue.";
+    return "3–20 characters";
+  }, [availability, cleaned, debounced, valid]);
 
-  const canContinue = valid && available === true && home !== null && !saving;
+  const canContinue = canFinishOnboarding({
+    validHandle: valid,
+    availability: cleaned === debounced ? availability : ("checking" as const),
+    homeSelected: home !== null,
+    saving,
+  });
 
   const finishSetup = async () => {
     if (!canContinue || !home) return;
@@ -99,6 +113,13 @@ export default function OnboardingScreen() {
       });
       setUser(next);
     } catch (reason) {
+      if (apiErrorCode(reason) === "HANDLE_TAKEN") {
+        setAvailability("taken");
+      }
+      if (apiErrorStatus(reason) === 401) {
+        await signOut();
+        return;
+      }
       setError(apiErrorMessage(reason) ?? "Couldn’t finish setup. Try again.");
     } finally {
       setSaving(false);
@@ -174,7 +195,7 @@ export default function OnboardingScreen() {
                 height: 62,
                 backgroundColor: theme.card,
                 borderColor:
-                  available === false || (!!handle && !valid)
+                  availability === "taken" || (!!handle && !valid)
                     ? "#DC2626"
                     : theme.border,
               }}
@@ -190,7 +211,7 @@ export default function OnboardingScreen() {
                 value={handle}
                 onChangeText={(value) => {
                   setHandle(value.replace(/^@/, "").toLowerCase());
-                  setAvailable(null);
+                  setAvailability("idle");
                   setError(null);
                 }}
                 autoCapitalize="none"
@@ -202,9 +223,10 @@ export default function OnboardingScreen() {
                 className="h-full flex-1 text-xl"
                 style={{ fontFamily: "Inter_600SemiBold", color: theme.text }}
               />
-              {checking || (valid && cleaned !== debounced) ? (
+              {availability === "checking" ||
+              (valid && cleaned !== debounced) ? (
                 <ActivityIndicator size="small" color="rgba(17,17,17,0.35)" />
-              ) : available === true ? (
+              ) : availability === "available" ? (
                 <Ionicons
                   name="checkmark-circle"
                   size={22}
@@ -214,14 +236,31 @@ export default function OnboardingScreen() {
             </View>
             <Typography
               weight="500"
-              className={`mt-2.5 text-xs ${
-                available === false || (!!handle && !valid)
-                  ? "text-red-600"
-                  : "text-black/40"
-              }`}
+              className="mt-2.5 text-xs"
+              style={{
+                color:
+                  availability === "taken" || (!!handle && !valid)
+                    ? "#DC2626"
+                    : theme.muted,
+              }}
             >
               {handleHint}
             </Typography>
+            {availability === "unverified" ? (
+              <HapticPressable
+                feedback="selection"
+                onPress={() => setCheckAttempt((attempt) => attempt + 1)}
+                className="mt-2 self-start py-1"
+              >
+                <Typography
+                  weight="600"
+                  className="text-xs underline"
+                  style={{ color: theme.text }}
+                >
+                  Check again
+                </Typography>
+              </HapticPressable>
+            ) : null}
           </View>
 
           <View className="mt-6">
