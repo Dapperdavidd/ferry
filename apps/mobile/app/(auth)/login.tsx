@@ -77,6 +77,7 @@ function WelcomeScreen() {
   const [busy, setBusy] = useState<
     "create" | "resume" | "signIn" | "choose" | null
   >(null);
+  const authErrorMessage = authError?.split("\n", 1)[0];
 
   const run = async (which: "create" | "resume" | "signIn" | "choose") => {
     if (busy) return;
@@ -134,10 +135,23 @@ function WelcomeScreen() {
               One-second settlement · Your face is the only key
             </Typography>
           </View>
-          {authError ? (
-            <Typography weight="500" className="mb-4 text-base text-[#FFB4B4]">
-              {authError}
-            </Typography>
+          {authErrorMessage ? (
+            <View className="mb-4 flex-row items-center gap-3 rounded-2xl border border-[#FFB4B4]/25 bg-black/35 px-4 py-3">
+              <View className="size-8 items-center justify-center rounded-full bg-[#FFB4B4]/10">
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#FFB4B4"
+                />
+              </View>
+              <Typography
+                weight="500"
+                className="flex-1 text-sm leading-[19px] text-[#FFD4D4]"
+                numberOfLines={2}
+              >
+                {authErrorMessage}
+              </Typography>
+            </View>
           ) : null}
           <View className="gap-2.5">
             <HapticPressable
