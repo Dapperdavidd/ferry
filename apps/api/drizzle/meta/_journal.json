@@ -29,6 +29,13 @@
       "when": 1791206622615,
       "tag": "0003_light_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791218349037,
+      "tag": "0004_worried_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { AuthStorage } from "@/utils/storage/authStorage";
 import {
   SEED_BALANCES,
   SEED_DEMO,
+  SEED_REWARDS,
   SEED_TRANSFERS,
   SEED_USER,
 } from "@/utils/devSeed";
@@ -312,6 +313,82 @@ export const SubmitFlowPaymentResponseSchema = z.object({
 export type SubmitFlowPaymentResponse = z.infer<
   typeof SubmitFlowPaymentResponseSchema
 >;
+
+export const RewardEventKindSchema = z.enum([
+  "transfer_milestone",
+  "flow_milestone",
+  "cashout_milestone",
+  "referral_inviter",
+  "referral_invitee",
+  "adjustment",
+]);
+
+export const RewardSummarySchema = z.object({
+  program: z.literal("Ferry Miles"),
+  unit: z.literal("Miles"),
+  balance: z.number().int().nonnegative(),
+  lifetimeEarned: z.number().int().nonnegative(),
+  thisMonthEarned: z.number().int().nonnegative(),
+  asOf: z.string(),
+  level: z.object({
+    name: z.string(),
+    minimumPoints: z.number().int().nonnegative(),
+    nextName: z.string().nullable(),
+    nextAt: z.number().int().nonnegative().nullable(),
+    progress: z.number().min(0).max(1),
+  }),
+  levels: z.array(
+    z.object({
+      name: z.string(),
+      minimumPoints: z.number().int().nonnegative(),
+      unlock: z.string(),
+      unlocked: z.boolean(),
+    })
+  ),
+  referral: z.object({
+    code: z.string(),
+    link: z.string(),
+    inviterReward: z.number().int().positive(),
+    inviteeReward: z.number().int().positive(),
+    pendingCount: z.number().int().nonnegative(),
+    qualifiedCount: z.number().int().nonnegative(),
+    canApplyCode: z.boolean(),
+  }),
+  breakdown: z.object({
+    activity: z.number().int(),
+    referrals: z.number().int(),
+  }),
+  earningRules: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      detail: z.string(),
+      points: z.number().int().positive(),
+      earned: z.boolean(),
+    })
+  ),
+  activity: z.array(
+    z.object({
+      id: z.string(),
+      kind: RewardEventKindSchema,
+      description: z.string(),
+      points: z.number().int(),
+      createdAt: z.string(),
+    })
+  ),
+  terms: z.object({
+    transferable: z.literal(false),
+    cashValue: z.literal(false),
+    summary: z.string(),
+  }),
+});
+export type RewardSummary = z.infer<typeof RewardSummarySchema>;
+
+export const AppliedReferralSchema = z.object({
+  status: z.enum(["PENDING", "QUALIFIED", "REJECTED"]),
+  code: z.string(),
+  qualifiedAt: z.string().nullable(),
+});
 
 const SEED_FLOW_UPDATED_AT = "2026-10-05T09:00:00.000Z";
 let seedFlow: Flow = {
@@ -634,6 +711,24 @@ class BackendClient {
       updatedAt: new Date().toISOString(),
     };
     return Promise.resolve(seedFlow);
+  }
+
+  // Ferry Miles
+  getRewards() {
+    if (this.isDemoMode()) return Promise.resolve(SEED_REWARDS);
+    return this.request("GET", "/rewards/me", RewardSummarySchema);
+  }
+  applyReferral(code: string) {
+    if (this.isDemoMode()) {
+      return Promise.resolve({
+        status: "PENDING" as const,
+        code: code.trim().toUpperCase(),
+        qualifiedAt: null,
+      });
+    }
+    return this.request("POST", "/rewards/referral", AppliedReferralSchema, {
+      code,
+    });
   }
   listTransfers(params: { cursor?: string; limit?: number } = {}) {
     if (this.isDemoMode())

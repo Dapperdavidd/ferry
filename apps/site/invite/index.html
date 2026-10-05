@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>You're invited to Ferry</title>
+    <style>
+      :root {
+        --bg: #f7f7f4;
+        --card: #ffffff;
+        --text: #121310;
+        --muted: #6d6f69;
+        --soft: #eff0eb;
+        --accent: #a7a04f;
+        --border: #12131012;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0c0c;
+          --card: #171918;
+          --text: #f3f3ee;
+          --muted: #a8aca7;
+          --soft: #1e2120;
+          --accent: #b8b15f;
+          --border: #ffffff17;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.45 -apple-system,
+          BlinkMacSystemFont,
+          "Inter",
+          system-ui,
+          sans-serif;
+      }
+      main {
+        width: min(34rem, calc(100% - 32px));
+        min-height: 100vh;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        padding: 32px 0;
+      }
+      nav {
+        font-weight: 750;
+        letter-spacing: -0.03em;
+      }
+      .hero {
+        flex: 1;
+        display: grid;
+        align-content: center;
+        padding: 56px 0;
+      }
+      .mark {
+        width: 64px;
+        height: 64px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--soft);
+        font-size: 24px;
+      }
+      h1 {
+        max-width: 30rem;
+        margin: 28px 0 0;
+        font-size: clamp(2.8rem, 12vw, 5rem);
+        line-height: 0.98;
+        letter-spacing: -0.065em;
+      }
+      .lead {
+        max-width: 29rem;
+        margin: 24px 0 0;
+        color: var(--muted);
+        font-size: 1.08rem;
+      }
+      .code-card {
+        margin-top: 36px;
+        padding: 22px;
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        background: var(--card);
+      }
+      .label {
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+      }
+      .code {
+        margin-top: 4px;
+        font-size: 1.75rem;
+        font-weight: 750;
+        letter-spacing: 0.02em;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      button,
+      a.button {
+        min-height: 58px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 999px;
+        font: inherit;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .primary {
+        background: var(--text);
+        color: var(--bg);
+      }
+      .secondary {
+        background: var(--soft);
+        color: var(--text);
+      }
+      footer {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav>Ferry</nav>
+      <section class="hero">
+        <div class="mark" aria-hidden="true">✦</div>
+        <h1>Move money. Earn milestones.</h1>
+        <p class="lead">
+          A friend invited you to Ferry. Add their code before your first
+          settled payment and you will both earn non-transferable Ferry Miles.
+        </p>
+        <div class="code-card">
+          <div class="label">INVITE CODE</div>
+          <div class="code" id="code">Loading…</div>
+          <div class="actions">
+            <button class="secondary" id="copy" type="button">Copy code</button>
+            <a class="button primary" id="open" href="ferry://rewards"
+              >Open Ferry</a
+            >
+          </div>
+        </div>
+      </section>
+      <footer>
+        Ferry Miles have no cash or AUSD value. A signup alone does not qualify.
+      </footer>
+    </main>
+    <script>
+      const match = location.pathname.match(/\/invite\/([A-Za-z0-9]{6,16})/);
+      const code = match ? match[1].toUpperCase() : "";
+      const codeNode = document.querySelector("#code");
+      const copyButton = document.querySelector("#copy");
+      const openLink = document.querySelector("#open");
+      codeNode.textContent = code || "Code unavailable";
+      openLink.href = code
+        ? `ferry://rewards?code=${encodeURIComponent(code)}`
+        : "ferry://rewards";
+      copyButton.disabled = !code;
+      copyButton.addEventListener("click", async () => {
+        if (!code) return;
+        await navigator.clipboard.writeText(code);
+        copyButton.textContent = "Copied";
+      });
+    </script>
+  </body>
+</html>

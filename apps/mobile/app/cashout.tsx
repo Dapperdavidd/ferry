@@ -154,6 +154,7 @@ export default function CashoutScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ["transfers"] });
       queryClient.invalidateQueries({ queryKey: ["balances"] });
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
       router.replace({
         pathname: "/success",
         params: {

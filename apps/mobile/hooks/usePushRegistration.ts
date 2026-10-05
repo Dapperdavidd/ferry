@@ -79,6 +79,7 @@ export function useNotificationRouting() {
     if (kind === ARRIVAL_KIND) {
       void queryClient.invalidateQueries({ queryKey: ["transfers"] });
       void queryClient.invalidateQueries({ queryKey: ["balances"] });
+      void queryClient.invalidateQueries({ queryKey: ["rewards"] });
     }
 
     router.push(((kind && DESTINATIONS[kind]) ?? HOME) as never);

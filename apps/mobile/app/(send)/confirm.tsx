@@ -304,6 +304,7 @@ export default function ConfirmScreen() {
       pendingSubmission.current = null;
       queryClient.invalidateQueries({ queryKey: ["transfers"] });
       queryClient.invalidateQueries({ queryKey: ["balances"] });
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
 
       if (run === attempt.current) {
         setFlow({ step: "sent", state: "done", message: null });

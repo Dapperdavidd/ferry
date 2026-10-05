@@ -19,6 +19,7 @@ import { WalletModule } from "./wallet/wallet.module";
 import { PayoutModule } from "./payout/payout.module";
 import { FlowsModule } from "./flows/flows.module";
 import { RelayerPolicyModule } from "./relayer/relayer-policy.module";
+import { RewardsModule } from "./rewards/rewards.module";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { RelayerPolicyModule } from "./relayer/relayer-policy.module";
     PayoutModule,
     AgoraModule,
     FlowsModule,
+    RewardsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

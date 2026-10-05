@@ -160,6 +160,7 @@ export default function FlowsScreen() {
         );
       }
       await queryClient.invalidateQueries({ queryKey: ["flow"] });
+      await queryClient.invalidateQueries({ queryKey: ["rewards"] });
       setCompletion(saved.status === "CONFIRMED" ? "active" : "activating");
       setMode("done");
     } catch (reason) {
@@ -221,6 +222,7 @@ export default function FlowsScreen() {
           );
         }
         await queryClient.invalidateQueries({ queryKey: ["flow"] });
+        await queryClient.invalidateQueries({ queryKey: ["rewards"] });
         setCompletion(saved.status === "CONFIRMED" ? "disabled" : "disabling");
       }
       setMode("done");

@@ -10,6 +10,7 @@ import { Animated, View } from "react-native";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { setToastHandler } from "@/utils/toast";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 interface ToastOptions {
   label: string;
@@ -33,6 +34,7 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const [toast, setToast] = useState<ToastOptions | null>(null);
@@ -107,10 +109,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           ]}
         >
           <View
-            className="flex-row items-center rounded-full border border-black/5 bg-white px-4 py-2.5"
+            className="flex-row items-center rounded-full border px-4 py-2.5"
             // PLATFORM-SHADOW: lifts the pill off same-colored content so it
             // stays visible on both iOS and Android (no reliable blur on Android).
             style={{
+              backgroundColor: theme.card,
+              borderColor: theme.border,
               shadowColor: "#000",
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.12,
@@ -119,7 +123,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             }}
           >
             {toast.icon && <View className="mr-2">{toast.icon}</View>}
-            <Typography weight="600" className="text-sm text-black">
+            <Typography
+              weight="600"
+              className="text-sm"
+              style={{ color: theme.text }}
+            >
               {toast.label}
             </Typography>
           </View>

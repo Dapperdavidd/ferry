@@ -53,6 +53,19 @@ export const flowPaymentStatus = pgEnum("flow_payment_status", [
   "FAILED",
   "EXPIRED",
 ]);
+export const rewardEventKind = pgEnum("reward_event_kind", [
+  "transfer_milestone",
+  "flow_milestone",
+  "cashout_milestone",
+  "referral_inviter",
+  "referral_invitee",
+  "adjustment",
+]);
+export const referralStatus = pgEnum("referral_status", [
+  "PENDING",
+  "QUALIFIED",
+  "REJECTED",
+]);
 
 export interface StoredFlowDestination {
   label: string;
@@ -288,6 +301,79 @@ export const pushDevices = pgTable(
       .defaultNow(),
   },
   (t) => [index("push_devices_user_idx").on(t.userId)],
+);
+
+/**
+ * One stable, non-transferable Ferry Miles account per Ferry user. Codes are
+ * random instead of address-derived so a shared invite never leaks wallet
+ * identity.
+ */
+export const rewardAccounts = pgTable(
+  "reward_accounts",
+  {
+    userId: text("user_id").primaryKey(),
+    referralCode: text("referral_code").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("reward_accounts_referral_code_idx").on(t.referralCode)],
+);
+
+/**
+ * Append-only points ledger. eventKey is a business idempotency key (for
+ * example, first-transfer:<user id>) so retries and concurrent refreshes can
+ * never award the same milestone twice.
+ */
+export const rewardEvents = pgTable(
+  "reward_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    eventKey: text("event_key").notNull(),
+    kind: rewardEventKind("kind").notNull(),
+    points: integer("points").notNull(),
+    referenceId: text("reference_id"),
+    description: text("description").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("reward_events_event_key_idx").on(t.eventKey),
+    index("reward_events_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/**
+ * A referral qualifies only after the invitee's first confirmed outbound
+ * transfer. Signup alone never creates a financial reward.
+ */
+export const referrals = pgTable(
+  "referrals",
+  {
+    id: text("id").primaryKey(),
+    inviterUserId: text("inviter_user_id").notNull(),
+    inviteeUserId: text("invitee_user_id").notNull(),
+    code: text("code").notNull(),
+    status: referralStatus("status").notNull().default("PENDING"),
+    qualifyingTransferId: text("qualifying_transfer_id"),
+    qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("referrals_invitee_idx").on(t.inviteeUserId),
+    index("referrals_inviter_status_idx").on(t.inviterUserId, t.status),
+  ],
 );
 
 /** Cursors and locks for the indexer and the relayer caps. */

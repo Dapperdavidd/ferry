@@ -62,6 +62,7 @@ export function usePendingWatch(hasPending = false) {
           queryKey: TRANSFERS_QUERY_KEY(userId),
         });
         queryClient.invalidateQueries({ queryKey: ["balances", userId] });
+        queryClient.invalidateQueries({ queryKey: ["rewards", userId] });
 
         const wasWatching = seenAt - previousSeenAt < AWAY_GAP_MS;
         const isNewArrival =

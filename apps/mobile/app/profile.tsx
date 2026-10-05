@@ -17,6 +17,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useNotificationPreference } from "@/hooks/usePushRegistration";
 import { useProfilePhoto } from "@/hooks/useProfilePhoto";
 import { useWalletName } from "@/hooks/useWalletName";
+import { useRewards } from "@/hooks/useRewards";
 
 const SUPPORT_URL = "mailto:support@ferry.money?subject=Ferry%20support";
 
@@ -28,6 +29,7 @@ export default function ProfileScreen() {
   const { name: walletName, setName: setWalletName } = useWalletName();
   const { photoUri, isSaving, savePhoto, removePhoto } = useProfilePhoto();
   const notifications = useNotificationPreference();
+  const { data: rewards } = useRewards();
   const notificationsSheetRef = useRef<BottomSheetModal>(null);
   const [showEditWallet, setShowEditWallet] = useState(false);
 
@@ -77,6 +79,14 @@ export default function ProfileScreen() {
   };
 
   const rows: ProfileRowProps[] = [
+    {
+      label: "Ferry Miles",
+      value: rewards
+        ? `${new Intl.NumberFormat("en-US").format(rewards.balance)} · ${rewards.level.name}`
+        : undefined,
+      icon: "sparkles-outline",
+      onPress: () => router.push("/rewards" as never),
+    },
     {
       label: "Account",
       icon: "person-outline",

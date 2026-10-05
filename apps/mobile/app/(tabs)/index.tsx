@@ -13,6 +13,7 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { PremiumActionButton } from "@/components/ui/molecules/PremiumActionButton";
 import { ActivityItem } from "@/components/ui/organisms/ActivityItem";
 import { FerryDirectCard } from "@/components/ui/organisms/FerryDirectCard";
+import { FerryMilesRow } from "@/components/ui/organisms/FerryMilesRow";
 import { QRCodeModal } from "@/components/ui/organisms/modals/QRCodeModal";
 import { ReceiveModal } from "@/components/ui/organisms/modals/ReceiveModal";
 import { TransactionDetailModal } from "@/components/ui/organisms/modals/TransactionDetailModal";
@@ -24,6 +25,7 @@ import { useBalances } from "@/hooks/useBalances";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useTransfersInfinite } from "@/hooks/useTransfers";
 import { useProfilePhoto } from "@/hooks/useProfilePhoto";
+import { useRewards } from "@/hooks/useRewards";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
 import { monad } from "@/lib/chain";
 import {
@@ -59,6 +61,7 @@ function HomeScreenContent() {
     refetch: refetchBalances,
   } = useBalances();
   const { data: transferPages } = useTransfersInfinite();
+  const { data: rewards } = useRewards();
   const address = useWalletAddress();
   const sendFlowModalRef = useRef<BottomSheetModal>(null);
   const qrCodeModalRef = useRef<BottomSheetModal>(null);
@@ -279,6 +282,12 @@ function HomeScreenContent() {
             }
           />
         </View>
+
+        <FerryMilesRow
+          balance={rewards?.balance}
+          level={rewards?.level.name}
+          onPress={() => router.push("/rewards" as never)}
+        />
 
         <FerryDirectCard
           compact={compact}

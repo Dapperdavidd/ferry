@@ -63,6 +63,7 @@ import {
   useNotificationRouting,
   usePushRegistration,
 } from "@/hooks/usePushRegistration";
+import { useRewardLifecycle } from "@/hooks/useRewardLifecycle";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2 } },
@@ -120,6 +121,7 @@ function AuthLayout() {
       <ScreenThemeProvider>
         <ModalFlowProvider>
           <ToastProvider>
+            <RewardLifecycle />
             <BlurTargetHost>
               <Slot />
             </BlurTargetHost>
@@ -138,11 +140,10 @@ function AuthLayout() {
   const isAuthenticated = status === "signedIn";
   const inAuthGroup = segments[0] === "(auth)";
   const atOnboarding = segments[0] === "onboarding";
-  const atDevelopmentPreview = __DEV__ && segments[0] === "dev-preview";
   // A handle is the identity people send to, so an account without one stays on onboarding.
   const needsHandle = isAuthenticated && (!user || !user.handle);
 
-  if (!isAuthenticated && !inAuthGroup && !atDevelopmentPreview) {
+  if (!isAuthenticated && !inAuthGroup) {
     return <Redirect href="/login" withAnchor />;
   }
 
@@ -262,6 +263,11 @@ function ActivityWatch() {
   usePendingWatch();
   usePushRegistration();
   useNotificationRouting();
+  return null;
+}
+
+function RewardLifecycle() {
+  useRewardLifecycle();
   return null;
 }
 
