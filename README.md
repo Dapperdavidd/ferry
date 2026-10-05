@@ -14,6 +14,13 @@ onchain destinations. The sender still sees a normal Send flow; wallets, gas, co
 and basis points stay out of the consumer experience. Flows remain behind an explicit
 contract-address feature gate until `FerryFlow` is deployed and rehearsed on testnet.
 
+**Ferry Plus** turns gas sponsorship into a consumer entitlement instead of an invisible
+unbounded subsidy. Free accounts receive five covered sends each UTC month. A real 9.99
+AUSD onchain purchase activates 30 days of Plus, 50 covered sends and 2× newly earned
+Ferry Miles. The API reserves each covered send by intent under a database lock, so the
+allowance cannot be bypassed with concurrent submissions; the app only displays the
+server's result.
+
 Built for Agora's "Best Cross-Border Payments App on Monad" bounty at Monad Metropolis,
 October 2026. The design is in
 [`docs/specs/cross-border-ausd-design.md`](docs/specs/cross-border-ausd-design.md).

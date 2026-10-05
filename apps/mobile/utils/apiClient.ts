@@ -400,6 +400,53 @@ export const RewardSummarySchema = z.object({
 });
 export type RewardSummary = z.infer<typeof RewardSummarySchema>;
 
+export const PlusStatusSchema = z.object({
+  plan: z.enum(["FREE", "PLUS"]),
+  active: z.boolean(),
+  activeFrom: z.string().nullable(),
+  activeUntil: z.string().nullable(),
+  coveredSends: z.object({
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+    remaining: z.number().int().nonnegative(),
+    resetsAt: z.string(),
+  }),
+  milesMultiplier: z.number().int().positive(),
+  pendingPurchase: z
+    .object({ txHash: z.string(), submittedAt: z.string() })
+    .nullable(),
+  offer: z.object({
+    priceRaw: rawAmount,
+    price: z.string(),
+    token: z.literal("AUSD"),
+    durationDays: z.number().int().positive(),
+    coveredSends: z.number().int().positive(),
+    milesMultiplier: z.number().int().positive(),
+    purchaseAvailable: z.boolean(),
+  }),
+});
+export type PlusStatus = z.infer<typeof PlusStatusSchema>;
+
+export const PreparePlusResponseSchema = z.object({
+  intentId: z.string(),
+  typedData: TypedDataSchema,
+  expiresAt: z.string(),
+  priceRaw: rawAmount,
+  price: z.string(),
+  token: z.literal("AUSD"),
+  treasuryAddress: address,
+  durationDays: z.number().int().positive(),
+});
+export type PreparePlusResponse = z.infer<typeof PreparePlusResponseSchema>;
+
+export const SubmitPlusResponseSchema = z.object({
+  purchaseId: z.string(),
+  txHash: z.string(),
+  status: z.enum(["PENDING", "ACTIVE", "FAILED"]),
+  activeFrom: z.string().nullable(),
+  activeUntil: z.string().nullable(),
+});
+
 export const AppliedReferralSchema = z.object({
   status: z.enum(["PENDING", "QUALIFIED", "REJECTED"]),
   code: z.string(),
@@ -749,6 +796,45 @@ class BackendClient {
     return this.request("POST", "/rewards/referral", AppliedReferralSchema, {
       code,
     });
+  }
+
+  // Ferry Plus
+  getPlus() {
+    if (this.isDemoMode()) {
+      const now = new Date();
+      return Promise.resolve({
+        plan: "FREE" as const,
+        active: false,
+        activeFrom: null,
+        activeUntil: null,
+        coveredSends: {
+          used: 2,
+          limit: 5,
+          remaining: 3,
+          resetsAt: new Date(
+            Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+          ).toISOString(),
+        },
+        milesMultiplier: 1,
+        pendingPurchase: null,
+        offer: {
+          priceRaw: "9990000",
+          price: "9.99",
+          token: "AUSD" as const,
+          durationDays: 30,
+          coveredSends: 50,
+          milesMultiplier: 2,
+          purchaseAvailable: false,
+        },
+      });
+    }
+    return this.request("GET", "/plus", PlusStatusSchema);
+  }
+  preparePlus() {
+    return this.request("POST", "/plus/prepare", PreparePlusResponseSchema);
+  }
+  submitPlus(body: { intentId: string; signature: string }) {
+    return this.request("POST", "/plus/submit", SubmitPlusResponseSchema, body);
   }
   listTransfers(params: { cursor?: string; limit?: number } = {}) {
     if (this.isDemoMode())

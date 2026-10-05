@@ -86,6 +86,24 @@ const hexKey = Joi.string().pattern(/^0x[0-9a-fA-F]{64}$/);
           .pattern(/^\d+$/)
           .default("2000000000000000000"),
 
+        FERRY_PLUS_TREASURY_ADDRESS: address.optional().allow(""),
+        FERRY_PLUS_PRICE_RAW: Joi.string().pattern(/^\d+$/).default("9990000"),
+        FERRY_PLUS_DURATION_DAYS: Joi.number()
+          .integer()
+          .min(1)
+          .max(365)
+          .default(30),
+        FERRY_FREE_SPONSORED_SENDS: Joi.number()
+          .integer()
+          .min(0)
+          .max(100)
+          .default(5),
+        FERRY_PLUS_SPONSORED_SENDS: Joi.number()
+          .integer()
+          .min(1)
+          .max(1000)
+          .default(50),
+
         AGORA_API_MODE: Joi.string().valid("live", "mock").default("mock"),
         AGORA_API_URL: Joi.string().uri().default("https://api.agora.finance"),
         AGORA_API_KEY: Joi.string().when("AGORA_API_MODE", {

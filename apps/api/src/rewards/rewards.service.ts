@@ -1,12 +1,13 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { createId } from "@paralleldrive/cuid2";
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
 import { ApiError } from "../common/errors";
 import { DbService } from "../db/db.service";
 import {
   cashouts,
   flowConfigurations,
+  plusPurchases,
   referrals,
   rewardAccounts,
   rewardEvents,
@@ -272,6 +273,7 @@ export class RewardsService {
             points: REWARD_POINTS.FIRST_TRANSFER,
             referenceId: transfer.id,
             description: "First Ferry payment settled",
+            occurredAt: transfer.confirmedAt,
           })
         : undefined,
       flow
@@ -282,6 +284,7 @@ export class RewardsService {
             points: REWARD_POINTS.FIRST_FLOW,
             referenceId: flow.id,
             description: "First Ferry Flow activated",
+            occurredAt: flow.confirmedAt,
           })
         : undefined,
       cashout
@@ -292,6 +295,7 @@ export class RewardsService {
             points: REWARD_POINTS.FIRST_CASHOUT,
             referenceId: cashout.id,
             description: "First bank delivery completed",
+            occurredAt: cashout.settledAt,
           })
         : undefined,
     ]);
@@ -369,23 +373,44 @@ export class RewardsService {
     );
   }
 
-  private insertEvent(event: {
+  private async insertEvent(event: {
     userId: string;
     eventKey: string;
     kind: RewardKind;
     points: number;
     referenceId: string;
     description: string;
+    occurredAt?: Date | null;
   }) {
+    const { occurredAt, points, ...stored } = event;
+    const at = occurredAt ?? new Date();
+    const [plus] = await this.db.client
+      .select({ id: plusPurchases.id })
+      .from(plusPurchases)
+      .where(
+        and(
+          eq(plusPurchases.userId, event.userId),
+          eq(plusPurchases.status, "ACTIVE"),
+          lte(plusPurchases.startsAt, at),
+          gt(plusPurchases.expiresAt, at),
+        ),
+      )
+      .limit(1);
+    const multiplier = plus ? 2 : 1;
     return this.db.client
       .insert(rewardEvents)
-      .values({ id: createId(), ...event })
+      .values({
+        id: createId(),
+        ...stored,
+        points: points * multiplier,
+        metadata: { basePoints: points, multiplier },
+      })
       .onConflictDoNothing({ target: rewardEvents.eventKey });
   }
 
   private firstConfirmedTransfer(userId: string) {
     return this.db.client
-      .select({ id: transfers.id })
+      .select({ id: transfers.id, confirmedAt: transfers.confirmedAt })
       .from(transfers)
       .where(
         and(
@@ -405,6 +430,7 @@ export class RewardsService {
       .select({
         id: flowConfigurations.id,
         destinations: flowConfigurations.destinations,
+        confirmedAt: flowConfigurations.confirmedAt,
       })
       .from(flowConfigurations)
       .where(
@@ -422,7 +448,7 @@ export class RewardsService {
 
   private firstConfirmedCashout(userId: string) {
     return this.db.client
-      .select({ id: cashouts.id })
+      .select({ id: cashouts.id, settledAt: cashouts.settledAt })
       .from(cashouts)
       .where(
         and(

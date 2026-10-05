@@ -31,7 +31,14 @@ export const intentKind = pgEnum("intent_kind", [
   "cashout",
   "flow_config",
   "flow_payment",
+  "plus_purchase",
 ]);
+export const plusPurchaseStatus = pgEnum("plus_purchase_status", [
+  "PENDING",
+  "ACTIVE",
+  "FAILED",
+]);
+export const sponsorshipPlan = pgEnum("sponsorship_plan", ["FREE", "PLUS"]);
 export const payoutStatus = pgEnum("payout_status", [
   "PENDING",
   "SENT",
@@ -373,6 +380,56 @@ export const referrals = pgTable(
   (t) => [
     uniqueIndex("referrals_invitee_idx").on(t.inviteeUserId),
     index("referrals_inviter_status_idx").on(t.inviterUserId, t.status),
+  ],
+);
+
+/** One onchain AUSD purchase grants one fixed Ferry Plus access period. */
+export const plusPurchases = pgTable(
+  "plus_purchases",
+  {
+    id: text("id").primaryKey(),
+    intentId: text("intent_id").notNull(),
+    userId: text("user_id").notNull(),
+    amountRaw: text("amount_raw").notNull(),
+    txHash: text("tx_hash").notNull(),
+    status: plusPurchaseStatus("status").notNull().default("PENDING"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("plus_purchases_intent_idx").on(t.intentId),
+    uniqueIndex("plus_purchases_tx_idx").on(t.txHash),
+    index("plus_purchases_user_status_idx").on(t.userId, t.status),
+  ],
+);
+
+/**
+ * A durable reservation for every gas-sponsored consumer send. Reserving by
+ * intent closes the concurrent-submit gap without charging abandoned drafts.
+ */
+export const sendSponsorships = pgTable(
+  "send_sponsorships",
+  {
+    intentId: text("intent_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    plan: sponsorshipPlan("plan").notNull(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("send_sponsorships_user_period_idx").on(
+      t.userId,
+      t.plan,
+      t.periodStart,
+    ),
   ],
 );
 

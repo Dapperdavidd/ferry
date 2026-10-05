@@ -96,6 +96,20 @@ app                          api                             Monad
 - Errors surface by name: `TransferPaused`, `AccountIsFrozen`, `SignatureVerificationPaused`, `INSUFFICIENT_BALANCE`, `RELAYER_CAP`.
 - Caps: per user 20 sends and 5,000 AUSD a day on testnet, global MON spend monitor with an alert below 2 MON.
 
+### Ferry Plus and sponsored-send economics
+
+Gasless does not mean unmetered. Every account receives five Ferry-covered sends per UTC
+calendar month. At submit time the API serialises allowance allocation per user and
+stores a durable reservation keyed by the signed intent; preparing a payment never burns
+an allowance, while concurrent signed submissions cannot overspend it.
+
+Ferry Plus is a 30-day onchain entitlement purchased for 9.99 AUSD with the same
+EIP-3009 and Face ID flow as a payment. The signed authorization names Ferry's configured
+treasury and exact price. A purchase remains pending until its Monad receipt succeeds,
+then grants 50 covered sends and a 2× multiplier for new Ferry Miles earned during the
+active interval. It does not auto-renew. The treasury address, price, duration and limits
+are server configuration; the mobile client never decides entitlement state.
+
 **Receiving.** The recipient's QR encodes `ferry://pay?to=@bola` with the address as fallback. An indexer polls AUSD `Transfer` logs for addresses we know (every ~2 s, chunked by block range, cursor stored), writes RECEIVE rows, and pushes "You received $50.00 from @ada". Pending sends are confirmed by receipt the same way. HyperSync can replace polling for history later.
 
 **Funding on testnet.** "Add funds" calls the AUSD faucet through the relayer (10,000 AUSD, once a minute). Production USDC funding is implemented as an Agora `stablecoin → ausd` route into the user's registered Monad wallet. Agora returns one reusable deposit address per supported source network; the app renders only those returned instructions, with an explicit USDC/network warning. Mock mode shows a clearly labelled preview and disables copying or sharing its generated addresses. USD bank funding stays marked "Coming soon" until the additional banking and verification work is complete.

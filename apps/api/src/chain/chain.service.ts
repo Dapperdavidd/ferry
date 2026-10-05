@@ -11,6 +11,7 @@ import {
   type Address,
   type Hex,
   type PublicClient,
+  TransactionReceiptNotFoundError,
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
@@ -348,6 +349,20 @@ export class ChainService implements OnModuleInit {
       );
     } catch {
       return false;
+    }
+  }
+
+  async transactionStatus(
+    txHash: Hex,
+  ): Promise<"PENDING" | "CONFIRMED" | "FAILED"> {
+    try {
+      const receipt = await this.publicClient.getTransactionReceipt({
+        hash: txHash,
+      });
+      return receipt.status === "success" ? "CONFIRMED" : "FAILED";
+    } catch (error) {
+      if (error instanceof TransactionReceiptNotFoundError) return "PENDING";
+      throw error;
     }
   }
 

@@ -26,6 +26,7 @@ import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useTransfersInfinite } from "@/hooks/useTransfers";
 import { useProfilePhoto } from "@/hooks/useProfilePhoto";
 import { useRewards } from "@/hooks/useRewards";
+import { usePlus } from "@/hooks/usePlus";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
 import {
   mapTransferRowToActivityEntry,
@@ -62,6 +63,7 @@ function HomeScreenContent() {
   } = useBalances();
   const { data: transferPages } = useTransfersInfinite();
   const { data: rewards } = useRewards();
+  const { data: plus } = usePlus();
   const address = useWalletAddress();
   const sendFlowModalRef = useRef<BottomSheetModal>(null);
   const qrCodeModalRef = useRef<BottomSheetModal>(null);
@@ -254,11 +256,49 @@ function HomeScreenContent() {
             disabled={networkStatus?.capabilities.send !== true}
             onPress={() =>
               runWhenAvailable("send", () =>
-                sendFlowModalRef.current?.present()
+                plus?.coveredSends.remaining === 0
+                  ? router.push("/plus" as never)
+                  : sendFlowModalRef.current?.present()
               )
             }
           />
         </View>
+
+        <HapticPressable
+          accessibilityRole="button"
+          feedback="selection"
+          onPress={() => router.push("/plus" as never)}
+          className="mb-2 flex-row items-center border-y py-4"
+          style={{ borderColor: theme.border }}
+        >
+          <Ionicons name="diamond-outline" size={21} color={theme.text} />
+          <View className="ml-3 flex-1">
+            <Typography
+              weight="700"
+              className="text-[15px]"
+              style={{ color: theme.text }}
+            >
+              {plus?.active ? "Ferry Plus" : "Covered sends"}
+            </Typography>
+            <Typography
+              weight="500"
+              className="mt-0.5 text-[12px]"
+              style={{ color: theme.muted }}
+            >
+              {plus
+                ? `${plus.coveredSends.remaining} of ${plus.coveredSends.limit} left`
+                : "Your Ferry send allowance"}
+            </Typography>
+          </View>
+          <Typography
+            weight="700"
+            className="mr-1 text-[13px]"
+            style={{ color: theme.text }}
+          >
+            {plus?.active ? "Active" : "Get Plus"}
+          </Typography>
+          <Ionicons name="chevron-forward" size={18} color={theme.faint} />
+        </HapticPressable>
 
         <FerryMilesRow
           balance={rewards?.balance}

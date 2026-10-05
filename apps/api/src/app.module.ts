@@ -20,6 +20,7 @@ import { PayoutModule } from "./payout/payout.module";
 import { FlowsModule } from "./flows/flows.module";
 import { RelayerPolicyModule } from "./relayer/relayer-policy.module";
 import { RewardsModule } from "./rewards/rewards.module";
+import { PlusModule } from "./plus/plus.module";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { RewardsModule } from "./rewards/rewards.module";
     AgoraModule,
     FlowsModule,
     RewardsModule,
+    PlusModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -488,6 +488,8 @@ export class FlowsService {
       }
       if (intent.expiresAt.getTime() < Date.now()) throw expiredPayment();
       assertRelayWindowOpen(authorization.validBefore, expiredPayment);
+      await this.relayerPolicy.assertSendAllowed(userId, authorization.value);
+      await this.relayerPolicy.reserveSponsoredSend(userId, intentId);
       const now = new Date();
       await this.db.client
         .update(flowPayments)
@@ -511,7 +513,10 @@ export class FlowsService {
       );
     } catch (error) {
       if (isDefinitelyPreBroadcastFailure(error)) {
-        await this.releasePaymentClaim(submission.paymentId);
+        await Promise.all([
+          this.releasePaymentClaim(submission.paymentId),
+          this.relayerPolicy.releaseSponsoredSend(intentId),
+        ]);
       }
       throw error;
     }

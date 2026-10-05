@@ -126,6 +126,11 @@ export default function ConfirmScreen() {
         "failed",
         "You've reached today's $5,000 testnet sending limit. Nothing has been sent."
       );
+    if (code === "SPONSORED_SEND_LIMIT")
+      return hold(
+        "failed",
+        "You've used your covered sends. Get Ferry Plus to keep sending."
+      );
     const message = apiErrorMessage(error);
     if (message) return hold("failed", message);
     throw error;
@@ -295,6 +300,13 @@ export default function ConfirmScreen() {
           return hold(
             "failed",
             "You've hit today's sending limit. Nothing has been sent."
+          );
+        }
+        if (code === "SPONSORED_SEND_LIMIT") {
+          pendingSubmission.current = null;
+          return hold(
+            "failed",
+            "You've used your covered sends. Get Ferry Plus to keep sending."
           );
         }
         throw error;

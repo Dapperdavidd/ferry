@@ -15,6 +15,7 @@ import {
   flowConfigurations,
   flowPayments,
   intents,
+  sendSponsorships,
   transfers,
   users,
 } from "../db/schema";
@@ -194,6 +195,7 @@ export class IndexerService {
               updatedAt: now,
             })
             .where(eq(flowPayments.id, payment.id));
+          await this.releaseSponsorships([payment.intentId]);
           this.logger.error(
             `indexer.flow_payment_event_mismatch id=${payment.id} tx=${txHash}`,
           );
@@ -205,6 +207,15 @@ export class IndexerService {
 
   private async markFlowsFailed(txHash: string): Promise<void> {
     const now = new Date();
+    const failedPayments = await this.db.client
+      .select({ intentId: flowPayments.intentId })
+      .from(flowPayments)
+      .where(
+        and(
+          eq(flowPayments.txHash, txHash),
+          eq(flowPayments.status, "PENDING"),
+        ),
+      );
     await this.db.client
       .update(flowConfigurations)
       .set({ status: "FAILED", errorCode: "TX_FAILED", updatedAt: now })
@@ -223,6 +234,9 @@ export class IndexerService {
           eq(flowPayments.status, "PENDING"),
         ),
       );
+    await this.releaseSponsorships(
+      failedPayments.map((payment) => payment.intentId),
+    );
     this.logger.warn(`indexer.flow_failed tx=${txHash}`);
   }
 
@@ -330,6 +344,12 @@ export class IndexerService {
   }
 
   private async markFailed(txHash: string): Promise<void> {
+    const failedTransfers = await this.db.client
+      .select({ intentId: transfers.intentId })
+      .from(transfers)
+      .where(
+        and(eq(transfers.txHash, txHash), eq(transfers.status, "PENDING")),
+      );
     await this.db.client
       .update(transfers)
       .set({ status: "FAILED" })
@@ -340,7 +360,20 @@ export class IndexerService {
       .update(cashouts)
       .set({ status: "FAILED" })
       .where(and(eq(cashouts.txHash, txHash), eq(cashouts.status, "PENDING")));
+    await this.releaseSponsorships(
+      failedTransfers.flatMap((transfer) =>
+        transfer.intentId ? [transfer.intentId] : [],
+      ),
+    );
     this.logger.warn(`indexer.failed tx=${txHash}`);
+  }
+
+  private async releaseSponsorships(intentIds: string[]): Promise<void> {
+    const uniqueIntentIds = [...new Set(intentIds)];
+    if (uniqueIntentIds.length === 0) return;
+    await this.db.client
+      .delete(sendSponsorships)
+      .where(inArray(sendSponsorships.intentId, uniqueIntentIds));
   }
 
   /** AUSD Transfer logs since the cursor, kept for addresses that belong to users. */

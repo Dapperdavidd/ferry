@@ -195,6 +195,9 @@ export class TransfersService {
         );
       }
 
+      await this.relayerPolicy.assertSendAllowed(userId, auth.value);
+      await this.relayerPolicy.reserveSponsoredSend(userId, intentId);
+
       const txHash = await this.chain.transferWithAuthorization(
         auth,
         signature,

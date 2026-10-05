@@ -18,6 +18,7 @@ import { useNotificationPreference } from "@/hooks/usePushRegistration";
 import { useProfilePhoto } from "@/hooks/useProfilePhoto";
 import { useWalletName } from "@/hooks/useWalletName";
 import { useRewards } from "@/hooks/useRewards";
+import { usePlus } from "@/hooks/usePlus";
 
 const SUPPORT_URL = "mailto:support@ferry.money?subject=Ferry%20support";
 
@@ -30,6 +31,7 @@ export default function ProfileScreen() {
   const { photoUri, isSaving, savePhoto, removePhoto } = useProfilePhoto();
   const notifications = useNotificationPreference();
   const { data: rewards } = useRewards();
+  const { data: plus } = usePlus();
   const notificationsSheetRef = useRef<BottomSheetModal>(null);
   const [showEditWallet, setShowEditWallet] = useState(false);
 
@@ -79,6 +81,16 @@ export default function ProfileScreen() {
   };
 
   const rows: ProfileRowProps[] = [
+    {
+      label: "Ferry Plus",
+      value: plus?.active
+        ? "Active"
+        : plus
+          ? `${plus.coveredSends.remaining} sends left`
+          : undefined,
+      icon: "diamond-outline",
+      onPress: () => router.push("/plus" as never),
+    },
     {
       label: "Ferry Miles",
       value: rewards

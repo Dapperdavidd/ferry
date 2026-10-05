@@ -12,6 +12,7 @@ import {
   flowPayments,
   intents,
   kv,
+  sendSponsorships,
   transfers,
   users,
 } from "../db/schema";
@@ -129,6 +130,7 @@ function setup(receiptStatus: "success" | "reverted" | "missing") {
     [flowConfigurations, [configuration]],
     [flowPayments, [payment]],
     [intents, [paymentIntent]],
+    [sendSponsorships, [{ intentId: payment.intentId }]],
   ]);
   const db = {
     client: {
@@ -145,6 +147,12 @@ function setup(receiptStatus: "success" | "reverted" | "missing") {
             return Promise.resolve();
           },
         }),
+      }),
+      delete: (table: object) => ({
+        where: () => {
+          rows.set(table, []);
+          return Promise.resolve();
+        },
       }),
     },
   } as unknown as DbService;
@@ -217,7 +225,7 @@ function setup(receiptStatus: "success" | "reverted" | "missing") {
     undefined,
     { reconcileUser } as unknown as RewardsService,
   );
-  return { service, configuration, payment, reconcileUser };
+  return { service, configuration, payment, reconcileUser, rows };
 }
 
 describe("IndexerService Flow reconciliation", () => {
@@ -232,12 +240,13 @@ describe("IndexerService Flow reconciliation", () => {
   });
 
   it("marks both records failed when the relayed transaction reverts", async () => {
-    const { service, configuration, payment } = setup("reverted");
+    const { service, configuration, payment, rows } = setup("reverted");
 
     await service.confirmPendingFlows();
 
     expect(configuration.status).toBe("FAILED");
     expect(payment.status).toBe("FAILED");
+    expect(rows.get(sendSponsorships)).toEqual([]);
   });
 
   it("keeps an unknown receipt pending instead of inventing a failure", async () => {

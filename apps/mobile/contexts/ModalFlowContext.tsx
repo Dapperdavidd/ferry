@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 
 import { useNetwork } from "@/contexts/NetworkContext";
 import { apiClient } from "@/utils/apiClient";
 import { showToast } from "@/utils/toast";
+import { usePlus } from "@/hooks/usePlus";
 
 interface ModalFlowContextType {
   isReceiveModalVisible: boolean;
@@ -22,7 +24,9 @@ const ModalFlowContext = createContext<ModalFlowContextType | undefined>(
  * Send tapped from the tab bar shows on whatever screen the Consumer is on.
  */
 export function ModalFlowProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const { network, config } = useNetwork();
+  const { data: plus } = usePlus();
   const { data: networkStatus } = useQuery({
     queryKey: ["network-status", network],
     queryFn: () => apiClient.network(),
@@ -40,8 +44,17 @@ export function ModalFlowProvider({ children }: { children: React.ReactNode }) {
       showToast(`Send is coming soon on ${config.label}`);
       return;
     }
+    if (plus?.coveredSends.remaining === 0) {
+      router.push("/plus" as never);
+      return;
+    }
     setIsSendModalVisible(true);
-  }, [config.label, networkStatus?.capabilities.send]);
+  }, [
+    config.label,
+    networkStatus?.capabilities.send,
+    plus?.coveredSends.remaining,
+    router,
+  ]);
 
   const hideAllModals = useCallback(() => {
     setIsReceiveModalVisible(false);

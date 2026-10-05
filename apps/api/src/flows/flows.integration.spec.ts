@@ -259,6 +259,8 @@ describe("Ferry Flows integration", () => {
     const notifyArrival = jest.fn().mockResolvedValue(undefined);
     const policy = {
       assertSendAllowed: jest.fn().mockResolvedValue(undefined),
+      reserveSponsoredSend: jest.fn().mockResolvedValue(undefined),
+      releaseSponsoredSend: jest.fn().mockResolvedValue(undefined),
     } as unknown as RelayerPolicyService;
     const flows = new FlowsService(db, chain, ferryUsers, policy, relayer);
     const indexer = new IndexerService(db, chain, ferryUsers, {

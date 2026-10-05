@@ -127,8 +127,12 @@ function setup() {
     findByAddress: jest.fn().mockResolvedValue(null),
   } as unknown as UsersService;
   const assertSendAllowed = jest.fn().mockResolvedValue(undefined);
+  const reserveSponsoredSend = jest.fn().mockResolvedValue(undefined);
+  const releaseSponsoredSend = jest.fn().mockResolvedValue(undefined);
   const relayerPolicy = {
     assertSendAllowed,
+    reserveSponsoredSend,
+    releaseSponsoredSend,
   } as unknown as RelayerPolicyService;
   return {
     service: new FlowsService(db, chain, users, relayerPolicy, relayer),
