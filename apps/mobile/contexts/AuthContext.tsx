@@ -266,6 +266,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [account, guarded, openSession]
   );
 
+  const signInDemo = useCallback(async () => {
+    if (!__DEV__) throw new AppError(ErrorCode.AUTH_FAILED, false, false);
+    apiClient.setDemoMode(true);
+    setAccount({
+      address: SEED_ADDRESS,
+      credentialId: "seed",
+      handle: SEED_USER.handle ?? undefined,
+    });
+    setUserState(SEED_USER);
+    setStatus("signedIn");
+    setAuthError(null);
+  }, []);
+
   const authorize = useCallback(
     <T,>(work: (signer: LocalAccount) => Promise<T>) =>
       guarded(async () => {
@@ -297,13 +310,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // The passkey stays with the phone's provider, and the account record stays
   // here so the next sign-in pins it. Only the session and its data go.
   const signOut = useCallback(async () => {
-    await forgetThisDevice().catch(() => {});
-    await apiClient.signOut().catch(() => {});
+    void forgetThisDevice().catch(() => {});
+    void apiClient.signOut().catch(() => {});
     await AuthStorage.clearAuthData();
     queryClient.clear();
     setUserState(null);
     setStatus("signedOut");
     setAuthError(null);
+    apiClient.setDemoMode(false);
     router.replace("/(auth)/login");
   }, [queryClient]);
 
@@ -318,6 +332,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authError,
       createAccount,
       signIn,
+      signInDemo,
       signOut,
       authorize,
       refreshUser,
@@ -330,6 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authError,
       createAccount,
       signIn,
+      signInDemo,
       signOut,
       authorize,
       refreshUser,

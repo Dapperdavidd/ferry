@@ -1,6 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  Linking,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { useReducedMotion } from "react-native-reanimated";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
@@ -16,11 +25,15 @@ const WELCOME_MESSAGES = [
 
 const PRIVACY_POLICY_URL = "https://ferry.money/privacy";
 const TERMS_URL = "https://ferry.money/terms";
+const SHOW_DEVELOPMENT_PREVIEW = __DEV__;
 
 function TypewriterHeadline() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [visibleText, setVisibleText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const letterReveal = useRef(new Animated.Value(1)).current;
+  const wake = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReducedMotion();
   const message = WELCOME_MESSAGES[messageIndex];
 
   useEffect(() => {
@@ -46,15 +59,44 @@ function TypewriterHeadline() {
         return;
       }
 
-      setVisibleText(
-        isDeleting
-          ? message.slice(0, visibleText.length - 1)
-          : message.slice(0, visibleText.length + 1)
-      );
+      if (isDeleting) {
+        setVisibleText(message.slice(0, visibleText.length - 1));
+        return;
+      }
+
+      const nextLength = visibleText.length + 1;
+      const nextCharacter = message[visibleText.length];
+      if (!reduceMotion) {
+        letterReveal.setValue(0);
+        wake.setValue(nextLength % 2 === 0 ? -1.25 : 1.25);
+        Animated.parallel([
+          Animated.timing(letterReveal, {
+            toValue: 1,
+            duration: 110,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(wake, {
+            toValue: 0,
+            duration: 130,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+      if (nextCharacter !== " " && nextLength % 3 === 0) {
+        void Haptics.selectionAsync();
+      }
+      setVisibleText(message.slice(0, nextLength));
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [isDeleting, message, visibleText]);
+  }, [isDeleting, letterReveal, message, reduceMotion, visibleText, wake]);
+
+  const settledText =
+    !isDeleting && visibleText ? visibleText.slice(0, -1) : visibleText;
+  const activeLetter =
+    !isDeleting && visibleText ? visibleText.slice(-1) : null;
 
   return (
     <View
@@ -62,28 +104,55 @@ function TypewriterHeadline() {
       accessible
       accessibilityLabel={message}
     >
-      <Typography
-        weight="500"
-        className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
+      <Animated.View
+        style={{
+          transform: [{ translateX: wake }],
+        }}
       >
-        {visibleText}
-      </Typography>
+        <Typography
+          weight="500"
+          className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
+        >
+          {settledText}
+          {activeLetter ? (
+            <Animated.Text
+              style={{
+                opacity: letterReveal,
+                transform: [
+                  {
+                    translateY: letterReveal.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [5, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              {activeLetter}
+            </Animated.Text>
+          ) : null}
+        </Typography>
+      </Animated.View>
     </View>
   );
 }
 
 function WelcomeScreen() {
-  const { createAccount, signIn, account, authError } = useAuth();
+  const { createAccount, signIn, signInDemo, account, authError } = useAuth();
   const [busy, setBusy] = useState<
-    "create" | "resume" | "signIn" | "choose" | null
+    "create" | "resume" | "signIn" | "choose" | "demo" | null
   >(null);
   const authErrorMessage = authError?.split("\n", 1)[0];
 
-  const run = async (which: "create" | "resume" | "signIn" | "choose") => {
+  const run = async (
+    which: "create" | "resume" | "signIn" | "choose" | "demo"
+  ) => {
     if (busy) return;
     setBusy(which);
     try {
-      if (which === "create" || which === "resume") {
+      if (which === "demo") {
+        await signInDemo();
+      } else if (which === "create" || which === "resume") {
         await createAccount({ resumePending: which === "resume" });
       } else {
         const { isNew } = await signIn({
@@ -203,6 +272,25 @@ function WelcomeScreen() {
                   className="text-sm text-white/65 underline"
                 >
                   Create a new account instead
+                </Typography>
+              </HapticPressable>
+            ) : null}
+
+            {SHOW_DEVELOPMENT_PREVIEW ? (
+              <HapticPressable
+                feedback="selection"
+                onPress={() => run("demo")}
+                disabled={busy !== null}
+                accessibilityRole="button"
+                className="flex-row items-center justify-center gap-2 py-2"
+              >
+                <Ionicons
+                  name="phone-portrait-outline"
+                  size={14}
+                  color="#D8D29B"
+                />
+                <Typography weight="600" className="text-sm text-[#D8D29B]">
+                  Preview Ada in development
                 </Typography>
               </HapticPressable>
             ) : null}

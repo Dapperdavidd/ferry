@@ -30,6 +30,8 @@ export interface AuthContextType {
   createAccount: (options?: CreateAccountOptions) => Promise<void>;
   /** One Face ID against the remembered passkey, or the chooser on a fresh phone. */
   signIn: (options?: SignInOptions) => Promise<{ isNew: boolean }>;
+  /** Dev builds only: opens the populated Ada preview without a platform passkey. */
+  signInDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Face ID, then `work` runs with a signing account that is wiped afterwards. */
   authorize: <T>(work: (signer: LocalAccount) => Promise<T>) => Promise<T>;
