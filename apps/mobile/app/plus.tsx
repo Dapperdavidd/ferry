@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -20,7 +21,6 @@ import Svg, {
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
-import { ScreenLayout } from "@/components/ui/layout";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -107,130 +107,127 @@ export default function PlusScreen() {
     : "Checking your allowance…";
 
   return (
-    <ScreenLayout
-      className="p-0"
-      decorated={false}
-      lightColor={PLUS_BACKGROUND}
-      darkColor={PLUS_BACKGROUND}
-    >
+    <View style={styles.screen}>
       <StatusBar style="light" />
       <Atmosphere width={width} accent={theme.accent} />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View className="h-14 flex-row items-center justify-end">
-          <HapticPressable
-            accessibilityLabel="Close Ferry Plus"
-            accessibilityRole="button"
-            feedback="selection"
-            onPress={() => router.back()}
-            className="size-11 items-center justify-center rounded-full"
-            style={styles.closeButton}
-          >
-            <Ionicons name="close" size={27} color={PLUS_MUTED} />
-          </HapticPressable>
-        </View>
-
-        <View className="items-center pb-6 pt-1">
-          <PlusMark accent={theme.accent} />
-          <Typography
-            weight="600"
-            className="mt-5 text-center text-[24px] tracking-[-0.55px]"
-            style={{ color: PLUS_TEXT }}
-          >
-            Ferry Plus
-          </Typography>
-          <Typography
-            weight="500"
-            className="mt-2 max-w-[280px] text-center text-[14px] leading-5"
-            style={{ color: PLUS_MUTED }}
-          >
-            Move more. Earn faster. Never think about the network underneath.
-          </Typography>
-        </View>
-
-        <View style={styles.benefitsCard}>
-          <Benefit
-            icon="flash"
-            accent={theme.accent}
-            title={`${status?.offer.coveredSends ?? 50} covered sends`}
-            detail={`Move money without network fees for ${status?.offer.durationDays ?? 30} days.`}
-          />
-          <Benefit
-            icon="sparkles"
-            accent={theme.accent}
-            title={`${status?.offer.milesMultiplier ?? 2}× Ferry Miles`}
-            detail="Earn rewards twice as fast on eligible activity."
-          />
-          <Benefit
-            icon="shield-checkmark"
-            accent={theme.accent}
-            title="Private by design"
-            detail="Activate with Face ID and one secure AUSD payment."
-          />
-          <Benefit
-            icon="refresh-circle"
-            accent={theme.accent}
-            title="No automatic renewal"
-            detail="Renew only when you want another Plus period."
-          />
-
-          <View style={styles.allowanceRow}>
-            <Typography
-              weight="700"
-              className="flex-1 text-[12px] uppercase tracking-[1.2px]"
-              style={{ color: PLUS_MUTED }}
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="h-14 flex-row items-center justify-end">
+            <HapticPressable
+              accessibilityLabel="Close Ferry Plus"
+              accessibilityRole="button"
+              feedback="selection"
+              onPress={() => router.back()}
+              className="size-11 items-center justify-center rounded-full"
+              style={styles.closeButton}
             >
-              {status?.active ? "Plus plan" : "Free plan"}
-            </Typography>
+              <Ionicons name="close" size={27} color={PLUS_MUTED} />
+            </HapticPressable>
+          </View>
+
+          <View className="items-center pb-6 pt-1">
+            <PlusMark accent={theme.accent} />
             <Typography
-              weight="700"
-              className="text-[13px]"
+              weight="600"
+              className="mt-5 text-center text-[24px] tracking-[-0.55px]"
               style={{ color: PLUS_TEXT }}
             >
-              {allowanceLabel}
+              Ferry Plus
+            </Typography>
+            <Typography
+              weight="500"
+              className="mt-2 max-w-[280px] text-center text-[14px] leading-5"
+              style={{ color: PLUS_MUTED }}
+            >
+              Move more. Earn faster. Never think about the network underneath.
             </Typography>
           </View>
-        </View>
-      </ScrollView>
 
-      <View style={styles.actionDock}>
-        <HapticPressable
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-          disabled={disabled}
-          feedback="impact"
-          onPress={() => void purchase()}
-          className="h-16 items-center justify-center rounded-full"
-          style={[
-            styles.actionButton,
-            { backgroundColor: PLUS_TEXT },
-            disabled ? styles.actionDisabled : undefined,
-          ]}
-        >
-          <Typography
-            weight="700"
-            className="text-[17px] tracking-[-0.2px]"
-            style={{ color: PLUS_BACKGROUND }}
+          <View style={styles.benefitsCard}>
+            <Benefit
+              icon="flash"
+              accent={theme.accent}
+              title={`${status?.offer.coveredSends ?? 50} covered sends`}
+              detail={`Move money without network fees for ${status?.offer.durationDays ?? 30} days.`}
+            />
+            <Benefit
+              icon="sparkles"
+              accent={theme.accent}
+              title={`${status?.offer.milesMultiplier ?? 2}× Ferry Miles`}
+              detail="Earn rewards twice as fast on eligible activity."
+            />
+            <Benefit
+              icon="shield-checkmark"
+              accent={theme.accent}
+              title="Private by design"
+              detail="Activate with Face ID and one secure AUSD payment."
+            />
+            <Benefit
+              icon="refresh-circle"
+              accent={theme.accent}
+              title="No automatic renewal"
+              detail="Renew only when you want another Plus period."
+            />
+
+            <View style={styles.allowanceRow}>
+              <Typography
+                weight="700"
+                className="flex-1 text-[12px] uppercase tracking-[1.2px]"
+                style={{ color: PLUS_MUTED }}
+              >
+                {status?.active ? "Plus plan" : "Free plan"}
+              </Typography>
+              <Typography
+                weight="700"
+                className="text-[13px]"
+                style={{ color: PLUS_TEXT }}
+              >
+                {allowanceLabel}
+              </Typography>
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={styles.actionDock}>
+          <HapticPressable
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={actionLabel}
+            disabled={disabled}
+            feedback="impact"
+            onPress={() => void purchase()}
+            className="h-16 items-center justify-center rounded-full"
+            style={[
+              styles.actionButton,
+              { backgroundColor: PLUS_TEXT },
+              disabled ? styles.actionDisabled : undefined,
+            ]}
           >
-            {actionLabel}
+            <Typography
+              weight="700"
+              className="text-[17px] tracking-[-0.2px]"
+              style={{ color: PLUS_BACKGROUND }}
+            >
+              {actionLabel}
+            </Typography>
+          </HapticPressable>
+          <Typography
+            weight="500"
+            className="mt-3 text-center text-[11px]"
+            style={{ color: PLUS_MUTED }}
+          >
+            {status?.active && status.activeUntil
+              ? `Active until ${formatDate(status.activeUntil)}`
+              : `One ${status?.offer.price ?? "9.99"} AUSD payment · no subscription`}
           </Typography>
-        </HapticPressable>
-        <Typography
-          weight="500"
-          className="mt-3 text-center text-[11px]"
-          style={{ color: PLUS_MUTED }}
-        >
-          {status?.active && status.activeUntil
-            ? `Active until ${formatDate(status.activeUntil)}`
-            : `One ${status?.offer.price ?? "9.99"} AUSD payment · no subscription`}
-        </Typography>
-      </View>
-    </ScreenLayout>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -327,6 +324,13 @@ function formatDate(value?: string | null) {
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: PLUS_BACKGROUND,
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
   actionButton: {
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 10 },
