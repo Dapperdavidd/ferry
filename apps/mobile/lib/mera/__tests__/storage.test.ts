@@ -1,15 +1,15 @@
+import * as SecureStore from "expo-secure-store";
 import { loadAccount, saveAccount } from "../storage";
-
-const getItemAsync = jest.fn();
-const setItemAsync = jest.fn();
-const deleteItemAsync = jest.fn();
 
 jest.mock("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
-  getItemAsync,
-  setItemAsync,
-  deleteItemAsync,
+  getItemAsync: jest.fn(),
+  setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
 }));
+
+const getItemAsync = jest.mocked(SecureStore.getItemAsync);
+const setItemAsync = jest.mocked(SecureStore.setItemAsync);
 
 const account = {
   address: "0x0000000000000000000000000000000000000001" as const,
