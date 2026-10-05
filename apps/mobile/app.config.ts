@@ -12,8 +12,13 @@ export default (): ExpoConfig => {
   const rpId = process.env.FERRY_RP_ID ?? "ferry.money";
   return {
     ...expo,
+    owner: "samsonnoliens-team",
     plugins: [...(expo.plugins ?? []), "./plugins/with-ios-archive-symbols"],
     ios: { ...expo.ios, associatedDomains: [`webcredentials:${rpId}`] },
-    extra: { ...expo.extra, rpId },
+    extra: {
+      ...expo.extra,
+      rpId,
+      eas: { projectId: "d2310513-43eb-40bf-a3e1-52b86d516466" },
+    },
   };
 };
