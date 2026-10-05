@@ -134,22 +134,21 @@ export default function PlusScreen() {
           </HapticPressable>
         </View>
 
-        <View className="items-center pb-7 pt-5">
+        <View className="items-center pb-6 pt-1">
           <PlusMark accent={theme.accent} />
           <Typography
             weight="600"
-            className="mt-6 text-center text-[27px] tracking-[-0.7px]"
+            className="mt-5 text-center text-[24px] tracking-[-0.55px]"
             style={{ color: PLUS_TEXT }}
           >
-            Ferry Plus Membership
+            Ferry Plus
           </Typography>
           <Typography
             weight="500"
-            className="mt-2 max-w-[300px] text-center text-[15px] leading-[21px]"
+            className="mt-2 max-w-[280px] text-center text-[14px] leading-5"
             style={{ color: PLUS_MUTED }}
           >
-            More covered sends and faster rewards, without exposing the crypto
-            underneath.
+            Move more. Earn faster. Never think about the network underneath.
           </Typography>
         </View>
 
@@ -158,45 +157,41 @@ export default function PlusScreen() {
             icon="flash"
             accent={theme.accent}
             title={`${status?.offer.coveredSends ?? 50} covered sends`}
-            detail={`Ferry covers network fees for ${status?.offer.durationDays ?? 30} days.`}
+            detail={`Move money without network fees for ${status?.offer.durationDays ?? 30} days.`}
           />
           <Benefit
             icon="sparkles"
             accent={theme.accent}
             title={`${status?.offer.milesMultiplier ?? 2}× Ferry Miles`}
-            detail="Earn twice the Miles on new eligible activity."
+            detail="Earn rewards twice as fast on eligible activity."
           />
           <Benefit
             icon="shield-checkmark"
             accent={theme.accent}
-            title="One private approval"
-            detail="Activate with Face ID and a single AUSD payment."
+            title="Private by design"
+            detail="Activate with Face ID and one secure AUSD payment."
           />
           <Benefit
             icon="refresh-circle"
             accent={theme.accent}
             title="No automatic renewal"
-            detail="You decide when another Plus period begins."
+            detail="Renew only when you want another Plus period."
           />
 
           <View style={styles.allowanceRow}>
-            <View
-              className="size-2 rounded-full"
-              style={{ backgroundColor: theme.accent }}
-            />
             <Typography
-              weight="600"
-              className="ml-3 flex-1 text-[13px]"
+              weight="700"
+              className="flex-1 text-[12px] uppercase tracking-[1.2px]"
               style={{ color: PLUS_MUTED }}
             >
-              {allowanceLabel}
+              {status?.active ? "Plus plan" : "Free plan"}
             </Typography>
             <Typography
-              weight="600"
-              className="text-[12px]"
-              style={{ color: PLUS_MUTED }}
+              weight="700"
+              className="text-[13px]"
+              style={{ color: PLUS_TEXT }}
             >
-              Resets {formatDate(status?.coveredSends.resetsAt)}
+              {allowanceLabel}
             </Typography>
           </View>
         </View>
@@ -210,17 +205,17 @@ export default function PlusScreen() {
           disabled={disabled}
           feedback="impact"
           onPress={() => void purchase()}
-          className="h-[66px] items-center justify-center rounded-full"
+          className="h-16 items-center justify-center rounded-full"
           style={[
             styles.actionButton,
-            { backgroundColor: theme.accent },
+            { backgroundColor: PLUS_TEXT },
             disabled ? styles.actionDisabled : undefined,
           ]}
         >
           <Typography
             weight="700"
             className="text-[17px] tracking-[-0.2px]"
-            style={{ color: "#10110F" }}
+            style={{ color: PLUS_BACKGROUND }}
           >
             {actionLabel}
           </Typography>
@@ -347,9 +342,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     bottom: 0,
     left: 0,
-    paddingBottom: 9,
+    paddingBottom: 7,
     paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingTop: 10,
     position: "absolute",
     right: 0,
   },
@@ -358,8 +353,8 @@ const styles = StyleSheet.create({
     borderTopColor: PLUS_BORDER,
     borderTopWidth: 1,
     flexDirection: "row",
-    minHeight: 58,
-    paddingHorizontal: 24,
+    minHeight: 52,
+    paddingHorizontal: 22,
   },
   atmosphere: {
     left: 0,
@@ -370,14 +365,14 @@ const styles = StyleSheet.create({
   benefitRow: {
     alignItems: "center",
     flexDirection: "row",
-    minHeight: 88,
+    minHeight: 72,
     paddingHorizontal: 20,
-    paddingVertical: 13,
+    paddingVertical: 9,
   },
   benefitsCard: {
     backgroundColor: PLUS_CARD,
     borderColor: PLUS_BORDER,
-    borderRadius: 32,
+    borderRadius: 30,
     borderWidth: 1,
     overflow: "hidden",
   },
@@ -387,46 +382,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   markImage: {
-    height: 52,
-    width: 52,
+    height: 45,
+    width: 45,
   },
   markShell: {
     alignItems: "center",
     backgroundColor: "#111311",
     borderColor: "rgba(255,255,255,0.11)",
-    borderRadius: 22,
+    borderRadius: 19,
     borderWidth: 1,
-    height: 84,
+    height: 72,
     justifyContent: "center",
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.34,
     shadowRadius: 22,
-    width: 84,
+    width: 72,
   },
   plusGlow: {
     borderRadius: 24,
-    bottom: 5,
-    height: 36,
-    opacity: 0.28,
+    bottom: 3,
+    height: 31,
+    opacity: 0.23,
     position: "absolute",
-    right: 3,
+    right: 1,
     shadowColor: "#FFFFFF",
     shadowOpacity: 0.8,
     shadowRadius: 15,
-    width: 36,
+    width: 31,
   },
   plusSign: {
     alignItems: "center",
-    bottom: 9,
-    height: 28,
+    bottom: 5,
+    height: 26,
     justifyContent: "center",
     position: "absolute",
-    right: 7,
-    width: 28,
+    right: 4,
+    width: 26,
   },
   scrollContent: {
-    paddingBottom: 126,
+    paddingBottom: 112,
     paddingHorizontal: 22,
   },
 });
