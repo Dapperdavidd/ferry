@@ -30,6 +30,7 @@ import { AUSD_DECIMALS, formatLocalMoney, numberToRaw } from "@/utils/balances";
 import { AppError } from "@/utils/errors";
 import { formatAmount, truncateAddress } from "@/utils/helper";
 import { toSignable } from "@/utils/typedData";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 type PendingSubmission = { intentId: string; signature: string };
 
@@ -43,6 +44,7 @@ const SENT_DWELL_MS = 700;
 const NETWORK_BUSY = "The network is busy. Nothing has been sent.";
 
 export default function ConfirmScreen() {
+  const { theme } = useAppTheme();
   const [isLoading, setIsLoading] = useState(false);
   const { showToast } = useToast();
   const { address, authorize } = useAuth();
@@ -272,7 +274,7 @@ export default function ConfirmScreen() {
 
   return (
     <ThemedScreen
-      className="bg-[#F7F7F4]"
+      style={{ backgroundColor: theme.background }}
       useSafeArea
       safeAreaEdges={["bottom", "left", "right"]}
     >
@@ -326,23 +328,38 @@ export default function ConfirmScreen() {
             </View>
           </View>
         ) : (
-          <View className="mb-5 items-center rounded-[32px] bg-white px-6 py-10">
-            <Typography weight="600" className="text-sm text-black/40">
+          <View
+            className="mb-5 items-center rounded-[32px] border px-6 py-10"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          >
+            <Typography
+              weight="600"
+              className="text-sm"
+              style={{ color: theme.muted }}
+            >
               You&apos;re sending
             </Typography>
             <Typography
               weight="700"
-              className="mt-1 text-[50px] tracking-[-2px] text-black"
+              className="mt-1 text-[50px] tracking-[-2px]"
+              style={{ color: theme.text }}
             >
               ${formatAmount({ amount })}
             </Typography>
-            <Typography weight="600" className="mt-2 text-sm text-black/45">
+            <Typography
+              weight="600"
+              className="mt-2 text-sm"
+              style={{ color: theme.muted }}
+            >
               to {recipientLabel}
             </Typography>
           </View>
         )}
 
-        <View className="rounded-[28px] bg-white px-5 py-2">
+        <View
+          className="rounded-[28px] border px-5 py-2"
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        >
           <SummaryRow
             label="You send"
             value={`$${formatAmount({ amount })} AUSD`}
@@ -360,16 +377,22 @@ export default function ConfirmScreen() {
           <HapticPressable
             disabled={isLoading}
             onPress={handleConfirm}
-            className="h-[62px] flex-row items-center justify-center gap-2 rounded-full bg-black"
+            className="h-[62px] flex-row items-center justify-center gap-2 rounded-full"
+            style={{ backgroundColor: theme.primary }}
           >
-            <Ionicons name="finger-print" size={21} color="#FFFFFF" />
-            <Typography weight="700" className="text-base text-white">
+            <Ionicons name="finger-print" size={21} color={theme.primaryText} />
+            <Typography
+              weight="700"
+              className="text-base"
+              style={{ color: theme.primaryText }}
+            >
               Confirm with Face ID
             </Typography>
           </HapticPressable>
           <Typography
             weight="600"
-            className="mt-3 text-center text-[11px] text-black/30"
+            className="mt-3 text-center text-[11px]"
+            style={{ color: theme.muted }}
           >
             {isDirect
               ? "Recipient and live rate verified by Ferry"
@@ -403,14 +426,23 @@ function SummaryRow({
   value: string;
   last?: boolean;
 }) {
+  const { theme } = useAppTheme();
   return (
     <View
       className={`flex-row items-center justify-between py-4 ${last ? "" : "border-b border-black/[0.06]"}`}
     >
-      <Typography weight="600" className="text-sm text-black/40">
+      <Typography
+        weight="600"
+        className="text-sm"
+        style={{ color: theme.muted }}
+      >
         {label}
       </Typography>
-      <Typography weight="700" className="text-sm text-[#111111]">
+      <Typography
+        weight="700"
+        className="text-sm"
+        style={{ color: theme.text }}
+      >
         {value}
       </Typography>
     </View>

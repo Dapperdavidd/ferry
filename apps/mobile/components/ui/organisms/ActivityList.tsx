@@ -8,6 +8,7 @@ import {
 import { ActivityItem } from "./ActivityItem";
 import { Typography } from "../atoms/Typography";
 import type { ActivityEntry } from "@/utils/activity";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 type ActivityRow = ActivityEntry & {
   onPress?: () => void;
@@ -50,9 +51,10 @@ export const ActivityList = memo(
     hasNextPage = false,
     ListEmptyComponent,
   }: ActivityListProps) => {
+    const { theme } = useAppTheme();
     const emptyState = ListEmptyComponent ?? (
       <View className="items-center py-16">
-        <Typography weight="500" className="text-black/30">
+        <Typography weight="500" style={{ color: theme.muted }}>
           No activity yet
         </Typography>
       </View>
@@ -62,9 +64,20 @@ export const ActivityList = memo(
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ActivityItem {...item} />}
+        renderItem={({ item }) => (
+          <View
+            className="mb-2 rounded-[22px] border px-4"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          >
+            <ActivityItem {...item} />
+          </View>
+        )}
         renderSectionHeader={({ section: { title } }) => (
-          <Typography weight="600" className="text-sm text-black/30">
+          <Typography
+            weight="700"
+            className="mb-2 mt-3 px-1 text-xs uppercase tracking-[1px]"
+            style={{ color: theme.muted }}
+          >
             {formatSectionTitle(title)}
           </Typography>
         )}

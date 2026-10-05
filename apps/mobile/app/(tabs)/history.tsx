@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import TabHeaderText from "@/components/ui/atoms/TabHeaderText";
 import { ScreenLayout } from "@/components/ui/layout";
@@ -15,6 +16,7 @@ import {
   type ActivityEntry,
 } from "@/utils/activity";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { Typography } from "@/components/ui/atoms/Typography";
 
 export default function HistoryScreen() {
   const { theme } = useAppTheme();
@@ -50,6 +52,8 @@ export default function HistoryScreen() {
       onPress: () => handleItemPress(item),
     })),
   }));
+  const completed = rows.filter((row) => row.status === "confirmed").length;
+  const pending = rows.filter((row) => row.status === "pending").length;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -62,7 +66,71 @@ export default function HistoryScreen() {
 
   return (
     <ScreenLayout lightColor={theme.background} darkColor={theme.background}>
-      <TabHeaderText style={{ color: theme.text }}>Activity</TabHeaderText>
+      <TabHeaderText className="pb-3" style={{ color: theme.text }}>
+        Activity
+      </TabHeaderText>
+      <View
+        className="mb-5 overflow-hidden rounded-[28px] border p-5"
+        style={{ backgroundColor: theme.card, borderColor: theme.border }}
+      >
+        <View className="flex-row items-start justify-between">
+          <View>
+            <Typography
+              weight="700"
+              className="text-[11px] uppercase tracking-[1.2px]"
+              style={{ color: theme.muted }}
+            >
+              Wallet pulse
+            </Typography>
+            <Typography
+              weight="700"
+              className="mt-2 text-[28px] tracking-[-0.8px]"
+              style={{ color: theme.text }}
+            >
+              {rows.length} movements
+            </Typography>
+            <Typography
+              weight="500"
+              className="mt-1 text-sm"
+              style={{ color: theme.muted }}
+            >
+              Everything in and out, in one place.
+            </Typography>
+          </View>
+          <View
+            className="size-12 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: theme.accentSoft }}
+          >
+            <Ionicons name="pulse-outline" size={23} color={theme.text} />
+          </View>
+        </View>
+        <View className="mt-5 flex-row gap-2">
+          <StatPill label="Completed" value={completed} color="#22A660" />
+          <StatPill label="Pending" value={pending} color={theme.accent} />
+        </View>
+      </View>
+      <View className="mb-3 flex-row items-center justify-between px-1">
+        <Typography
+          weight="700"
+          className="text-base"
+          style={{ color: theme.text }}
+        >
+          Timeline
+        </Typography>
+        <View
+          className="flex-row items-center gap-1 rounded-full px-3 py-2"
+          style={{ backgroundColor: theme.accentSoft }}
+        >
+          <Typography
+            weight="700"
+            className="text-xs"
+            style={{ color: theme.text }}
+          >
+            All activity
+          </Typography>
+          <Ionicons name="chevron-down" size={13} color={theme.text} />
+        </View>
+      </View>
       <ActivityList
         sections={sections}
         onEndReached={() => fetchNextPage()}
@@ -85,5 +153,42 @@ export default function HistoryScreen() {
         item={selectedItem}
       />
     </ScreenLayout>
+  );
+}
+
+function StatPill({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <View
+      className="flex-1 flex-row items-center rounded-2xl px-3 py-3"
+      style={{ backgroundColor: theme.cardStrong }}
+    >
+      <View
+        className="mr-2 size-2 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      <Typography
+        weight="600"
+        className="flex-1 text-xs"
+        style={{ color: theme.muted }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        weight="700"
+        className="text-sm"
+        style={{ color: theme.text }}
+      >
+        {value}
+      </Typography>
+    </View>
   );
 }

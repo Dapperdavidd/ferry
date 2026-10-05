@@ -21,6 +21,7 @@ import { Typography } from "@/components/ui/atoms/Typography";
 import { QRScannerModal } from "@/components/ui/organisms/send/QRScannerModal";
 import { cn } from "@/utils/cn";
 import { isAddress } from "viem";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 const ERROR_COLOR = "#F90101";
 
@@ -38,6 +39,7 @@ export const AddContactSheet = forwardRef<
   AddContactSheetRef,
   AddContactSheetProps
 >(({ onAdd, existingAddresses }, ref) => {
+  const { theme } = useAppTheme();
   const sheetRef = useRef<BottomSheetModal>(null);
   const scannerRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ["62%"], []);
@@ -122,7 +124,7 @@ export const AddContactSheet = forwardRef<
         android_keyboardInputMode="adjustResize"
         handleIndicatorStyle={{ display: "none" }}
         backgroundStyle={{
-          backgroundColor: "#FFFFFF",
+          backgroundColor: theme.card,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
         }}
@@ -131,28 +133,44 @@ export const AddContactSheet = forwardRef<
         <BottomSheetView className="flex-1 px-6 pb-8 pt-5">
           <View className="mb-6 flex-row items-start justify-end">
             <HapticPressable onPress={handleClose} className="p-1">
-              <Ionicons name="close" size={22} color="#00000066" />
+              <Ionicons name="close" size={22} color={theme.muted} />
             </HapticPressable>
           </View>
 
           <View className="mb-8 items-center">
             <View className="relative">
-              <View className="h-20 w-20 items-center justify-center rounded-full bg-black/[0.04]">
-                <Ionicons name="wallet-outline" size={32} color="#000" />
+              <View
+                className="h-20 w-20 items-center justify-center rounded-full"
+                style={{ backgroundColor: theme.accentSoft }}
+              >
+                <Ionicons name="wallet-outline" size={32} color={theme.text} />
               </View>
-              <View className="absolute -right-1 top-0 h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white">
-                <Ionicons name="pencil" size={14} color="#000" />
+              <View
+                className="absolute -right-1 top-0 h-7 w-7 items-center justify-center rounded-full border"
+                style={{
+                  backgroundColor: theme.cardStrong,
+                  borderColor: theme.border,
+                }}
+              >
+                <Ionicons name="pencil" size={14} color={theme.text} />
               </View>
             </View>
           </View>
 
-          <View className="mb-3 rounded-2xl border border-black/10 px-4 py-3">
+          <View
+            className="mb-3 rounded-2xl border px-4 py-3"
+            style={{
+              backgroundColor: theme.cardStrong,
+              borderColor: theme.border,
+            }}
+          >
             <BottomSheetTextInput
               value={name}
               onChangeText={setName}
               placeholder="Contact name"
-              placeholderTextColor="#00000040"
-              className="text-base text-black"
+              placeholderTextColor={theme.faint}
+              className="text-base"
+              style={{ color: theme.text }}
             />
           </View>
 
@@ -161,23 +179,32 @@ export const AddContactSheet = forwardRef<
               "flex-row items-center rounded-2xl border px-4 py-3",
               addressError ? "border-[#F90101]" : "border-black/10"
             )}
+            style={{
+              backgroundColor: theme.cardStrong,
+              borderColor: addressError ? ERROR_COLOR : theme.border,
+            }}
           >
             <BottomSheetTextInput
               value={address}
               onChangeText={setAddress}
               placeholder="Contact address"
-              placeholderTextColor="#00000040"
-              className="flex-1 text-base text-black"
+              placeholderTextColor={theme.faint}
+              className="flex-1 text-base"
+              style={{ color: theme.text }}
               autoCapitalize="none"
               autoCorrect={false}
             />
             <HapticPressable onPress={handlePaste} className="px-2">
-              <Typography weight="600" className="text-base text-black">
+              <Typography
+                weight="600"
+                className="text-base"
+                style={{ color: theme.text }}
+              >
                 Paste
               </Typography>
             </HapticPressable>
             <HapticPressable onPress={handleScanPress} className="pl-2">
-              <Ionicons name="scan-outline" size={22} color="#000" />
+              <Ionicons name="scan-outline" size={22} color={theme.text} />
             </HapticPressable>
           </View>
 
@@ -196,10 +223,15 @@ export const AddContactSheet = forwardRef<
             disabled={!canSubmit}
             className={cn(
               "mt-6 items-center justify-center rounded-full py-4",
-              canSubmit ? "bg-black" : "bg-black/30"
+              !canSubmit && "opacity-30"
             )}
+            style={{ backgroundColor: theme.primary }}
           >
-            <Typography weight="600" className="text-base text-white">
+            <Typography
+              weight="600"
+              className="text-base"
+              style={{ color: theme.primaryText }}
+            >
               Add contact
             </Typography>
           </HapticPressable>

@@ -18,8 +18,10 @@ import { PremiumActionButton } from "@/components/ui/molecules/PremiumActionButt
 import { txUrl } from "@/lib/chain";
 import { formatLocalMoney } from "@/utils/balances";
 import { formatAmount } from "@/utils/helper";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export default function SuccessScreen() {
+  const { theme } = useAppTheme();
   const {
     amount,
     type,
@@ -46,24 +48,29 @@ export default function SuccessScreen() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] p-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <View className="flex-1 px-6 pb-8 pt-10">
         <View className="items-center">
-          <View className="size-16 items-center justify-center rounded-full bg-black">
-            <Ionicons name="checkmark" size={31} color="#FFFFFF" />
+          <View
+            className="size-16 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.primary }}
+          >
+            <Ionicons name="checkmark" size={31} color={theme.primaryText} />
           </View>
           <Typography
             weight="700"
-            className="mt-8 text-center text-[34px] leading-[40px] tracking-[-1.1px] text-[#111111]"
+            className="mt-8 text-center text-[34px] leading-[40px] tracking-[-1.1px]"
+            style={{ color: theme.text }}
           >
             {isDelivery ? "Money is on its way" : "Sent"}
           </Typography>
           <Typography
             weight="500"
-            className="mt-3 max-w-[300px] text-center text-base leading-6 text-black/45"
+            className="mt-3 max-w-[300px] text-center text-base leading-6"
+            style={{ color: theme.muted }}
           >
             {isDelivery
               ? `${destination} should receive it in under a minute.`
@@ -72,7 +79,13 @@ export default function SuccessScreen() {
         </View>
 
         {isDelivery ? (
-          <View className="relative mt-12 min-h-[220px] overflow-hidden rounded-[32px] border border-white/80 bg-[#EDEEE8] p-6">
+          <View
+            className="relative mt-12 min-h-[220px] overflow-hidden rounded-[32px] border p-6"
+            style={{
+              backgroundColor: theme.cardStrong,
+              borderColor: theme.border,
+            }}
+          >
             <ReceiptArt />
             <Image
               source={require("@/assets/images/logo/ferry-mark-black-2048.png")}
@@ -84,13 +97,18 @@ export default function SuccessScreen() {
               <View className="size-2 rounded-full bg-[#AAA052]" />
               <Typography
                 weight="700"
-                className="text-[10px] uppercase tracking-[1.6px] text-black/45"
+                className="text-[10px] uppercase tracking-[1.6px]"
+                style={{ color: theme.muted }}
               >
                 Local delivery
               </Typography>
             </View>
             <View className="mt-auto">
-              <Typography weight="600" className="text-sm text-black/35">
+              <Typography
+                weight="600"
+                className="text-sm"
+                style={{ color: theme.muted }}
+              >
                 Delivered amount
               </Typography>
               <Typography
@@ -98,16 +116,22 @@ export default function SuccessScreen() {
                 adjustsFontSizeToFit
                 minimumFontScale={0.72}
                 numberOfLines={1}
-                className="mt-1 text-[40px] tracking-[-1.6px] text-[#111111]"
+                className="mt-1 text-[40px] tracking-[-1.6px]"
+                style={{ color: theme.text }}
               >
                 {delivered}
               </Typography>
               <View className="mt-3 flex-row items-center gap-2">
-                <Ionicons name="business-outline" size={15} color="#11111166" />
+                <Ionicons
+                  name="business-outline"
+                  size={15}
+                  color={theme.muted}
+                />
                 <Typography
                   weight="600"
                   numberOfLines={1}
-                  className="max-w-[280px] text-xs text-black/45"
+                  className="max-w-[280px] text-xs"
+                  style={{ color: theme.muted }}
                 >
                   {destination}
                 </Typography>
@@ -126,10 +150,14 @@ export default function SuccessScreen() {
               onPress={() => void Linking.openURL(txUrl(txHash))}
               className="h-11 flex-row items-center justify-center gap-2"
             >
-              <Typography weight="700" className="text-sm text-black/45">
+              <Typography
+                weight="700"
+                className="text-sm"
+                style={{ color: theme.muted }}
+              >
                 View receipt on Monad
               </Typography>
-              <Ionicons name="arrow-up-outline" size={15} color="#11111173" />
+              <Ionicons name="arrow-up-outline" size={15} color={theme.muted} />
             </HapticPressable>
           ) : null}
           <PremiumActionButton

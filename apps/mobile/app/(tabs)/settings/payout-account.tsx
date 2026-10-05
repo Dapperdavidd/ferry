@@ -15,8 +15,10 @@ import {
   type PayoutNetwork,
 } from "@/utils/apiClient";
 import { cn } from "@/utils/cn";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export default function PayoutAccountScreen() {
+  const { theme } = useAppTheme();
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<PayoutNetwork | null>(null);
@@ -65,9 +67,9 @@ export default function PayoutAccountScreen() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] p-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -81,15 +83,20 @@ export default function PayoutAccountScreen() {
             accessibilityRole="button"
             accessibilityLabel="Go back"
             feedback="selection"
-            className="z-10 size-12 items-center justify-center rounded-full bg-white"
+            className="z-10 size-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="chevron-back" size={24} color="#111111" />
+            <Ionicons name="chevron-back" size={24} color={theme.text} />
           </HapticPressable>
           <View
             pointerEvents="none"
             className="absolute inset-x-0 items-center"
           >
-            <Typography weight="700" className="text-[20px] tracking-[-0.3px]">
+            <Typography
+              weight="700"
+              className="text-[20px] tracking-[-0.3px]"
+              style={{ color: theme.text }}
+            >
               Bank account
             </Typography>
           </View>
@@ -99,40 +106,64 @@ export default function PayoutAccountScreen() {
         <Typography
           weight="700"
           className="max-w-[330px] text-[31px] leading-[36px] tracking-[-1px]"
+          style={{ color: theme.text }}
         >
           Add your bank account.
         </Typography>
         <Typography
           weight="500"
-          className="mt-2 max-w-[340px] text-[15px] leading-[22px] text-black/45"
+          className="mt-2 max-w-[340px] text-[15px] leading-[22px]"
+          style={{ color: theme.muted }}
         >
           Cash-outs arrive here. Ferry verifies the account name before saving.
         </Typography>
 
         {account.data ? (
-          <View className="mt-6 rounded-[26px] border border-white/80 bg-[#EDEEE8] p-5">
+          <View
+            className="mt-6 rounded-[26px] border p-5"
+            style={{
+              backgroundColor: theme.cardStrong,
+              borderColor: theme.border,
+            }}
+          >
             <Typography
               weight="700"
-              className="text-[10px] uppercase tracking-[1.5px] text-black/40"
+              className="text-[10px] uppercase tracking-[1.5px]"
+              style={{ color: theme.muted }}
             >
               Current payout account
             </Typography>
-            <Typography weight="700" className="mt-4 text-xl text-[#111111]">
+            <Typography
+              weight="700"
+              className="mt-4 text-xl"
+              style={{ color: theme.text }}
+            >
               {account.data.accountName}
             </Typography>
-            <Typography weight="500" className="mt-1 text-sm text-black/45">
+            <Typography
+              weight="500"
+              className="mt-1 text-sm"
+              style={{ color: theme.muted }}
+            >
               {account.data.bankName} · •••• {account.data.accountEnding}
             </Typography>
           </View>
         ) : null}
 
         <View className="mt-7">
-          <Typography weight="700" className="mb-3 text-sm text-black/45">
+          <Typography
+            weight="700"
+            className="mb-3 text-sm"
+            style={{ color: theme.muted }}
+          >
             Choose bank
           </Typography>
-          <View className="overflow-hidden rounded-[26px] bg-white">
+          <View
+            className="overflow-hidden rounded-[26px] border"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          >
             {networks.isLoading ? (
-              <ActivityIndicator className="my-8" color="#111111" />
+              <ActivityIndicator className="my-8" color={theme.text} />
             ) : networks.isError ? (
               <Typography className="p-5 text-sm text-red-500">
                 {apiErrorMessage(networks.error) ??
@@ -152,7 +183,11 @@ export default function PayoutAccountScreen() {
                     index > 0 && "border-t border-black/[0.05]"
                   )}
                 >
-                  <Typography weight="600" className="text-base">
+                  <Typography
+                    weight="600"
+                    className="text-base"
+                    style={{ color: theme.text }}
+                  >
                     {network.name}
                   </Typography>
                   <Ionicons
@@ -162,7 +197,9 @@ export default function PayoutAccountScreen() {
                         : "ellipse-outline"
                     }
                     size={22}
-                    color={selected?.id === network.id ? "#111111" : "#C4C4C4"}
+                    color={
+                      selected?.id === network.id ? theme.accent : theme.faint
+                    }
                   />
                 </HapticPressable>
               ))
@@ -171,7 +208,11 @@ export default function PayoutAccountScreen() {
         </View>
 
         <View className="mt-6">
-          <Typography weight="700" className="mb-3 text-sm text-black/45">
+          <Typography
+            weight="700"
+            className="mb-3 text-sm"
+            style={{ color: theme.muted }}
+          >
             Account number
           </Typography>
           <TextInput
@@ -180,12 +221,17 @@ export default function PayoutAccountScreen() {
               setAccountNumber(value.replace(/[^0-9]/g, ""))
             }
             placeholder="Enter account number"
-            placeholderTextColor="rgba(0,0,0,0.25)"
+            placeholderTextColor={theme.faint}
             keyboardType="number-pad"
             returnKeyType="done"
             maxLength={24}
             accessibilityLabel="Account number"
-            className="rounded-[24px] bg-white px-5 py-[19px] text-[17px] font-semibold text-black"
+            className="rounded-[24px] border px-5 py-[19px] text-[17px] font-semibold"
+            style={{
+              backgroundColor: theme.card,
+              borderColor: theme.border,
+              color: theme.text,
+            }}
           />
         </View>
 

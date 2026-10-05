@@ -21,6 +21,7 @@ import { formatUsdFromString, rawToNumber } from "@/utils/balances";
 import { cn } from "@/utils/cn";
 import { truncateAddress } from "@/utils/helper";
 import { describeToken, formatTokenAmount } from "@/utils/tokens";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 interface TransactionDetailModalProps {
   visible: boolean;
@@ -60,7 +61,8 @@ export function TransactionDetailModal({
   item,
 }: TransactionDetailModalProps) {
   const { contacts } = useContacts();
-  const copyIconColor = "rgba(0,0,0,0.3)";
+  const { theme } = useAppTheme();
+  const copyIconColor = theme.muted;
 
   if (!item) return null;
 
@@ -97,26 +99,45 @@ export function TransactionDetailModal({
 
         <View className="relative mb-3">
           <TokenMark token={item.token} size={64} />
-          <View className="absolute right-0 top-0 overflow-hidden rounded-full bg-white">
+          <View
+            className="absolute right-0 top-0 overflow-hidden rounded-full"
+            style={{ backgroundColor: theme.card }}
+          >
             <Ionicons name={status.icon} size={16} color={status.color} />
           </View>
         </View>
 
-        <Typography weight="600" className="mb-1 text-sm text-black/30">
+        <Typography
+          weight="600"
+          className="mb-1 text-sm"
+          style={{ color: theme.muted }}
+        >
           {statusLabel(item)}
         </Typography>
 
-        <Typography weight="700" className="mb-1 text-3xl">
+        <Typography
+          weight="700"
+          className="mb-1 text-3xl"
+          style={{ color: theme.text }}
+        >
           {amount} {symbol}
         </Typography>
 
         {item.usdValue !== null && (
-          <Typography weight="600" className="mb-1 text-base text-black/30">
+          <Typography
+            weight="600"
+            className="mb-1 text-base"
+            style={{ color: theme.muted }}
+          >
             {formatUsdFromString(item.usdValue)}
           </Typography>
         )}
 
-        <Typography weight="600" className="mb-4 text-sm text-black/30">
+        <Typography
+          weight="600"
+          className="mb-4 text-sm"
+          style={{ color: theme.muted }}
+        >
           {date}
         </Typography>
 

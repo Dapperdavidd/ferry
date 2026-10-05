@@ -3,6 +3,8 @@ import { View, ViewStyle, StyleProp } from "react-native";
 import { SafeAreaView, Edge } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { cn } from "@/utils/cn";
+import { useAppTheme } from "@/contexts/AppThemeContext";
+import { ThemeBackdrop } from "@/components/ui/atoms/ThemeBackdrop";
 
 interface ThemedScreenProps {
   children: React.ReactNode;
@@ -19,13 +21,16 @@ export function ThemedScreen({
   useSafeArea = true,
   safeAreaEdges = ["top", "right", "bottom", "left"],
 }: ThemedScreenProps) {
-  const containerClass = cn("flex-1 bg-white", className);
+  const { theme } = useAppTheme();
+  const containerClass = cn("flex-1", className);
+  const themedStyle = [{ backgroundColor: theme.background }, style];
 
   const content = (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style={theme.dark ? "light" : "dark"} />
       {/* MEASURED-LAYOUT */}
-      <View className={containerClass} style={style}>
+      <View className={containerClass} style={themedStyle}>
+        <ThemeBackdrop quiet />
         {children}
       </View>
     </>
@@ -37,7 +42,7 @@ export function ThemedScreen({
       <SafeAreaView
         edges={safeAreaEdges}
         className={containerClass}
-        style={style}
+        style={themedStyle}
       >
         {content}
       </SafeAreaView>

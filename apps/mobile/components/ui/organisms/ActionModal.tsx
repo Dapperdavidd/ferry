@@ -10,7 +10,6 @@ import {
 import { Typography } from "@/components/ui/atoms/Typography";
 import { FrostBlurView } from "@/components/ui/atoms/FrostBlurView";
 import { ThemedText } from "@/components/ui/atoms";
-import { useThemeColor } from "@/hooks/useThemeColor";
 import Animated, {
   useSharedValue,
   // useAnimatedStyle,
@@ -22,6 +21,7 @@ import {
   Gesture,
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export interface ActionModalProps {
   visible: boolean;
@@ -75,8 +75,9 @@ export function ActionModal({
   children,
   useStarburstModal = false,
 }: ActionModalProps): ReactElement {
-  const backgroundColor = useThemeColor({}, "background");
-  const textColor = useThemeColor({}, "text");
+  const { theme } = useAppTheme();
+  const backgroundColor = theme.card;
+  const textColor = theme.text;
 
   const translateY = useSharedValue(0);
 

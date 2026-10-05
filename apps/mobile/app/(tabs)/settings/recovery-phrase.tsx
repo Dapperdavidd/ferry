@@ -7,12 +7,14 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { ThemedButton } from "@/components/ui/molecules/ThemedButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { mnemonicFromPrf, signInWithPasskey, zero } from "@/lib/mera";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 /**
  * The 24 words are the PRF output in BIP-39 form. Anyone with them has the
  * account, so they are shown once, after a fresh Face ID, and never stored.
  */
 export default function RecoveryPhraseScreen() {
+  const { theme } = useAppTheme();
   const router = useRouter();
   const { account } = useAuth();
   const [words, setWords] = useState<string[] | null>(null);
@@ -42,10 +44,14 @@ export default function RecoveryPhraseScreen() {
   return (
     <ScreenLayout>
       <ScrollView contentContainerClassName="px-6 pb-10 pt-4">
-        <Typography weight="700" className="text-3xl">
+        <Typography
+          weight="700"
+          className="text-3xl"
+          style={{ color: theme.text }}
+        >
           Recovery phrase
         </Typography>
-        <Typography className="mt-2 text-base text-black/60">
+        <Typography className="mt-2 text-base" style={{ color: theme.muted }}>
           Your passkey is the key to this account. These 24 words are the same
           key written out, so any wallet can restore it. Anyone who sees them
           can spend your money. Write them somewhere private, never in a photo
@@ -57,12 +63,21 @@ export default function RecoveryPhraseScreen() {
             {words.map((word, index) => (
               <View
                 key={index}
-                className="w-[30%] flex-row items-center gap-2 rounded-xl bg-black/[0.04] px-3 py-2"
+                className="w-[30%] flex-row items-center gap-2 rounded-xl px-3 py-2"
+                style={{ backgroundColor: theme.card }}
               >
-                <Typography weight="500" className="text-xs text-black/40">
+                <Typography
+                  weight="500"
+                  className="text-xs"
+                  style={{ color: theme.muted }}
+                >
                   {index + 1}
                 </Typography>
-                <Typography weight="600" className="text-sm">
+                <Typography
+                  weight="600"
+                  className="text-sm"
+                  style={{ color: theme.text }}
+                >
                   {word}
                 </Typography>
               </View>

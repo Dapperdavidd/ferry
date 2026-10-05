@@ -17,6 +17,7 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { apiClient, apiErrorMessage } from "@/utils/apiClient";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 const HANDLE = /^[a-z0-9_]{3,20}$/;
 
@@ -34,6 +35,7 @@ const HOMES = [
 type Home = (typeof HOMES)[number];
 
 export default function OnboardingScreen() {
+  const { theme } = useAppTheme();
   const { signOut, setUser } = useAuth();
   const [handle, setHandle] = useState("");
   const [home, setHome] = useState<Home | null>(null);
@@ -104,8 +106,12 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <ScreenLayout className="bg-[#FAFAF8] p-0" lightColor="#FAFAF8">
-      <StatusBar style="dark" />
+    <ScreenLayout
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
+    >
+      <StatusBar style={theme.dark ? "light" : "dark"} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
@@ -127,7 +133,11 @@ export default function OnboardingScreen() {
               onPress={() => void signOut()}
               style={{ paddingHorizontal: 4, paddingVertical: 10 }}
             >
-              <Typography weight="500" className="text-sm text-black/45">
+              <Typography
+                weight="500"
+                className="text-sm"
+                style={{ color: theme.muted }}
+              >
                 Sign out
               </Typography>
             </HapticPressable>
@@ -136,33 +146,44 @@ export default function OnboardingScreen() {
           <View className="pb-5 pt-8">
             <Typography
               weight="600"
-              className="max-w-[320px] text-[34px] leading-[39px] tracking-[-1.2px] text-[#111111]"
+              className="max-w-[320px] text-[34px] leading-[39px] tracking-[-1.2px]"
+              style={{ color: theme.text }}
             >
               Finish your setup
             </Typography>
             <Typography
               weight="400"
-              className="mt-3 max-w-[330px] text-base leading-6 text-black/50"
+              className="mt-3 max-w-[330px] text-base leading-6"
+              style={{ color: theme.muted }}
             >
               Pick how people find you and the currency you use at home.
             </Typography>
           </View>
 
           <View>
-            <Typography weight="600" className="mb-2.5 text-sm text-black/70">
+            <Typography
+              weight="600"
+              className="mb-2.5 text-sm"
+              style={{ color: theme.text }}
+            >
               Your handle
             </Typography>
             <View
-              className="flex-row items-center rounded-[20px] border bg-white px-5"
+              className="flex-row items-center rounded-[20px] border px-5"
               style={{
                 height: 62,
+                backgroundColor: theme.card,
                 borderColor:
                   available === false || (!!handle && !valid)
                     ? "#DC2626"
-                    : "rgba(17,17,17,0.10)",
+                    : theme.border,
               }}
             >
-              <Typography weight="600" className="mr-1 text-xl text-black/35">
+              <Typography
+                weight="600"
+                className="mr-1 text-xl"
+                style={{ color: theme.faint }}
+              >
                 @
               </Typography>
               <TextInput
@@ -177,14 +198,18 @@ export default function OnboardingScreen() {
                 autoComplete="username"
                 maxLength={20}
                 placeholder="yourname"
-                placeholderTextColor="rgba(17,17,17,0.26)"
-                className="h-full flex-1 text-xl text-[#111111]"
-                style={{ fontFamily: "Inter_600SemiBold" }}
+                placeholderTextColor={theme.faint}
+                className="h-full flex-1 text-xl"
+                style={{ fontFamily: "Inter_600SemiBold", color: theme.text }}
               />
               {checking || (valid && cleaned !== debounced) ? (
                 <ActivityIndicator size="small" color="rgba(17,17,17,0.35)" />
               ) : available === true ? (
-                <Ionicons name="checkmark-circle" size={22} color="#111111" />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={22}
+                  color={theme.accent}
+                />
               ) : null}
             </View>
             <Typography
@@ -200,7 +225,11 @@ export default function OnboardingScreen() {
           </View>
 
           <View className="mt-6">
-            <Typography weight="600" className="mb-2.5 text-sm text-black/70">
+            <Typography
+              weight="600"
+              className="mb-2.5 text-sm"
+              style={{ color: theme.text }}
+            >
               Home currency
             </Typography>
             <View className="flex-row flex-wrap justify-between gap-y-2">
@@ -216,8 +245,8 @@ export default function OnboardingScreen() {
                     }}
                     style={{
                       alignItems: "center",
-                      backgroundColor: selected ? "#111111" : "#FFFFFF",
-                      borderColor: selected ? "#111111" : "rgba(17,17,17,0.10)",
+                      backgroundColor: selected ? theme.primary : theme.card,
+                      borderColor: selected ? theme.primary : theme.border,
                       borderRadius: 16,
                       borderWidth: 1,
                       flexDirection: "row",
@@ -230,23 +259,29 @@ export default function OnboardingScreen() {
                     <View>
                       <Typography
                         weight="600"
-                        className={selected ? "text-white" : "text-[#111111]"}
+                        style={{
+                          color: selected ? theme.primaryText : theme.text,
+                        }}
                       >
                         {option.currency}
                       </Typography>
                       <Typography
                         weight="500"
-                        className={
-                          selected
-                            ? "text-[10px] text-white/50"
-                            : "text-[10px] text-black/35"
-                        }
+                        className="text-[10px]"
+                        style={{
+                          color: selected ? theme.primaryText : theme.muted,
+                          opacity: selected ? 0.65 : 1,
+                        }}
                       >
                         {option.country}
                       </Typography>
                     </View>
                     {selected ? (
-                      <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                      <Ionicons
+                        name="checkmark"
+                        size={18}
+                        color={theme.primaryText}
+                      />
                     ) : null}
                   </HapticPressable>
                 );
@@ -268,22 +303,21 @@ export default function OnboardingScreen() {
               onPress={() => void finishSetup()}
               style={{
                 alignItems: "center",
-                backgroundColor: canContinue
-                  ? "#111111"
-                  : "rgba(17,17,17,0.10)",
+                backgroundColor: canContinue ? theme.primary : theme.cardStrong,
                 borderRadius: 22,
                 height: 60,
                 justifyContent: "center",
               }}
             >
               {saving ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={theme.primaryText} />
               ) : (
                 <Typography
                   weight="600"
-                  className={
-                    canContinue ? "text-lg text-white" : "text-lg text-black/30"
-                  }
+                  className="text-lg"
+                  style={{
+                    color: canContinue ? theme.primaryText : theme.faint,
+                  }}
                 >
                   Continue to Ferry
                 </Typography>

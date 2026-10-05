@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { cn } from "@/utils/cn";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 interface EditWalletModalProps {
   visible: boolean;
@@ -39,6 +40,7 @@ export function EditWalletModal({
   onSave,
   placeholder = "Wallet name",
 }: EditWalletModalProps) {
+  const { theme } = useAppTheme();
   const [name, setName] = useState(initialName);
   const inputRef = useRef<TextInput>(null);
 
@@ -81,9 +83,15 @@ export function EditWalletModal({
           pointerEvents="box-none"
         >
           <Pressable onPress={() => {}} style={styles.cardWrapper}>
-            <View className="w-[88%] self-center rounded-3xl bg-white p-6">
+            <View
+              className="w-[88%] self-center rounded-3xl border p-6"
+              style={{ backgroundColor: theme.card, borderColor: theme.border }}
+            >
               <View className="mb-4 flex-row items-start justify-between">
-                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-black">
+                <View
+                  className="h-12 w-12 items-center justify-center rounded-2xl"
+                  style={{ backgroundColor: theme.primary }}
+                >
                   <Image
                     source={require("@/assets/icons/edit-wallet.png")}
                     className="size-6"
@@ -91,7 +99,7 @@ export function EditWalletModal({
                   />
                 </View>
                 <HapticPressable onPress={onClose} className="p-1">
-                  <Ionicons name="close" size={22} color="#00000066" />
+                  <Ionicons name="close" size={22} color={theme.muted} />
                 </HapticPressable>
               </View>
 
@@ -101,13 +109,18 @@ export function EditWalletModal({
                   value={name}
                   onChangeText={setName}
                   placeholder={placeholder}
-                  placeholderTextColor="#00000040"
-                  className="text-center text-2xl font-bold text-black"
+                  placeholderTextColor={theme.faint}
+                  className="text-center text-2xl font-bold"
+                  style={{ color: theme.text }}
                   blurOnSubmit={false}
                   returnKeyType="done"
                   onSubmitEditing={handleSave}
                 />
-                <Typography weight="500" className="mt-1 text-sm text-black/40">
+                <Typography
+                  weight="500"
+                  className="mt-1 text-sm"
+                  style={{ color: theme.muted }}
+                >
                   {truncate(address)}
                 </Typography>
               </View>
@@ -117,10 +130,15 @@ export function EditWalletModal({
                 disabled={!canSave}
                 className={cn(
                   "mt-6 items-center justify-center rounded-full py-4",
-                  canSave ? "bg-black" : "bg-black/30"
+                  !canSave && "opacity-30"
                 )}
+                style={{ backgroundColor: theme.primary }}
               >
-                <Typography weight="600" className="text-base text-white">
+                <Typography
+                  weight="600"
+                  className="text-base"
+                  style={{ color: theme.primaryText }}
+                >
                   Save
                 </Typography>
               </HapticPressable>

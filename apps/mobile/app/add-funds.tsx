@@ -15,8 +15,10 @@ import { useToast } from "@/contexts/ToastContext";
 import { useWalletAddress } from "@/hooks/useWalletAddress";
 import { monad } from "@/lib/chain";
 import { apiClient, apiErrorMessage } from "@/utils/apiClient";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export default function AddFundsScreen() {
+  const { theme } = useAppTheme();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const address = useWalletAddress();
@@ -45,9 +47,9 @@ export default function AddFundsScreen() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] p-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <ScrollView
         className="flex-1"
@@ -59,9 +61,10 @@ export default function AddFundsScreen() {
             accessibilityLabel="Go back"
             feedback="selection"
             onPress={() => router.back()}
-            className="z-10 size-12 items-center justify-center rounded-full bg-white"
+            className="z-10 size-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="chevron-back" size={25} color="#111111" />
+            <Ionicons name="chevron-back" size={25} color={theme.text} />
           </HapticPressable>
 
           <View
@@ -70,7 +73,8 @@ export default function AddFundsScreen() {
           >
             <Typography
               weight="700"
-              className="text-[20px] tracking-[-0.3px] text-[#111111]"
+              className="text-[20px] tracking-[-0.3px]"
+              style={{ color: theme.text }}
             >
               Add funds
             </Typography>
@@ -80,7 +84,10 @@ export default function AddFundsScreen() {
 
         <View className="mt-12">
           <SectionTitle>Available now</SectionTitle>
-          <View className="mt-5 overflow-hidden rounded-[28px] bg-white">
+          <View
+            className="mt-5 overflow-hidden rounded-[28px] border"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          >
             {testnet ? (
               <FundingRow
                 icon={<TokenMark token="AUSD" size={48} />}
@@ -90,9 +97,9 @@ export default function AddFundsScreen() {
                 onPress={() => void addTestFunds()}
                 trailing={
                   funding ? (
-                    <ActivityIndicator color="#111111" />
+                    <ActivityIndicator color={theme.text} />
                   ) : (
-                    <Ionicons name="add" size={26} color="#111111" />
+                    <Ionicons name="add" size={26} color={theme.text} />
                   )
                 }
                 disabled={funding}
@@ -101,15 +108,26 @@ export default function AddFundsScreen() {
 
             <FundingRow
               icon={
-                <View className="size-12 items-center justify-center rounded-full bg-black/[0.04]">
-                  <Ionicons name="qr-code-outline" size={22} color="#111111" />
+                <View
+                  className="size-12 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.accentSoft }}
+                >
+                  <Ionicons
+                    name="qr-code-outline"
+                    size={22}
+                    color={theme.text}
+                  />
                 </View>
               }
               title="Receive AUSD"
               description="Handle, QR, or wallet address"
               onPress={() => setReceiveVisible(true)}
               trailing={
-                <Ionicons name="chevron-forward" size={22} color="#A3A3A0" />
+                <Ionicons
+                  name="chevron-forward"
+                  size={22}
+                  color={theme.faint}
+                />
               }
               bordered={testnet}
             />
@@ -118,11 +136,21 @@ export default function AddFundsScreen() {
 
         <View className="mt-11">
           <SectionTitle>More ways to add</SectionTitle>
-          <View className="mt-5 overflow-hidden rounded-[28px] bg-white">
+          <View
+            className="mt-5 overflow-hidden rounded-[28px] border"
+            style={{ backgroundColor: theme.card, borderColor: theme.border }}
+          >
             <FundingRow
               icon={
-                <View className="size-12 items-center justify-center rounded-full bg-black/[0.04]">
-                  <Ionicons name="business-outline" size={23} color="#111111" />
+                <View
+                  className="size-12 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.accentSoft }}
+                >
+                  <Ionicons
+                    name="business-outline"
+                    size={23}
+                    color={theme.text}
+                  />
                 </View>
               }
               title="USD bank transfer"
@@ -133,22 +161,34 @@ export default function AddFundsScreen() {
             />
             <FundingRow
               icon={
-                <View className="size-12 items-center justify-center rounded-full bg-black/[0.04]">
-                  <Ionicons name="swap-horizontal" size={23} color="#111111" />
+                <View
+                  className="size-12 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.accentSoft }}
+                >
+                  <Ionicons
+                    name="swap-horizontal"
+                    size={23}
+                    color={theme.text}
+                  />
                 </View>
               }
               title="Deposit USDC"
               description="USDC → AUSD, delivered on Monad"
               onPress={() => router.push("/deposit-usdc")}
               trailing={
-                <Ionicons name="chevron-forward" size={22} color="#A3A3A0" />
+                <Ionicons
+                  name="chevron-forward"
+                  size={22}
+                  color={theme.faint}
+                />
               }
               bordered
             />
           </View>
           <Typography
             weight="500"
-            className="mx-2 mt-4 text-[13px] leading-5 text-black/35"
+            className="mx-2 mt-4 text-[13px] leading-5"
+            style={{ color: theme.muted }}
           >
             USDC deposits convert to AUSD through Agora. Bank transfers require
             additional verification and will follow later.
@@ -170,10 +210,12 @@ export default function AddFundsScreen() {
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
+  const { theme } = useAppTheme();
   return (
     <Typography
       weight="700"
-      className="text-[22px] tracking-[-0.4px] text-black/55"
+      className="text-[22px] tracking-[-0.4px]"
+      style={{ color: theme.text }}
     >
       {children}
     </Typography>
@@ -201,6 +243,7 @@ function FundingRow({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const { theme } = useAppTheme();
   return (
     <HapticPressable
       accessibilityRole="button"
@@ -218,7 +261,8 @@ function FundingRow({
         <View className="flex-row items-center gap-2">
           <Typography
             weight="700"
-            className="text-[18px] tracking-[-0.3px] text-[#111111]"
+            className="text-[18px] tracking-[-0.3px]"
+            style={{ color: theme.text }}
           >
             {title}
           </Typography>
@@ -230,7 +274,11 @@ function FundingRow({
             </View>
           ) : null}
         </View>
-        <Typography weight="500" className="mt-1 text-[13px] text-black/40">
+        <Typography
+          weight="500"
+          className="mt-1 text-[13px]"
+          style={{ color: theme.muted }}
+        >
           {description}
         </Typography>
       </View>
@@ -240,6 +288,9 @@ function FundingRow({
             ? "items-center justify-center"
             : "size-11 items-center justify-center rounded-full bg-black/[0.035]"
         }
+        style={
+          !bareTrailing ? { backgroundColor: theme.cardStrong } : undefined
+        }
       >
         {trailing}
       </View>
@@ -248,9 +299,17 @@ function FundingRow({
 }
 
 function RouteBadge({ label }: { label: string }) {
+  const { theme } = useAppTheme();
   return (
-    <View className="rounded-full bg-black/[0.055] px-2.5 py-1.5">
-      <Typography weight="700" className="text-[11px] text-black/45">
+    <View
+      className="rounded-full px-2.5 py-1.5"
+      style={{ backgroundColor: theme.cardStrong }}
+    >
+      <Typography
+        weight="700"
+        className="text-[11px]"
+        style={{ color: theme.muted }}
+      >
         {label}
       </Typography>
     </View>

@@ -66,6 +66,7 @@ export default function AppearanceScreen() {
           <ThemeOption
             key={id}
             palette={APP_THEMES[id]}
+            surface={theme}
             selected={themeId === id}
             onPress={() => setTheme(id)}
           />
@@ -77,10 +78,12 @@ export default function AppearanceScreen() {
 
 function ThemeOption({
   palette,
+  surface,
   selected,
   onPress,
 }: {
   palette: AppTheme;
+  surface: AppTheme;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -94,7 +97,7 @@ function ThemeOption({
       onPress={onPress}
       className="flex-row items-center rounded-[24px] border p-3"
       style={{
-        backgroundColor: palette.card,
+        backgroundColor: surface.card,
         borderColor: selected ? palette.accent : palette.border,
         borderWidth: selected ? 2 : 1,
       }}
@@ -127,14 +130,14 @@ function ThemeOption({
         <Typography
           weight="700"
           className="text-[16px]"
-          style={{ color: palette.text }}
+          style={{ color: surface.text }}
         >
           {palette.name}
         </Typography>
         <Typography
           weight="500"
           className="mt-1 text-[12px]"
-          style={{ color: palette.muted }}
+          style={{ color: surface.muted }}
         >
           {palette.description}
         </Typography>
@@ -142,7 +145,7 @@ function ThemeOption({
 
       <View
         className="size-7 items-center justify-center rounded-full border-2"
-        style={{ borderColor: selected ? palette.accent : palette.faint }}
+        style={{ borderColor: selected ? palette.accent : surface.faint }}
       >
         {selected ? (
           <View

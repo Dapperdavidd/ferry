@@ -36,12 +36,14 @@ import {
 import { cn } from "@/utils/cn";
 import { AppError } from "@/utils/errors";
 import { toSignable } from "@/utils/typedData";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 /**
  * Cash out is framed as bank delivery. Agora and Monad stay visible on the
  * receipt, while this screen answers what leaves, what arrives, and where.
  */
 export default function CashoutScreen() {
+  const { theme } = useAppTheme();
   const { user, authorize } = useAuth();
   const { total } = useBalances();
   const { showToast } = useToast();
@@ -189,9 +191,9 @@ export default function CashoutScreen() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] p-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <View className="flex-1 px-6 pb-5 pt-2">
         <View className="relative h-16 flex-row items-center justify-between">
@@ -201,9 +203,10 @@ export default function CashoutScreen() {
             accessibilityLabel="Go back"
             feedback="selection"
             onPress={() => router.back()}
-            className="z-10 size-12 items-center justify-center rounded-full bg-white"
+            className="z-10 size-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="chevron-back" size={25} color="#111111" />
+            <Ionicons name="chevron-back" size={25} color={theme.text} />
           </HapticPressable>
           <View
             pointerEvents="none"
@@ -211,7 +214,8 @@ export default function CashoutScreen() {
           >
             <Typography
               weight="700"
-              className="text-[20px] tracking-[-0.3px] text-[#111111]"
+              className="text-[20px] tracking-[-0.3px]"
+              style={{ color: theme.text }}
             >
               Cash out
             </Typography>
@@ -226,7 +230,8 @@ export default function CashoutScreen() {
             <View className="items-center pb-3 pt-5">
               <Typography
                 weight="700"
-                className="text-[12px] uppercase tracking-[1.5px] text-black/30"
+                className="text-[12px] uppercase tracking-[1.5px]"
+                style={{ color: theme.muted }}
               >
                 You send
               </Typography>
@@ -237,8 +242,9 @@ export default function CashoutScreen() {
                 numberOfLines={1}
                 className={cn(
                   "mt-1 w-full text-center text-[58px] tracking-[-2.7px]",
-                  amount ? "text-[#111111]" : "text-black/15"
+                  !amount && "opacity-20"
                 )}
+                style={{ color: theme.text }}
               >
                 ${formattedAmount}
               </Typography>
@@ -248,7 +254,8 @@ export default function CashoutScreen() {
                 accessibilityLabel={`Use maximum balance, ${formatAmount(total)} AUSD`}
                 feedback="selection"
                 onPress={() => setAmount(Math.min(total, 5_000).toFixed(2))}
-                className="mt-2 flex-row items-center gap-2 rounded-full bg-black/[0.045] py-2 pl-2 pr-3"
+                className="mt-2 flex-row items-center gap-2 rounded-full py-2 pl-2 pr-3"
+                style={{ backgroundColor: theme.accentSoft }}
               >
                 <View className="size-6 items-center justify-center rounded-full bg-[#AAA052]">
                   <Image
@@ -257,10 +264,18 @@ export default function CashoutScreen() {
                     className="size-3.5"
                   />
                 </View>
-                <Typography weight="700" className="text-xs text-black/45">
+                <Typography
+                  weight="700"
+                  className="text-xs"
+                  style={{ color: theme.muted }}
+                >
                   {formatAmount(total)} AUSD available
                 </Typography>
-                <Typography weight="800" className="text-[10px] text-black/65">
+                <Typography
+                  weight="800"
+                  className="text-[10px]"
+                  style={{ color: theme.text }}
+                >
                   MAX
                 </Typography>
               </HapticPressable>
@@ -287,7 +302,8 @@ export default function CashoutScreen() {
               ) : quote ? (
                 <Typography
                   weight="600"
-                  className="text-center text-xs text-black/30"
+                  className="text-center text-xs"
+                  style={{ color: theme.muted }}
                 >
                   $0 Ferry fee · Rate held for this confirmation
                 </Typography>
@@ -318,41 +334,55 @@ export default function CashoutScreen() {
 }
 
 function BankSetupState({ currency }: { currency: string }) {
+  const { theme } = useAppTheme();
   return (
     <View className="flex-1 justify-between pb-1 pt-8">
       <View>
         <Typography
           weight="700"
-          className="max-w-[330px] text-[36px] leading-[42px] tracking-[-1.3px] text-[#111111]"
+          className="max-w-[330px] text-[36px] leading-[42px] tracking-[-1.3px]"
+          style={{ color: theme.text }}
         >
           Add a bank account first.
         </Typography>
         <Typography
           weight="500"
-          className="mt-3 max-w-[330px] text-base leading-6 text-black/45"
+          className="mt-3 max-w-[330px] text-base leading-6"
+          style={{ color: theme.muted }}
         >
           Ferry needs a verified {currency} account before it can deliver your
           AUSD locally.
         </Typography>
 
-        <View className="relative mt-10 h-[220px] overflow-hidden rounded-[32px] bg-[#EDEEE8] p-6">
+        <View
+          className="relative mt-10 h-[220px] overflow-hidden rounded-[32px] border p-6"
+          style={{
+            backgroundColor: theme.cardStrong,
+            borderColor: theme.border,
+          }}
+        >
           <DeliveryArt />
           <View className="flex-row items-center gap-2">
             <View className="size-2 rounded-full bg-[#AAA052]" />
             <Typography
               weight="700"
-              className="text-[10px] uppercase tracking-[1.6px] text-black/45"
+              className="text-[10px] uppercase tracking-[1.6px]"
+              style={{ color: theme.muted }}
             >
               Ferry Direct
             </Typography>
           </View>
           <View className="mt-auto">
-            <View className="size-12 items-center justify-center rounded-full bg-white/70">
-              <Ionicons name="business-outline" size={22} color="#111111" />
+            <View
+              className="size-12 items-center justify-center rounded-full"
+              style={{ backgroundColor: theme.card }}
+            >
+              <Ionicons name="business-outline" size={22} color={theme.text} />
             </View>
             <Typography
               weight="700"
               className="mt-4 text-[26px] tracking-[-0.8px]"
+              style={{ color: theme.text }}
             >
               Your money, straight to your bank
             </Typography>
@@ -384,8 +414,12 @@ function DeliveryQuoteCard({
   accountEnding?: string;
   rate?: string | null;
 }) {
+  const { theme } = useAppTheme();
   return (
-    <View className="relative h-[156px] overflow-hidden rounded-[30px] border border-white/80 bg-[#EDEEE8] px-5 py-4">
+    <View
+      className="relative h-[156px] overflow-hidden rounded-[30px] border px-5 py-4"
+      style={{ backgroundColor: theme.cardStrong, borderColor: theme.border }}
+    >
       <DeliveryArt />
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
@@ -396,7 +430,8 @@ function DeliveryQuoteCard({
           />
           <Typography
             weight="700"
-            className="text-[10px] uppercase tracking-[1.6px] text-black/45"
+            className="text-[10px] uppercase tracking-[1.6px]"
+            style={{ color: theme.muted }}
           >
             Ferry Direct
           </Typography>
@@ -410,14 +445,22 @@ function DeliveryQuoteCard({
 
       <View className="mt-auto flex-row items-end justify-between">
         <View className="min-w-0 flex-1 pr-3">
-          <Typography weight="600" className="text-xs text-black/35">
+          <Typography
+            weight="600"
+            className="text-xs"
+            style={{ color: theme.muted }}
+          >
             Your bank receives
           </Typography>
           <View className="mt-0.5 h-9 justify-center">
             {quoting ? (
               <View className="flex-row items-center gap-2">
                 <ActivityIndicator size="small" color="#77786F" />
-                <Typography weight="700" className="text-lg text-black/35">
+                <Typography
+                  weight="700"
+                  className="text-lg"
+                  style={{ color: theme.muted }}
+                >
                   Getting live rate
                 </Typography>
               </View>
@@ -429,14 +472,19 @@ function DeliveryQuoteCard({
                 numberOfLines={1}
                 className={cn(
                   "text-[27px] tracking-[-0.8px]",
-                  localDisplay ? "text-[#111111]" : "text-black/20"
+                  !localDisplay && "opacity-20"
                 )}
+                style={{ color: theme.text }}
               >
                 {localDisplay ?? `${currency} —`}
               </Typography>
             )}
           </View>
-          <Typography weight="600" className="mt-1 text-[11px] text-black/35">
+          <Typography
+            weight="600"
+            className="mt-1 text-[11px]"
+            style={{ color: theme.muted }}
+          >
             {bankName
               ? `${bankName}${accountEnding ? ` · •••• ${accountEnding}` : ""}`
               : `Verified ${currency} payout account`}

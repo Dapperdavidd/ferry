@@ -17,6 +17,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useToast } from "@/contexts/ToastContext";
 import { cn } from "@/utils/cn";
 import { Toggle } from "@/components/ui/atoms/Toggle";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 interface QRCodeModalProps {
   walletAddress: string;
@@ -26,6 +27,7 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
   ({ walletAddress }, ref) => {
     const snapPoints = useMemo(() => ["94%"], []);
     const { showToast } = useToast();
+    const { theme } = useAppTheme();
     const [isHideWalletEnabled, setIsHideWalletEnabled] = useState(false);
 
     const renderBackdrop = useCallback(
@@ -38,7 +40,7 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(
         "Copied address",
-        <Ionicons name="checkmark-circle" size={16} color="black" />
+        <Ionicons name="checkmark-circle" size={16} color={theme.text} />
       );
     };
 
@@ -50,41 +52,79 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
         backdropComponent={renderBackdrop}
         enablePanDownToClose
         handleIndicatorStyle={{ display: "none" }}
-        backgroundStyle={{ backgroundColor: "#F0F0F0" }}
+        backgroundStyle={{ backgroundColor: theme.background }}
         containerStyle={{ zIndex: 1 }}
       >
-        <BottomSheetView className="h-full flex-1 bg-[#F0F0F0]">
+        <BottomSheetView
+          className="h-full flex-1"
+          style={{ backgroundColor: theme.background }}
+        >
           <View className="mb-5 items-center px-4">
-            <TabHeaderText className="text-center">Receive</TabHeaderText>
-            <Typography weight="500" className="mt-1 text-sm text-black/30">
+            <TabHeaderText
+              className="text-center"
+              style={{ color: theme.text }}
+            >
+              Receive
+            </TabHeaderText>
+            <Typography
+              weight="500"
+              className="mt-1 text-sm"
+              style={{ color: theme.muted }}
+            >
               Only send AUSD on Monad to this address
             </Typography>
           </View>
 
-          <View className="z-[0] mx-auto mt-12 h-10 w-[70%] rounded-full bg-black/5" />
+          <View
+            className="z-[0] mx-auto mt-7 h-10 w-[72%] rounded-full"
+            style={{ backgroundColor: theme.accentSoft }}
+          />
           <HapticPressable
             onPress={handleCopyAddress}
-            className={cn(
-              "mx-10 -mt-8 items-center rounded-[28px] border border-black/5 bg-white p-8",
-              {
-                "bg-[#3B82F6]": isHideWalletEnabled,
-              }
-            )}
+            className={cn("mx-7 -mt-8 items-center rounded-[32px] border p-7", {
+              "bg-[#3B82F6]": isHideWalletEnabled,
+            })}
+            style={{
+              backgroundColor: isHideWalletEnabled ? "#3B82F6" : theme.card,
+              borderColor: theme.border,
+            }}
           >
+            <View
+              className="mb-5 flex-row items-center gap-2 self-start rounded-full px-3 py-2"
+              style={{ backgroundColor: theme.accentSoft }}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={15}
+                color={theme.text}
+              />
+              <Typography
+                weight="700"
+                className="text-[11px] uppercase tracking-[0.8px]"
+                style={{ color: theme.text }}
+              >
+                Monad address
+              </Typography>
+            </View>
             <View className="relative w-full bg-transparent">
               <MemoizedQRCodeModal
                 walletAddress={walletAddress}
-                color={isHideWalletEnabled ? "white" : "black"}
+                color={isHideWalletEnabled ? "white" : theme.text}
               />
             </View>
             <Typography
               weight="500"
               className={cn(
-                "mx-auto mt-5 max-w-[198px] text-center text-sm leading-4 text-black/30",
+                "mx-auto mt-5 max-w-[240px] text-center text-sm leading-5",
                 {
                   "text-white/40": isHideWalletEnabled,
                 }
               )}
+              style={{
+                color: isHideWalletEnabled
+                  ? "rgba(255,255,255,0.55)"
+                  : theme.muted,
+              }}
             >
               {walletAddress}
             </Typography>
@@ -128,17 +168,20 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
 
           <View className="mx-6 mb-8">
             <HapticPressable
-              className={cn("items-center rounded-full border-none py-4", {
-                "bg-black/5": !isHideWalletEnabled,
-                "bg-[#3B82F6]": isHideWalletEnabled,
-              })}
+              className="items-center rounded-full border-none py-4"
+              style={{
+                backgroundColor: isHideWalletEnabled
+                  ? "#3B82F6"
+                  : theme.primary,
+              }}
               onPress={handleCopyAddress}
             >
               <Typography
                 weight="700"
-                className={cn("text-base text-black", {
-                  "text-white": isHideWalletEnabled,
-                })}
+                className="text-base"
+                style={{
+                  color: isHideWalletEnabled ? "white" : theme.primaryText,
+                }}
               >
                 Copy address
               </Typography>

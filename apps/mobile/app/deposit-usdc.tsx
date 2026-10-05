@@ -30,6 +30,7 @@ import { TokenMark } from "@/components/ui/atoms/TokenMark";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { useToast } from "@/contexts/ToastContext";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 import {
   apiClient,
   apiErrorMessage,
@@ -64,6 +65,7 @@ const NETWORK_PRIORITY: DepositNetwork[] = [
 const ROUTE_CARD_ART = require("../assets/images/funding/usdc-route-card-bg.jpg");
 
 export default function DepositUsdcScreen() {
+  const { theme } = useAppTheme();
   const { showToast } = useToast();
   const [selectedChain, setSelectedChain] = useState<DepositNetwork | null>(
     null
@@ -123,9 +125,9 @@ export default function DepositUsdcScreen() {
 
   return (
     <ScreenLayout
-      className="bg-[#F7F7F4] p-0"
-      lightColor="#F7F7F4"
-      darkColor="#F7F7F4"
+      className="p-0"
+      lightColor={theme.background}
+      darkColor={theme.background}
     >
       <ScrollView
         className="flex-1"
@@ -137,9 +139,10 @@ export default function DepositUsdcScreen() {
             accessibilityLabel="Go back"
             feedback="selection"
             onPress={() => router.back()}
-            className="z-10 size-12 items-center justify-center rounded-full bg-white"
+            className="z-10 size-12 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="chevron-back" size={25} color="#111111" />
+            <Ionicons name="chevron-back" size={25} color={theme.text} />
           </HapticPressable>
           <View
             pointerEvents="none"
@@ -147,7 +150,8 @@ export default function DepositUsdcScreen() {
           >
             <Typography
               weight="700"
-              className="text-[20px] tracking-[-0.3px] text-[#111111]"
+              className="text-[20px] tracking-[-0.3px]"
+              style={{ color: theme.text }}
             >
               Deposit USDC
             </Typography>
@@ -176,20 +180,25 @@ export default function DepositUsdcScreen() {
               onSelect={setSelectedChain}
             />
 
-            <View className="mt-4 overflow-hidden rounded-[30px] bg-white px-5 pb-5 pt-5">
+            <View
+              className="mt-4 overflow-hidden rounded-[30px] border px-5 pb-5 pt-5"
+              style={{ backgroundColor: theme.card, borderColor: theme.border }}
+            >
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-3">
                   <NetworkLogo chain={selected.chain} size={44} />
                   <View>
                     <Typography
                       weight="700"
-                      className="text-[17px] text-[#111111]"
+                      className="text-[17px]"
+                      style={{ color: theme.text }}
                     >
                       {NETWORKS[selected.chain].label}
                     </Typography>
                     <Typography
                       weight="500"
-                      className="mt-0.5 text-[12px] text-black/35"
+                      className="mt-0.5 text-[12px]"
+                      style={{ color: theme.muted }}
                     >
                       USDC deposit network
                     </Typography>
@@ -200,23 +209,27 @@ export default function DepositUsdcScreen() {
                   accessibilityLabel="Deposit safety information"
                   feedback="selection"
                   onPress={() => setSafetyOpen(true)}
-                  className="size-10 items-center justify-center rounded-full bg-black/[0.045]"
+                  className="size-10 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.accentSoft }}
                 >
                   <Ionicons
                     name="information-outline"
                     size={21}
-                    color="#111111"
+                    color={theme.text}
                   />
                 </HapticPressable>
               </View>
 
-              <View className="mt-4 items-center rounded-[24px] bg-[#FAFAF8] px-4 py-4">
+              <View
+                className="mt-4 items-center rounded-[24px] px-4 py-4"
+                style={{ backgroundColor: theme.cardStrong }}
+              >
                 <View className={isPreview ? "opacity-35" : undefined}>
                   <QRCode
                     value={selected.depositAddress}
                     size={142}
-                    color="#111111"
-                    backgroundColor="#FAFAF8"
+                    color={theme.text}
+                    backgroundColor={theme.cardStrong}
                     ecl="M"
                   />
                 </View>
@@ -224,7 +237,8 @@ export default function DepositUsdcScreen() {
                   accessibilityLabel={`Deposit address ${selected.depositAddress}`}
                   numberOfLines={1}
                   weight="500"
-                  className="mt-3 text-center text-[11px] leading-[15px] text-black/40"
+                  className="mt-3 text-center text-[11px] leading-[15px]"
+                  style={{ color: theme.muted }}
                 >
                   {compactAddress(selected.depositAddress)}
                 </Typography>
@@ -237,14 +251,19 @@ export default function DepositUsdcScreen() {
                     isPreview ? "Preview deposit route" : "Copy deposit address"
                   }
                   onPress={() => void copyAddress()}
-                  className="h-[52px] flex-1 flex-row items-center justify-center gap-2 rounded-full bg-[#111111]"
+                  className="h-[52px] flex-1 flex-row items-center justify-center gap-2 rounded-full"
+                  style={{ backgroundColor: theme.primary }}
                 >
                   <Ionicons
                     name={isPreview ? "lock-closed-outline" : "copy-outline"}
                     size={18}
-                    color="white"
+                    color={theme.primaryText}
                   />
-                  <Typography weight="700" className="text-[15px] text-white">
+                  <Typography
+                    weight="700"
+                    className="text-[15px]"
+                    style={{ color: theme.primaryText }}
+                  >
                     {isPreview ? "Preview only" : "Copy address"}
                   </Typography>
                 </HapticPressable>
@@ -254,9 +273,14 @@ export default function DepositUsdcScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Share deposit address"
                     onPress={() => void shareAddress()}
-                    className="size-[52px] items-center justify-center rounded-full bg-black/[0.045]"
+                    className="size-[52px] items-center justify-center rounded-full"
+                    style={{ backgroundColor: theme.accentSoft }}
                   >
-                    <Ionicons name="share-outline" size={20} color="#111111" />
+                    <Ionicons
+                      name="share-outline"
+                      size={20}
+                      color={theme.text}
+                    />
                   </HapticPressable>
                 ) : null}
               </View>

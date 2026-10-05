@@ -3,6 +3,7 @@ import { TouchableOpacity, ViewStyle, TextStyle } from "react-native";
 import { Typography } from "../atoms/Typography";
 import { useScreenTheme } from "@/contexts/ScreenThemeContext";
 import { cn } from "@/utils/cn";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 interface ThemedButtonProps {
   onPress: () => void;
@@ -45,6 +46,8 @@ export function ThemedButton({
   iconRight,
 }: ThemedButtonProps) {
   useScreenTheme(); // Preserved subscription for deferred ScreenThemeContext removal (ADR-0007).
+  const { theme } = useAppTheme();
+  const isPrimaryAction = variant === "secondary" || variant === "primary";
 
   return (
     <TouchableOpacity
@@ -57,13 +60,22 @@ export function ThemedButton({
         disabled && "opacity-50"
       )}
       // MEASURED-LAYOUT
-      style={style}
+      style={[
+        {
+          backgroundColor: isPrimaryAction ? theme.primary : theme.cardStrong,
+          borderColor: theme.border,
+        },
+        style,
+      ]}
     >
       {iconLeft}
       <Typography
         weight="600"
         className={cn("text-lg", variantText[variant])}
-        style={textStyle}
+        style={[
+          { color: isPrimaryAction ? theme.primaryText : theme.text },
+          textStyle,
+        ]}
       >
         {title}
       </Typography>

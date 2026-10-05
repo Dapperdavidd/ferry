@@ -8,6 +8,7 @@ import {
 import { ThemedText } from "@/components/ui/atoms";
 import { CircleButton } from "./CircleButton";
 import { cn } from "@/utils/cn";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 export interface ActionOption {
   key: string;
@@ -23,7 +24,8 @@ interface ModalOptionsListProps {
 }
 
 export function ModalOptionsList({ options }: ModalOptionsListProps) {
-  const arrowBackground = "#D5D5D5";
+  const { theme } = useAppTheme();
+  const arrowBackground = theme.accentSoft;
 
   return (
     <View>
@@ -31,9 +33,13 @@ export function ModalOptionsList({ options }: ModalOptionsListProps) {
         <TouchableOpacity
           key={option.key}
           className={cn(
-            "flex-row items-center py-4",
+            "flex-row items-center rounded-[20px] border px-4 py-4",
             option.disabled && "opacity-50"
           )}
+          style={{
+            backgroundColor: theme.cardStrong,
+            borderColor: theme.border,
+          }}
           onPress={option.onPress}
           disabled={option.disabled}
         >
@@ -46,12 +52,14 @@ export function ModalOptionsList({ options }: ModalOptionsListProps) {
             <ThemedText
               type="regularSemiBold"
               className={cn(option.disabled && "opacity-50")}
+              style={{ color: theme.text }}
             >
               {option.title}
             </ThemedText>
             <ThemedText
               type="tiny"
-              className={cn("opacity-40", option.disabled && "opacity-50")}
+              className={cn(option.disabled && "opacity-50")}
+              style={{ color: theme.muted }}
             >
               {option.description}
             </ThemedText>
