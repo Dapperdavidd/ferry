@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, View } from "react-native";
+import { ActivityIndicator, Image, Linking, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
@@ -13,6 +13,9 @@ const WELCOME_MESSAGES = [
   "Cash out straight to your bank.",
   "Receive money in seconds.",
 ];
+
+const PRIVACY_POLICY_URL = "https://ferry.money/privacy";
+const TERMS_URL = "https://ferry.money/terms";
 
 function TypewriterHeadline() {
   const [messageIndex, setMessageIndex] = useState(0);
@@ -55,21 +58,23 @@ function TypewriterHeadline() {
 
   return (
     <View
-      className="min-h-[150px] justify-center"
+      className="min-h-[150px] items-center justify-center"
       accessible
       accessibilityLabel={message}
     >
       <Typography
         weight="500"
-        className="max-w-[330px] text-[40px] leading-[46px] tracking-[-1.2px] text-white"
+        className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
       >
         {visibleText}
-        <Typography
-          weight="400"
-          className="text-[40px] leading-[46px] text-[#C9C38C]"
-        >
-          |
-        </Typography>
+        {visibleText === message ? null : (
+          <Typography
+            weight="600"
+            className="text-lg tracking-[2px] text-[#D8D29B]"
+          >
+            ···
+          </Typography>
+        )}
       </Typography>
     </View>
   );
@@ -101,7 +106,12 @@ function WelcomeScreen() {
 
   return (
     <View className="flex-1 bg-[#11110F]">
-      <CharcoalBackground />
+      <Image
+        source={require("@/assets/images/onboarding/ferry-olive-background.png")}
+        className="absolute inset-0 size-full"
+        resizeMode="cover"
+      />
+      <View className="absolute inset-0 bg-black/15" />
 
       <View className="flex-1 justify-between px-8 pb-12 pt-16">
         <View>
@@ -117,6 +127,14 @@ function WelcomeScreen() {
         </View>
 
         <View>
+          <View className="mb-5 items-center">
+            <Typography
+              weight="500"
+              className="text-center text-xs leading-[18px] text-white/60"
+            >
+              Settled in a second, on Monad.{"\n"}Your face is the only key.
+            </Typography>
+          </View>
           {authError ? (
             <Typography weight="500" className="mb-4 text-base text-[#FFB4B4]">
               {authError}
@@ -152,34 +170,34 @@ function WelcomeScreen() {
               </Typography>
             </HapticPressable>
           </View>
+
+          <Typography
+            weight="400"
+            className="mx-auto mt-5 max-w-[300px] text-center text-[11px] leading-[16px] text-white/50"
+          >
+            By continuing, you agree to Ferry&apos;s{" "}
+            <Typography
+              weight="600"
+              className="text-[11px] text-white/75 underline"
+              onPress={() => void Linking.openURL(TERMS_URL)}
+            >
+              Terms and Conditions
+            </Typography>{" "}
+            and acknowledge the{" "}
+            <Typography
+              weight="600"
+              className="text-[11px] text-white/75 underline"
+              onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+            >
+              Privacy Policy
+            </Typography>
+            .
+          </Typography>
         </View>
       </View>
     </View>
   );
 }
-
-const CharcoalBackground = () => (
-  <>
-    <Image
-      source={require("@/assets/images/onboarding/blue-blur-1.png")}
-      className="absolute bottom-[58px] left-0 h-[468px] w-full"
-      resizeMode="stretch"
-      tintColor="#5A5552"
-    />
-    <Image
-      source={require("@/assets/images/onboarding/blue-blur-2.png")}
-      className="absolute bottom-[-17px] left-0 h-[468px] w-full"
-      resizeMode="cover"
-      tintColor="#3A3532"
-    />
-    <Image
-      source={require("@/assets/images/onboarding/blue-blur-3.png")}
-      className="absolute bottom-[-134px] left-0 h-[468px] w-full"
-      resizeMode="cover"
-      tintColor="#211E1C"
-    />
-  </>
-);
 
 export default WithScreenTheme(WelcomeScreen, {
   backgroundColor: "#11110F",
