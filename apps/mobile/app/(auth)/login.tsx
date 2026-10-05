@@ -1,6 +1,17 @@
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  Linking,
+  Pressable,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Link } from "expo-router";
+import { useReducedMotion } from "react-native-reanimated";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
@@ -16,11 +27,15 @@ const WELCOME_MESSAGES = [
 
 const PRIVACY_POLICY_URL = "https://ferry.money/privacy";
 const TERMS_URL = "https://ferry.money/terms";
+const SHOW_DEVELOPMENT_PREVIEW = __DEV__;
 
 function TypewriterHeadline() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [visibleText, setVisibleText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const letterReveal = useRef(new Animated.Value(1)).current;
+  const wake = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReducedMotion();
   const message = WELCOME_MESSAGES[messageIndex];
 
   useEffect(() => {
@@ -46,15 +61,44 @@ function TypewriterHeadline() {
         return;
       }
 
-      setVisibleText(
-        isDeleting
-          ? message.slice(0, visibleText.length - 1)
-          : message.slice(0, visibleText.length + 1)
-      );
+      if (isDeleting) {
+        setVisibleText(message.slice(0, visibleText.length - 1));
+        return;
+      }
+
+      const nextLength = visibleText.length + 1;
+      const nextCharacter = message[visibleText.length];
+      if (!reduceMotion) {
+        letterReveal.setValue(0);
+        wake.setValue(0);
+        Animated.parallel([
+          Animated.timing(letterReveal, {
+            toValue: 1,
+            duration: 110,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(wake, {
+            toValue: 1,
+            duration: 160,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+      if (nextCharacter !== " " && nextLength % 3 === 0) {
+        void Haptics.selectionAsync();
+      }
+      setVisibleText(message.slice(0, nextLength));
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [isDeleting, message, visibleText]);
+  }, [isDeleting, letterReveal, message, reduceMotion, visibleText, wake]);
+
+  const settledText =
+    !isDeleting && visibleText ? visibleText.slice(0, -1) : visibleText;
+  const activeLetter =
+    !isDeleting && visibleText ? visibleText.slice(-1) : null;
 
   return (
     <View
@@ -66,7 +110,46 @@ function TypewriterHeadline() {
         weight="500"
         className="max-w-[330px] text-center text-[40px] leading-[46px] tracking-[-1.2px] text-white"
       >
-        {visibleText}
+        {settledText}
+        {activeLetter ? (
+          <Animated.Text
+            style={{
+              opacity: letterReveal,
+              transform: [
+                {
+                  translateY: letterReveal.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [5, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            {activeLetter}
+          </Animated.Text>
+        ) : null}
+        {visibleText === message ? null : (
+          <Animated.Text
+            style={{
+              color: "#D8D29B",
+              fontSize: 18,
+              opacity: wake.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.35, 0.9],
+              }),
+              transform: [
+                {
+                  translateX: wake.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-2, 2],
+                  }),
+                },
+              ],
+            }}
+          >
+            ≋
+          </Animated.Text>
+        )}
       </Typography>
     </View>
   );
@@ -77,6 +160,7 @@ function WelcomeScreen() {
   const [busy, setBusy] = useState<
     "create" | "resume" | "signIn" | "choose" | null
   >(null);
+  const authErrorMessage = authError?.split("\n", 1)[0];
 
   const run = async (which: "create" | "resume" | "signIn" | "choose") => {
     if (busy) return;
@@ -134,10 +218,23 @@ function WelcomeScreen() {
               One-second settlement · Protected by your passkey
             </Typography>
           </View>
-          {authError ? (
-            <Typography weight="500" className="mb-4 text-base text-[#FFB4B4]">
-              {authError}
-            </Typography>
+          {authErrorMessage ? (
+            <View className="mb-4 flex-row items-center gap-3 rounded-2xl border border-[#FFB4B4]/25 bg-black/35 px-4 py-3">
+              <View className="size-8 items-center justify-center rounded-full bg-[#FFB4B4]/10">
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#FFB4B4"
+                />
+              </View>
+              <Typography
+                weight="500"
+                className="flex-1 text-sm leading-[19px] text-[#FFD4D4]"
+                numberOfLines={2}
+              >
+                {authErrorMessage}
+              </Typography>
+            </View>
           ) : null}
           <View className="gap-2.5">
             <HapticPressable
@@ -191,6 +288,27 @@ function WelcomeScreen() {
                   Create a new account instead
                 </Typography>
               </HapticPressable>
+            ) : null}
+
+            {SHOW_DEVELOPMENT_PREVIEW ? (
+              <Link href="/dev-preview" asChild>
+                <Pressable
+                  onPressIn={() => void Haptics.selectionAsync()}
+                  disabled={busy !== null}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  className="mt-1 min-h-12 flex-row items-center justify-center gap-2 rounded-full border border-[#D8D29B]/25 bg-[#D8D29B]/10 px-4 py-3 active:opacity-70"
+                >
+                  <Ionicons
+                    name="phone-portrait-outline"
+                    size={16}
+                    color="#D8D29B"
+                  />
+                  <Typography weight="600" className="text-sm text-[#D8D29B]">
+                    Preview Ada in development
+                  </Typography>
+                </Pressable>
+              </Link>
             ) : null}
           </View>
 

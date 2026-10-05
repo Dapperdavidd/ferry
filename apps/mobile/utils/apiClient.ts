@@ -342,6 +342,16 @@ export const apiErrorMessage = (err: unknown) =>
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
 class BackendClient {
+  private demoMode = SEED_DEMO;
+
+  setDemoMode(enabled: boolean) {
+    if (__DEV__) this.demoMode = enabled;
+  }
+
+  isDemoMode() {
+    return __DEV__ && this.demoMode;
+  }
+
   private async request<T>(
     method: Method,
     path: string,
@@ -428,6 +438,7 @@ class BackendClient {
     return this.request("POST", "/auth/verify", VerifySchema, body);
   }
   signOut() {
+    if (this.isDemoMode()) return Promise.resolve({ ok: true });
     return this.request(
       "POST",
       "/auth/signout",
@@ -437,7 +448,7 @@ class BackendClient {
 
   // Me and the directory
   getMe() {
-    if (SEED_DEMO) return Promise.resolve(SEED_USER);
+    if (this.isDemoMode()) return Promise.resolve(SEED_USER);
     return this.request("GET", "/me", UserSchema);
   }
   updateMe(body: {
@@ -446,14 +457,14 @@ class BackendClient {
     homeCurrency?: string;
     country?: string;
   }) {
-    if (SEED_DEMO) return Promise.resolve({ ...SEED_USER, ...body });
+    if (this.isDemoMode()) return Promise.resolve({ ...SEED_USER, ...body });
     return this.request("PUT", "/me", UserSchema, body);
   }
   deleteMe() {
     return this.request("DELETE", "/me", z.object({ deleted: z.boolean() }));
   }
   handleAvailable(handle: string) {
-    if (SEED_DEMO)
+    if (this.isDemoMode())
       return Promise.resolve({
         available: handle !== "ada",
         reason: null as string | null,
@@ -465,7 +476,7 @@ class BackendClient {
     );
   }
   resolveHandle(handle: string) {
-    if (SEED_DEMO) {
+    if (this.isDemoMode()) {
       return Promise.resolve(
         handle === "bola"
           ? {
@@ -493,7 +504,7 @@ class BackendClient {
 
   // Wallet
   getBalances() {
-    if (SEED_DEMO) return Promise.resolve(SEED_BALANCES);
+    if (this.isDemoMode()) return Promise.resolve(SEED_BALANCES);
     return this.request("GET", "/wallet/balances", BalancesResponseSchema);
   }
   fundFromFaucet() {
@@ -504,7 +515,7 @@ class BackendClient {
     );
   }
   getUsdcDepositRoute() {
-    if (SEED_DEMO) {
+    if (this.isDemoMode()) {
       const routeId = "seed-usdc-route";
       return Promise.resolve({
         mode: "mock" as const,
@@ -625,7 +636,7 @@ class BackendClient {
     return Promise.resolve(seedFlow);
   }
   listTransfers(params: { cursor?: string; limit?: number } = {}) {
-    if (SEED_DEMO)
+    if (this.isDemoMode())
       return Promise.resolve({ items: SEED_TRANSFERS, nextCursor: null });
     const query = new URLSearchParams();
     if (params.cursor) query.set("cursor", params.cursor);
@@ -643,7 +654,7 @@ class BackendClient {
     return this.request("POST", "/cashout/quote", CashoutQuoteSchema, body);
   }
   quoteDirect(body: { to: string; amountRaw: string }) {
-    if (SEED_DEMO) {
+    if (this.isDemoMode()) {
       const amount = Number(body.amountRaw) / 1_000_000;
       const localAmount = (amount * 1580).toFixed(2);
       return Promise.resolve({
@@ -704,7 +715,7 @@ class BackendClient {
 
   // Local-bank delivery
   listPayoutNetworks(country: string, currency: string) {
-    if (SEED_DEMO)
+    if (this.isDemoMode())
       return Promise.resolve([
         { id: "gtbank", name: "GTBank", country, currency },
         { id: "access", name: "Access Bank", country, currency },
@@ -717,7 +728,7 @@ class BackendClient {
     );
   }
   getPayoutAccount() {
-    if (SEED_DEMO) return Promise.resolve(null as PayoutAccount | null);
+    if (this.isDemoMode()) return Promise.resolve(null as PayoutAccount | null);
     return this.request(
       "GET",
       "/payout/account",
@@ -725,7 +736,7 @@ class BackendClient {
     );
   }
   savePayoutAccount(body: { networkId: string; accountNumber: string }) {
-    if (SEED_DEMO)
+    if (this.isDemoMode())
       return Promise.resolve({
         provider: "yellowcard" as const,
         country: SEED_USER.country ?? "NG",
@@ -741,7 +752,7 @@ class BackendClient {
 
   // FX
   getFxQuote(currency: string) {
-    if (SEED_DEMO) {
+    if (this.isDemoMode()) {
       return Promise.resolve({
         currency,
         rate: currency === "NGN" ? "1580.00" : "1",
@@ -758,7 +769,7 @@ class BackendClient {
 
   // Agora
   getAgoraOverview() {
-    if (SEED_DEMO) {
+    if (this.isDemoMode()) {
       return Promise.resolve({
         mode: "mock" as const,
         totalSupply: "1200000000",
@@ -787,7 +798,7 @@ class BackendClient {
     );
   }
   getNotificationPreference() {
-    if (SEED_DEMO) return Promise.resolve(true);
+    if (this.isDemoMode()) return Promise.resolve(true);
     return this.request(
       "GET",
       "/notifications/preferences",
