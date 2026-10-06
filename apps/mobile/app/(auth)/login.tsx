@@ -53,11 +53,13 @@ function TypewriterHeadline() {
 
     const timer = setTimeout(() => {
       if (!isDeleting && isComplete) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setIsDeleting(true);
         return;
       }
 
       if (isDeleting && isEmpty) {
+        void Haptics.selectionAsync();
         setIsDeleting(false);
         setMessageIndex((current) => (current + 1) % WELCOME_MESSAGES.length);
         return;
@@ -88,7 +90,9 @@ function TypewriterHeadline() {
           }),
         ]).start();
       }
-      if (nextCharacter !== " " && nextLength % 3 === 0) {
+      if (nextLength === message.length) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } else if (nextCharacter !== " " && nextLength % 3 === 0) {
         void Haptics.selectionAsync();
       }
       setVisibleText(message.slice(0, nextLength));
