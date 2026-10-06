@@ -22,9 +22,14 @@ export interface ActionPillItem {
 export interface ActionPillProps {
   items: ActionPillItem[];
   containerStyle?: StyleProp<ViewStyle>;
+  fill?: boolean;
 }
 
-export function ActionPill({ items, containerStyle }: ActionPillProps) {
+export function ActionPill({
+  items,
+  containerStyle,
+  fill = false,
+}: ActionPillProps) {
   const { theme } = useAppTheme();
   const shadowStyle = {
     shadowColor: "#000",
@@ -36,7 +41,10 @@ export function ActionPill({ items, containerStyle }: ActionPillProps) {
 
   return (
     <View
-      className="flex-row items-center rounded-full border"
+      className={cn(
+        "flex-row items-center rounded-full border",
+        fill && "flex-1"
+      )}
       // PLATFORM-SHADOW
       style={[
         shadowStyle,
@@ -62,8 +70,19 @@ export function ActionPill({ items, containerStyle }: ActionPillProps) {
             // included) and a tap near the icon — not just on it — registers.
             className={cn(
               "items-center justify-center py-3",
-              isFirst ? "pl-5 pr-3.5" : isLast ? "pl-3.5 pr-5" : "px-3.5"
+              fill
+                ? "mx-0.5 flex-1 rounded-full px-3"
+                : isFirst
+                  ? "pl-5 pr-3.5"
+                  : isLast
+                    ? "pl-3.5 pr-5"
+                    : "px-3.5"
             )}
+            style={
+              fill && item.isActive
+                ? { backgroundColor: theme.accentSoft }
+                : undefined
+            }
           >
             <Icon
               isActive={item.isActive}

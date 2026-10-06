@@ -1,5 +1,6 @@
-import React, { useMemo } from "react";
-import { Image, Modal, StyleSheet, View } from "react-native";
+import React, { type ComponentProps, useMemo } from "react";
+import { Modal, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Animated, { FadeInRight, FadeOutRight } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,6 +20,8 @@ type ActionMenuProps = {
   onClose: () => void;
 };
 
+type ActionIcon = ComponentProps<typeof Ionicons>["name"];
+
 export function ActionMenu({ visible, onClose }: ActionMenuProps) {
   const { theme } = useAppTheme();
   const { showReceiveModal, showSendModal } = useModalFlow();
@@ -36,22 +39,22 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
     () => [
       {
         title: "Receive",
-        icon: require("@/assets/icons/recieve.png"),
+        icon: "arrow-down" as ActionIcon,
         onPress: showReceiveModal,
       },
       {
         title: "Send",
-        icon: require("@/assets/icons/send.png"),
+        icon: "arrow-up" as ActionIcon,
         onPress: showSendModal,
       },
       {
         title: "Bills",
-        icon: require("@/assets/icons/money-added.png"),
+        icon: "receipt-outline" as ActionIcon,
         onPress: () => router.push("/bills" as never),
       },
       {
         title: "Flow",
-        icon: require("@/assets/icons/earn.png"),
+        icon: "git-branch-outline" as ActionIcon,
         onPress: () =>
           flowsAvailable
             ? router.push("/flows" as never)
@@ -112,11 +115,19 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
                 >
                   {action.title}
                 </Typography>
-                <Image
-                  source={action.icon}
-                  className="size-9"
-                  resizeMode="contain"
-                />
+                <View
+                  className="size-11 items-center justify-center rounded-2xl border"
+                  style={{
+                    backgroundColor: theme.cardStrong,
+                    borderColor: theme.border,
+                    shadowColor: theme.dark ? "#000000" : theme.text,
+                    shadowOpacity: theme.dark ? 0.24 : 0.08,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                  }}
+                >
+                  <Ionicons name={action.icon} size={21} color={theme.accent} />
+                </View>
               </HapticPressable>
             </Animated.View>
           ))}

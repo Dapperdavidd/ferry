@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
@@ -82,8 +81,9 @@ export function CustomTabBar({
 
   return (
     <>
-      <ContainerWrapper withBlur={!isHome}>
+      <ContainerWrapper>
         <ActionPill
+          fill
           items={state.routes.map((route, index) => {
             const { options } = descriptors[route.key];
             const isFocused = state.index === index;
@@ -123,22 +123,16 @@ export function CustomTabBar({
               testID: options.title,
             };
           })}
-          containerStyle={
-            isHome
-              ? {
-                  backgroundColor: "transparent",
-                  borderColor: "transparent",
-                  shadowColor: "transparent",
-                }
-              : undefined
-          }
+          containerStyle={{
+            backgroundColor: "transparent",
+            borderColor: "transparent",
+            shadowColor: "transparent",
+            elevation: 0,
+          }}
         />
 
         {isHome ? (
-          <Animated.View
-            className="absolute right-4 top-3 z-[2]"
-            style={fabStyle}
-          >
+          <Animated.View className="z-[2] ml-1 mr-1" style={fabStyle}>
             <HapticPressable
               accessibilityLabel="Money actions"
               accessibilityRole="button"
@@ -168,38 +162,26 @@ export function CustomTabBar({
   );
 }
 
-function ContainerWrapper({
-  children,
-  withBlur,
-}: {
-  children: React.ReactNode;
-  withBlur?: boolean;
-}) {
+function ContainerWrapper({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
   const bottom = insets.bottom + 8;
-  const style = {
-    bottom,
-    backgroundColor: withBlur ? theme.chrome : "transparent",
-  };
-
-  if (!withBlur) {
-    return (
-      <View
-        className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
-        style={style}
-      >
-        {children}
-      </View>
-    );
-  }
 
   return (
     <BlurView
-      intensity={18}
+      intensity={28}
       tint={theme.dark ? "dark" : "light"}
-      className="absolute left-0 right-0 z-[1] flex-row items-center justify-between px-4 pt-2.5"
-      style={style}
+      className="absolute left-5 right-5 z-[1] flex-row items-center overflow-hidden rounded-[32px] border p-1.5"
+      style={{
+        bottom,
+        backgroundColor: theme.chrome,
+        borderColor: theme.border,
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 7 },
+        shadowOpacity: theme.dark ? 0.38 : 0.12,
+        shadowRadius: 18,
+        elevation: 9,
+      }}
     >
       {children}
     </BlurView>
