@@ -37,6 +37,20 @@ function noticeKind(
   return typeof data?.kind === "string" ? data.kind : undefined;
 }
 
+function noticeData(
+  notification: Notifications.Notification | undefined
+): Record<string, unknown> {
+  return (notification?.request.content.data ?? {}) as Record<string, unknown>;
+}
+
+function billIdFromNotice(data: Record<string, unknown>): string | null {
+  if (typeof data.url === "string") {
+    const match = data.url.match(/^ferry:\/\/bills\/([^/?#]+)$/);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return typeof data.billId === "string" ? data.billId : null;
+}
+
 /**
  * A notification that arrives while the Consumer is looking at the app is
  * handled by the in-app toast instead, so the OS banner is suppressed. Two
@@ -49,11 +63,12 @@ function noticeKind(
  */
 Notifications.setNotificationHandler({
   handleNotification: (notification) => {
-    const arrival = noticeKind(notification) === ARRIVAL_KIND;
+    const kind = noticeKind(notification);
+    const important = kind === ARRIVAL_KIND || kind?.startsWith("bill_");
     return Promise.resolve({
-      shouldShowBanner: arrival,
+      shouldShowBanner: Boolean(important),
       shouldShowList: true,
-      shouldPlaySound: arrival,
+      shouldPlaySound: Boolean(important),
       shouldSetBadge: false,
     });
   },
@@ -73,6 +88,8 @@ export function useNotificationRouting() {
   useEffect(() => {
     if (!response) return;
     const kind = noticeKind(response.notification);
+    const data = noticeData(response.notification);
+    const billId = billIdFromNotice(data);
 
     // The list the Payment screen renders was fetched before this Payment
     // existed.
@@ -80,6 +97,17 @@ export function useNotificationRouting() {
       void queryClient.invalidateQueries({ queryKey: ["transfers"] });
       void queryClient.invalidateQueries({ queryKey: ["balances"] });
       void queryClient.invalidateQueries({ queryKey: ["rewards"] });
+    }
+
+    if (kind?.startsWith("bill_") && billId) {
+      void queryClient.invalidateQueries({ queryKey: ["bills"] });
+      void queryClient.invalidateQueries({ queryKey: ["bill", billId] });
+      if (kind === "bill_paid") {
+        void queryClient.invalidateQueries({ queryKey: ["transfers"] });
+        void queryClient.invalidateQueries({ queryKey: ["balances"] });
+      }
+      router.push(`/bills/${billId}` as never);
+      return;
     }
 
     router.push(((kind && DESTINATIONS[kind]) ?? HOME) as never);

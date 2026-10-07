@@ -136,6 +136,14 @@ All routes below use the existing JWT principal unless noted otherwise.
 | `POST /flows/submit`               | Verify and relay a prepared configuration idempotently.                                                             |
 | `POST /flows/payments/prepare`     | Resolve a Ferry recipient and prepare an owner-bound AUSD payment authorization.                                    |
 | `POST /flows/payments/submit`      | Verify, relay, and reconcile an atomic Flow payment.                                                                |
+| `GET/POST /bills`                  | List every shared bill visible to the principal or create a handle-resolved split.                                  |
+| `GET /bills/:id`                   | Return one authorized bill with member, invitation, and payment status.                                             |
+| `POST /bills/:id/invitation`       | Accept or decline the current principal's invitation.                                                               |
+| `POST /bills/:id/remind`           | Let the creator push every member whose share is still pending.                                                     |
+| `POST /bills/:id/payment/prepare`  | Pin the principal's exact share as an AUSD EIP-3009 authorization to the creator.                                   |
+| `POST /bills/:id/payment/submit`   | Relay the pinned payment idempotently; the indexer alone advances the share to paid.                                |
+| `GET/POST /bill-groups`            | List reusable member groups or create one from Ferry handles.                                                       |
+| `POST /bill-groups/:id/members`    | Add a handle to a group owned by the principal.                                                                     |
 
 Database migration `apps/api/drizzle/0001_overconfident_imperial_guard.sql` adds encrypted
 payout metadata to users and payout state to cash-outs. Run it before starting the updated
@@ -143,6 +151,11 @@ API against an existing database.
 
 Migration `apps/api/drizzle/0002_glossy_rictor.sql` adds Flow configuration and payment
 state, including the durable `SUBMITTING` state used to prevent double broadcasts.
+
+Migration `apps/api/drizzle/0006_wonderful_tarantula.sql` adds the canonical Bills,
+shares, invitations, groups, and group-member tables. The API container runs every
+pending Drizzle migration before boot, so deploy the API before shipping the mobile
+build that calls these endpoints.
 
 ## Environment and external access
 

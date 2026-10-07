@@ -73,6 +73,22 @@ export const referralStatus = pgEnum("referral_status", [
   "QUALIFIED",
   "REJECTED",
 ]);
+export const billStatus = pgEnum("bill_status", [
+  "OPEN",
+  "SETTLED",
+  "CANCELLED",
+]);
+export const billShareStatus = pgEnum("bill_share_status", [
+  "PENDING",
+  "PAYMENT_PENDING",
+  "PAID",
+]);
+export const billInvitationStatus = pgEnum("bill_invitation_status", [
+  "PENDING",
+  "ACCEPTED",
+  "DECLINED",
+]);
+export const billGroupRole = pgEnum("bill_group_role", ["OWNER", "MEMBER"]);
 
 export interface StoredFlowDestination {
   label: string;
@@ -430,6 +446,119 @@ export const sendSponsorships = pgTable(
       t.plan,
       t.periodStart,
     ),
+  ],
+);
+
+/** A reusable set of Ferry users who split bills together. */
+export const billGroups = pgTable(
+  "bill_groups",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id").notNull(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("bill_groups_owner_idx").on(t.ownerUserId, t.createdAt)],
+);
+
+export const billGroupMembers = pgTable(
+  "bill_group_members",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id").notNull(),
+    userId: text("user_id").notNull(),
+    role: billGroupRole("role").notNull().default("MEMBER"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("bill_group_members_group_user_idx").on(t.groupId, t.userId),
+    index("bill_group_members_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/** The canonical bill shared by every participant device. */
+export const bills = pgTable(
+  "bills",
+  {
+    id: text("id").primaryKey(),
+    creatorUserId: text("creator_user_id").notNull(),
+    groupId: text("group_id"),
+    title: text("title").notNull(),
+    note: text("note"),
+    totalRaw: text("total_raw").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    category: text("category").notNull(),
+    splitMode: text("split_mode").notNull(),
+    dueLabel: text("due_label"),
+    status: billStatus("status").notNull().default("OPEN"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("bills_creator_created_idx").on(t.creatorUserId, t.createdAt),
+    index("bills_group_created_idx").on(t.groupId, t.createdAt),
+  ],
+);
+
+/** One exact AUSD obligation per bill participant. */
+export const billShares = pgTable(
+  "bill_shares",
+  {
+    id: text("id").primaryKey(),
+    billId: text("bill_id").notNull(),
+    userId: text("user_id").notNull(),
+    amountRaw: text("amount_raw").notNull(),
+    status: billShareStatus("status").notNull().default("PENDING"),
+    transferId: text("transfer_id"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("bill_shares_bill_user_idx").on(t.billId, t.userId),
+    uniqueIndex("bill_shares_transfer_idx").on(t.transferId),
+    index("bill_shares_user_status_idx").on(t.userId, t.status),
+  ],
+);
+
+/** Invitation state is distinct from whether the invited share has been paid. */
+export const billInvitations = pgTable(
+  "bill_invitations",
+  {
+    id: text("id").primaryKey(),
+    billId: text("bill_id").notNull(),
+    inviterUserId: text("inviter_user_id").notNull(),
+    inviteeUserId: text("invitee_user_id").notNull(),
+    status: billInvitationStatus("status").notNull().default("PENDING"),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("bill_invitations_bill_invitee_idx").on(
+      t.billId,
+      t.inviteeUserId,
+    ),
+    index("bill_invitations_invitee_status_idx").on(t.inviteeUserId, t.status),
   ],
 );
 

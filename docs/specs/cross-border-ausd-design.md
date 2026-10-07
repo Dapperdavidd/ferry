@@ -113,6 +113,31 @@ are server configuration; the mobile client never decides entitlement state.
 
 **Receiving.** The recipient's QR encodes `ferry://pay?to=@bola` with the address as fallback. An indexer polls AUSD `Transfer` logs for addresses we know (every ~2 s, chunked by block range, cursor stored), writes RECEIVE rows, and pushes "You received $50.00 from @ada". Pending sends are confirmed by receipt the same way. HyperSync can replace polling for history later.
 
+### Shared bills
+
+Postgres is the only source of truth for Bills. `bills` owns the bill header,
+`bill_shares` owns one exact AUSD obligation per participant,
+`bill_invitations` tracks the social response separately from payment state, and
+`bill_groups` / `bill_group_members` provide reusable member sets. The creator's
+share begins paid; every invited share moves `PENDING → PAYMENT_PENDING → PAID`.
+The app never marks a share paid after submission: the indexer verifies the AUSD
+receipt, confirms the sender transfer, advances the share, and settles the bill
+only when every share is paid.
+
+The authenticated contract is:
+
+- `GET/POST /bills`, `GET /bills/:id`
+- `POST /bills/:id/invitation`, `POST /bills/:id/remind`
+- `POST /bills/:id/payment/prepare` and `/submit`
+- `GET/POST /bill-groups`, `GET /bill-groups/:id`, and
+  `POST /bill-groups/:id/members`
+
+Creating a bill resolves handles server-side, checks that every share sums to the
+total, and sends every invitee an Expo push. Reminders target unpaid members.
+Confirmed payments notify all members with `ferry://bills/:id`; tapping a bill
+notification invalidates the local query and opens the shared bill. The app polls
+open bills as recovery, so two devices converge even if push delivery is delayed.
+
 **Funding on testnet.** "Add funds" calls the AUSD faucet through the relayer (10,000 AUSD, once a minute). Production USDC funding is implemented as an Agora `stablecoin → ausd` route into the user's registered Monad wallet. Agora returns one reusable deposit address per supported source network; the app renders only those returned instructions, with an explicit USDC/network warning. Mock mode shows a clearly labelled preview and disables copying or sharing its generated addresses. USD bank funding stays marked "Coming soon" until the additional banking and verification work is complete.
 
 ## 4. Cross-border: cash out through Instant Settlement, atomically
@@ -181,21 +206,22 @@ The write-up says exactly this: production needs an Agora organisation key; the 
 
 A fresh NestJS app, `apps/api`, replacing `apps/backend`. Reason: the old backend cannot boot without Kafka, half of it is merchant checkout, its 56 migrations are Solana-shaped, and the account, settlement and payment modules import each other. Porting the six modules we want (`config`, `db`, `common`, `health`, `notifications`, `fx`, plus the mailer if we keep it) is cheaper and safer than carving.
 
-| Module              | Responsibility                                                                                                                                                                                                                                                                            |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config`            | Joi-validated env: `DATABASE_URL`, `JWT_SECRETS`, `MONAD_RPC_URLS`, `AUSD_ADDRESS`, `CTK_ADDRESS`, `PAIR_ADDRESS`, `WHITELISTER_ADDRESS`, `SETTLEMENT_ADDRESS`, `FAUCET_ADDRESS`, `RELAYER_PRIVATE_KEY`, `RELAYER_CAP_*`, `AGORA_API_MODE`, `AGORA_API_KEY?`, `EXPO_ACCESS_TOKEN`, `FX_*` |
-| `db`                | Drizzle over Postgres. Tables: `users` (address unique, handle unique, display name, home currency, country), `transfers`, `transfer_intents` (60 s TTL rows; no Redis), `cashouts`, `payouts`, `push_devices`, `indexer_state`, `agora_mock_*`                                           |
-| `auth`              | challenge/verify, JWT guard, `Principal { userId, address }`; rate-limited                                                                                                                                                                                                                |
-| `directory`         | handle registration (3–20 chars, unique, reserved list), profile, `GET /directory/:handle` → `{ address, displayName }`; no reverse listing                                                                                                                                               |
-| `chain`             | viem public client with RPC failover, relayer wallet client, AUSD typed-data builder (domain read once at boot), receipt waiter, explicit gas, MON balance monitor                                                                                                                        |
-| `transfers`         | prepare / submit / list (the HTTP contract the mobile app already speaks, see §7)                                                                                                                                                                                                         |
-| `settlement`        | quote / prepare / submit for cash-outs; binds a verified bank destination into the signed quote                                                                                                                                                                                           |
-| `payout`            | Yellow Card HMAC client, live rates and bank discovery, account-name resolution, encrypted payout accounts, idempotent bank sends and signed webhooks                                                                                                                                     |
-| `indexer`           | AUSD `Transfer` log poller, receipt confirmation, RECEIVE rows, pushes                                                                                                                                                                                                                    |
-| `agora`             | the OpenAPI client, live and mock                                                                                                                                                                                                                                                         |
-| `fx`                | display rates (ported)                                                                                                                                                                                                                                                                    |
-| `notifications`     | Expo push (ported)                                                                                                                                                                                                                                                                        |
-| `health`, `metrics` | `/health` with chain, db and relayer-balance checks                                                                                                                                                                                                                                       |
+| Module              | Responsibility                                                                                                                                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `config`            | Joi-validated env: `DATABASE_URL`, `JWT_SECRETS`, `MONAD_RPC_URLS`, `AUSD_ADDRESS`, `CTK_ADDRESS`, `PAIR_ADDRESS`, `WHITELISTER_ADDRESS`, `SETTLEMENT_ADDRESS`, `FAUCET_ADDRESS`, `RELAYER_PRIVATE_KEY`, `RELAYER_CAP_*`, `AGORA_API_MODE`, `AGORA_API_KEY?`, `EXPO_ACCESS_TOKEN`, `FX_*`              |
+| `db`                | Drizzle over Postgres. Tables: `users` (address unique, handle unique, display name, home currency, country), `transfers`, `transfer_intents`, `bills`, `bill_shares`, `bill_invitations`, `bill_groups`, `bill_group_members`, `cashouts`, `payouts`, `push_devices`, `indexer_state`, `agora_mock_*` |
+| `auth`              | challenge/verify, JWT guard, `Principal { userId, address }`; rate-limited                                                                                                                                                                                                                             |
+| `directory`         | handle registration (3–20 chars, unique, reserved list), profile, `GET /directory/:handle` → `{ address, displayName }`; no reverse listing                                                                                                                                                            |
+| `chain`             | viem public client with RPC failover, relayer wallet client, AUSD typed-data builder (domain read once at boot), receipt waiter, explicit gas, MON balance monitor                                                                                                                                     |
+| `transfers`         | prepare / submit / list (the HTTP contract the mobile app already speaks, see §7)                                                                                                                                                                                                                      |
+| `settlement`        | quote / prepare / submit for cash-outs; binds a verified bank destination into the signed quote                                                                                                                                                                                                        |
+| `payout`            | Yellow Card HMAC client, live rates and bank discovery, account-name resolution, encrypted payout accounts, idempotent bank sends and signed webhooks                                                                                                                                                  |
+| `indexer`           | AUSD `Transfer` log poller, receipt confirmation, RECEIVE rows, pushes                                                                                                                                                                                                                                 |
+| `agora`             | the OpenAPI client, live and mock                                                                                                                                                                                                                                                                      |
+| `fx`                | display rates (ported)                                                                                                                                                                                                                                                                                 |
+| `notifications`     | Expo push (ported)                                                                                                                                                                                                                                                                                     |
+| `bills`             | shared bills and groups, member authorization, invitations, reminders, and bill-bound AUSD payment intents                                                                                                                                                                                             |
+| `health`, `metrics` | `/health` with chain, db and relayer-balance checks                                                                                                                                                                                                                                                    |
 
 Infra: Postgres only. No Redis, no Kafka. Deployed on Railway with its Postgres plugin; the relayer key is an env var now (KMS is a follow-up and the signer is behind an interface, Xend's ADR 0010 pattern).
 

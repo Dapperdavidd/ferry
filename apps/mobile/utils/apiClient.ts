@@ -117,6 +117,63 @@ export const SubmitResponseSchema = z.object({
 });
 export type SubmitResponse = z.infer<typeof SubmitResponseSchema>;
 
+export const BillParticipantSchema = z.object({
+  id: z.string(),
+  handle: z.string().nullable(),
+  name: z.string(),
+  initials: z.string(),
+  amountRaw: rawAmount,
+  paid: z.boolean(),
+  paymentStatus: z.enum(["PENDING", "PAYMENT_PENDING", "PAID"]),
+  self: z.boolean(),
+  invitationStatus: z.enum(["PENDING", "ACCEPTED", "DECLINED"]),
+});
+export type BillParticipant = z.infer<typeof BillParticipantSchema>;
+
+export const BillSchema = z.object({
+  id: z.string(),
+  creatorUserId: z.string(),
+  groupId: z.string().nullable(),
+  title: z.string(),
+  note: z.string(),
+  totalRaw: rawAmount,
+  currency: z.string(),
+  category: z.enum([
+    "food",
+    "transport",
+    "home",
+    "travel",
+    "shopping",
+    "other",
+  ]),
+  splitMode: z.enum(["even", "custom"]),
+  status: z.enum(["OPEN", "SETTLED", "CANCELLED"]),
+  position: z.enum(["collecting", "owe", "settled"]),
+  dueLabel: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  participants: z.array(BillParticipantSchema),
+});
+export type ApiBill = z.infer<typeof BillSchema>;
+
+export const BillGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  ownerUserId: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  members: z.array(
+    z.object({
+      id: z.string(),
+      role: z.enum(["OWNER", "MEMBER"]),
+      handle: z.string().nullable(),
+      name: z.string(),
+      initials: z.string(),
+    })
+  ),
+});
+export type BillGroup = z.infer<typeof BillGroupSchema>;
+
 export const CashoutSchema = z.object({
   outToken: z.string(),
   outAmountRaw: rawAmount,
@@ -847,6 +904,71 @@ class BackendClient {
       "GET",
       `/transfers${suffix}`,
       TransferListResponseSchema
+    );
+  }
+
+  // Shared bills
+  listBills(status: "all" | "open" | "settled" = "all") {
+    return this.request("GET", `/bills?status=${status}`, z.array(BillSchema));
+  }
+  getBill(id: string) {
+    return this.request("GET", `/bills/${encodeURIComponent(id)}`, BillSchema);
+  }
+  createBill(body: {
+    title: string;
+    note?: string;
+    totalRaw: string;
+    creatorAmountRaw: string;
+    category: ApiBill["category"];
+    splitMode: ApiBill["splitMode"];
+    dueLabel?: string;
+    groupId?: string;
+    shares: { handle: string; amountRaw: string }[];
+  }) {
+    return this.request("POST", "/bills", BillSchema, body);
+  }
+  respondToBill(id: string, accepted: boolean) {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/invitation`,
+      BillSchema,
+      { accepted }
+    );
+  }
+  remindBill(id: string) {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/remind`,
+      z.object({ reminded: z.number().int().nonnegative() })
+    );
+  }
+  prepareBillPayment(id: string) {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/payment/prepare`,
+      PrepareTransferResponseSchema
+    );
+  }
+  submitBillPayment(id: string, body: { intentId: string; signature: string }) {
+    return this.request(
+      "POST",
+      `/bills/${encodeURIComponent(id)}/payment/submit`,
+      SubmitResponseSchema,
+      body
+    );
+  }
+  listBillGroups() {
+    return this.request("GET", "/bill-groups", z.array(BillGroupSchema));
+  }
+  createBillGroup(body: { name: string; handles: string[] }) {
+    return this.request("POST", "/bill-groups", BillGroupSchema, body);
+  }
+  addBillGroupMember(id: string, handle: string) {
+    return this.request(
+      "POST",
+      `/bill-groups/${encodeURIComponent(id)}/members`,
+      BillGroupSchema,
+      { handle }
     );
   }
 

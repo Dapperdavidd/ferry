@@ -63,7 +63,12 @@ export class TransfersService {
   ) {}
 
   /** Resolves the recipient, checks balance and caps, and pins the exact authorization the app will sign. */
-  async prepare(userId: string, from: Address, body: PrepareTransferRequest) {
+  async prepare(
+    userId: string,
+    from: Address,
+    body: PrepareTransferRequest,
+    context: Record<string, string> = {},
+  ) {
     const recipient = await this.resolveRecipient(body.to);
     if (recipient.address.toLowerCase() === from.toLowerCase()) {
       throw new ApiError("SELF_SEND", "You can't send money to yourself.");
@@ -106,7 +111,11 @@ export class TransfersService {
       amountRaw: value.toString(),
       nonce: auth.nonce,
       typedData,
-      details: { memo: body.memo ?? null, recipientUserId: recipient.userId },
+      details: {
+        memo: body.memo ?? null,
+        recipientUserId: recipient.userId,
+        ...context,
+      },
       expiresAt,
     });
     return {

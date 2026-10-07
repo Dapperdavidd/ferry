@@ -12,6 +12,8 @@ import { DbService } from "../db/db.service";
 import { kvGet, kvSet } from "../db/kv";
 import {
   cashouts,
+  bills,
+  billShares,
   flowConfigurations,
   flowPayments,
   intents,
@@ -294,7 +296,8 @@ export class IndexerService {
         const log = logs.find(
           (l) =>
             l.args.to.toLowerCase() === row.toAddress.toLowerCase() &&
-            l.args.from.toLowerCase() === row.fromAddress.toLowerCase(),
+            l.args.from.toLowerCase() === row.fromAddress.toLowerCase() &&
+            l.args.value === BigInt(row.amountRaw),
         );
         await this.db.client
           .update(transfers)
@@ -305,6 +308,9 @@ export class IndexerService {
             logIndex: log?.logIndex ?? null,
           })
           .where(eq(transfers.id, row.id));
+        if (row.direction === "SEND") {
+          await this.reconcileBillPayment(row, now, Boolean(log));
+        }
         if (row.direction === "RECEIVE") {
           const sender = await this.users
             .findByAddress(row.fromAddress)
@@ -345,7 +351,7 @@ export class IndexerService {
 
   private async markFailed(txHash: string): Promise<void> {
     const failedTransfers = await this.db.client
-      .select({ intentId: transfers.intentId })
+      .select({ id: transfers.id, intentId: transfers.intentId })
       .from(transfers)
       .where(
         and(eq(transfers.txHash, txHash), eq(transfers.status, "PENDING")),
@@ -356,6 +362,17 @@ export class IndexerService {
       .where(
         and(eq(transfers.txHash, txHash), eq(transfers.status, "PENDING")),
       );
+    const failedTransferIds = failedTransfers.map((transfer) => transfer.id);
+    if (failedTransferIds.length) {
+      await this.db.client
+        .update(billShares)
+        .set({
+          status: "PENDING",
+          transferId: null,
+          updatedAt: new Date(),
+        })
+        .where(inArray(billShares.transferId, failedTransferIds));
+    }
     await this.db.client
       .update(cashouts)
       .set({ status: "FAILED" })
@@ -366,6 +383,98 @@ export class IndexerService {
       ),
     );
     this.logger.warn(`indexer.failed tx=${txHash}`);
+  }
+
+  private async reconcileBillPayment(
+    transfer: typeof transfers.$inferSelect,
+    confirmedAt: Date,
+    receiptMatches: boolean,
+  ): Promise<void> {
+    if (!transfer.intentId) return;
+    const [intent] = await this.db.client
+      .select({ details: intents.details })
+      .from(intents)
+      .where(eq(intents.id, transfer.intentId))
+      .limit(1);
+    const details = (intent?.details ?? {}) as Record<string, unknown>;
+    if (
+      typeof details.billId !== "string" ||
+      typeof details.billShareId !== "string"
+    )
+      return;
+
+    if (!receiptMatches) {
+      await this.db.client
+        .update(transfers)
+        .set({ status: "FAILED", confirmedAt: null })
+        .where(eq(transfers.id, transfer.id));
+      await this.db.client
+        .update(billShares)
+        .set({ status: "PENDING", transferId: null, updatedAt: confirmedAt })
+        .where(
+          and(
+            eq(billShares.id, details.billShareId),
+            eq(billShares.transferId, transfer.id),
+          ),
+        );
+      await this.releaseSponsorships([transfer.intentId]);
+      this.logger.error(
+        `indexer.bill_receipt_mismatch bill=${details.billId} share=${details.billShareId} tx=${transfer.txHash}`,
+      );
+      return;
+    }
+
+    const [paidShare] = await this.db.client
+      .update(billShares)
+      .set({ status: "PAID", paidAt: confirmedAt, updatedAt: confirmedAt })
+      .where(
+        and(
+          eq(billShares.id, details.billShareId),
+          eq(billShares.billId, details.billId),
+          eq(billShares.userId, transfer.userId),
+          eq(billShares.transferId, transfer.id),
+          eq(billShares.status, "PAYMENT_PENDING"),
+        ),
+      )
+      .returning();
+    if (!paidShare) return;
+
+    const [bill, shares, payer] = await Promise.all([
+      this.db.client
+        .select()
+        .from(bills)
+        .where(eq(bills.id, paidShare.billId))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      this.db.client
+        .select({ userId: billShares.userId, status: billShares.status })
+        .from(billShares)
+        .where(eq(billShares.billId, paidShare.billId)),
+      this.users.findActiveById(transfer.userId),
+    ]);
+    if (!bill) return;
+    if (shares.every((share) => share.status === "PAID")) {
+      await this.db.client
+        .update(bills)
+        .set({ status: "SETTLED", updatedAt: confirmedAt })
+        .where(eq(bills.id, bill.id));
+    } else {
+      await this.db.client
+        .update(bills)
+        .set({ updatedAt: confirmedAt })
+        .where(eq(bills.id, bill.id));
+    }
+    await this.notifications.notifyBillPaid(
+      shares.map((share) => share.userId),
+      {
+        billId: bill.id,
+        title: bill.title,
+        payerHandle: payer?.handle ?? null,
+      },
+    );
+    this.logger.log(
+      `indexer.bill_paid bill=${bill.id} share=${paidShare.id} tx=${transfer.txHash}`,
+    );
   }
 
   private async releaseSponsorships(intentIds: string[]): Promise<void> {

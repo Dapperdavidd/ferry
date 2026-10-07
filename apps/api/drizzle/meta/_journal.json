@@ -43,6 +43,13 @@
       "when": 1791231611855,
       "tag": "0005_tearful_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791351207902,
+      "tag": "0006_wonderful_tarantula",
+      "breakpoints": true
     }
   ]
 }

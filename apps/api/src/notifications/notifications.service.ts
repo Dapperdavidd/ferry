@@ -116,4 +116,96 @@ export class NotificationsService {
       this.logger.warn(`push.cashout_failed ${(err as Error).message}`);
     }
   }
+
+  async notifyBillInvited(
+    userIds: string[],
+    params: { billId: string; title: string; inviterHandle: string | null },
+  ): Promise<void> {
+    const inviter = params.inviterHandle
+      ? `@${params.inviterHandle}`
+      : "A Ferry friend";
+    await this.notifyBillMembers(userIds, {
+      title: "You’re in a new split",
+      body: `${inviter} added you to “${params.title}”.`,
+      data: {
+        kind: "bill_invited",
+        billId: params.billId,
+        url: `ferry://bills/${params.billId}`,
+      },
+    });
+  }
+
+  async notifyBillReminder(
+    userIds: string[],
+    params: { billId: string; title: string },
+  ): Promise<void> {
+    await this.notifyBillMembers(userIds, {
+      title: "Quick bill reminder",
+      body: `Your share of “${params.title}” is still open.`,
+      data: {
+        kind: "bill_reminder",
+        billId: params.billId,
+        url: `ferry://bills/${params.billId}`,
+      },
+    });
+  }
+
+  async notifyBillPaid(
+    userIds: string[],
+    params: { billId: string; title: string; payerHandle: string | null },
+  ): Promise<void> {
+    const payer = params.payerHandle ? `@${params.payerHandle}` : "A member";
+    await this.notifyBillMembers(userIds, {
+      title: "Bill payment confirmed",
+      body: `${payer} paid their share of “${params.title}”.`,
+      data: {
+        kind: "bill_paid",
+        billId: params.billId,
+        url: `ferry://bills/${params.billId}`,
+      },
+    });
+  }
+
+  private async notifyBillMembers(
+    userIds: string[],
+    message: {
+      title: string;
+      body: string;
+      data: Record<string, string>;
+    },
+  ): Promise<void> {
+    try {
+      const uniqueIds = [...new Set(userIds)];
+      if (uniqueIds.length === 0) return;
+      const enabledUsers = await this.db.client
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          and(
+            inArray(users.id, uniqueIds),
+            eq(users.notificationsEnabled, true),
+          ),
+        );
+      if (enabledUsers.length === 0) return;
+      const enabledIds = enabledUsers.map((user) => user.id);
+      const devices = await this.db.client
+        .select({ token: pushDevices.token, userId: pushDevices.userId })
+        .from(pushDevices)
+        .where(inArray(pushDevices.userId, enabledIds));
+      if (devices.length === 0) return;
+      const { invalidTokens } = await this.push.send(
+        devices.map((device) => ({ token: device.token, ...message })),
+      );
+      if (invalidTokens.length) {
+        await this.db.client
+          .delete(pushDevices)
+          .where(inArray(pushDevices.token, invalidTokens));
+      }
+      this.logger.log(
+        `push.bill kind=${message.data.kind} users=${enabledIds.length} devices=${devices.length}`,
+      );
+    } catch (err) {
+      this.logger.warn(`push.bill_failed ${(err as Error).message}`);
+    }
+  }
 }

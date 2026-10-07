@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,7 +8,8 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
@@ -16,14 +17,16 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { PremiumActionButton } from "@/components/ui/molecules/PremiumActionButton";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
+import { useBillGroups } from "@/hooks/useBills";
+import { apiClient, apiErrorMessage } from "@/utils/apiClient";
 import {
-  BILL_CONTACTS,
+  centsToRaw,
   formatBillMoney,
-  saveBill,
+  fromApiBill,
   splitEvenly,
   type Bill,
   type BillCategory,
-  type BillParticipant,
   type BillSplitMode,
 } from "@/utils/bills";
 
@@ -42,11 +45,27 @@ const CATEGORIES: {
 
 const DUE_OPTIONS = ["Today", "This week", "No rush"] as const;
 
+type DraftContact = {
+  id: string;
+  handle: string | null;
+  name: string;
+  initials: string;
+  self?: boolean;
+};
+
+type DraftParticipant = DraftContact & {
+  amountCents: number;
+  paid: boolean;
+};
+
 export default function NewBillScreen() {
   const { theme } = useAppTheme();
-  const { user, address } = useAuth();
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
-  const owner = user?.id ?? address ?? "ferry-user";
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
+  const groups = useBillGroups();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2 | 3 | "done">(1);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -54,7 +73,9 @@ export default function NewBillScreen() {
   const [category, setCategory] = useState<BillCategory>("food");
   const [dueLabel, setDueLabel] =
     useState<(typeof DUE_OPTIONS)[number]>("This week");
-  const [selectedIds, setSelectedIds] = useState<string[]>(["self", "bola"]);
+  const [contacts, setContacts] = useState<DraftContact[]>([]);
+  const [handle, setHandle] = useState("");
+  const [resolvingHandle, setResolvingHandle] = useState(false);
   const [splitMode, setSplitMode] = useState<BillSplitMode>("even");
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>(
     {}
@@ -62,10 +83,32 @@ export default function NewBillScreen() {
   const [busy, setBusy] = useState(false);
   const [createdBill, setCreatedBill] = useState<Bill | null>(null);
 
+  useEffect(() => {
+    if (!groupId || !user?.id || !groups.data) return;
+    const group = groups.data.find((item) => item.id === groupId);
+    if (!group) return;
+    setContacts(
+      group.members
+        .filter((member) => member.id !== user.id && member.handle)
+        .map((member) => ({
+          id: member.id,
+          handle: member.handle,
+          name: member.name,
+          initials: member.initials || initials(member.name),
+          self: false,
+        }))
+    );
+  }, [groupId, groups.data, user?.id]);
+
   const totalCents = Math.round((Number(amount) || 0) * 100);
-  const selectedContacts = BILL_CONTACTS.filter((contact) =>
-    selectedIds.includes(contact.id)
-  );
+  const selfContact: DraftContact = {
+    id: user?.id ?? "self",
+    handle: user?.handle ?? null,
+    name: user?.displayName ?? "You",
+    initials: initials(user?.displayName ?? user?.handle ?? "You"),
+    self: true,
+  };
+  const selectedContacts: DraftContact[] = [selfContact, ...contacts];
   const evenShares = useMemo(
     () => splitEvenly(totalCents, selectedContacts.length),
     [selectedContacts.length, totalCents]
@@ -109,7 +152,7 @@ export default function NewBillScreen() {
     }
   };
 
-  const participants: BillParticipant[] = selectedContacts.map(
+  const participants: DraftParticipant[] = selectedContacts.map(
     (contact, index) => ({
       ...contact,
       amountCents:
@@ -120,22 +163,65 @@ export default function NewBillScreen() {
     })
   );
 
+  const addHandle = async () => {
+    const normalized = handle.trim().replace(/^@/, "").toLowerCase();
+    if (!normalized || resolvingHandle) return;
+    if (
+      normalized === user?.handle ||
+      contacts.some((item) => item.handle === normalized)
+    ) {
+      showToast("That person is already in the split");
+      return;
+    }
+    setResolvingHandle(true);
+    try {
+      const contact = await apiClient.resolveHandle(normalized);
+      if (!contact) {
+        showToast(`@${normalized} is not on Ferry yet`);
+        return;
+      }
+      setContacts((current) => [
+        ...current,
+        {
+          id: contact.handle,
+          handle: contact.handle,
+          name: contact.displayName || contact.handle,
+          initials: initials(contact.displayName || contact.handle),
+          self: false,
+        },
+      ]);
+      setHandle("");
+    } catch (error) {
+      showToast(apiErrorMessage(error) ?? "We couldn't find that person");
+    } finally {
+      setResolvingHandle(false);
+    }
+  };
+
   const createBill = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const bill = await saveBill(owner, {
+      const created = await apiClient.createBill({
         title: title.trim(),
-        note: note.trim(),
-        totalCents,
-        currency: "USD",
+        note: note.trim() || undefined,
+        totalRaw: centsToRaw(totalCents),
+        creatorAmountRaw: centsToRaw(participants[0]?.amountCents ?? 0),
         category,
         splitMode,
         dueLabel,
-        participants,
+        groupId,
+        shares: participants.slice(1).map((participant) => ({
+          handle: participant.handle!,
+          amountRaw: centsToRaw(participant.amountCents),
+        })),
       });
+      const bill = fromApiBill(created);
+      await queryClient.invalidateQueries({ queryKey: ["bills"] });
       setCreatedBill(bill);
       setStep("done");
+    } catch (error) {
+      showToast(apiErrorMessage(error) ?? "We couldn't create that bill");
     } finally {
       setBusy(false);
     }
@@ -149,7 +235,7 @@ export default function NewBillScreen() {
       .join("\n");
     await Share.share({
       title: createdBill.title,
-      message: `${createdBill.title} · ${formatBillMoney(createdBill.totalCents)}\n${shares}\n\nSplit with Ferry.`,
+      message: `${createdBill.title} · ${formatBillMoney(createdBill.totalCents)}\n${shares}\n\nOpen in Ferry: ferry://bills/${createdBill.id}`,
     });
   };
 
@@ -217,16 +303,16 @@ export default function NewBillScreen() {
         ) : step === 2 ? (
           <PeopleStep
             amountCents={totalCents}
-            selectedIds={selectedIds}
+            selected={selectedContacts}
+            handle={handle}
+            resolvingHandle={resolvingHandle}
             splitMode={splitMode}
             customAmounts={customAmounts}
             customTotal={customTotal}
-            onTogglePerson={(id) =>
-              setSelectedIds((current) =>
-                current.includes(id)
-                  ? current.filter((value) => value !== id)
-                  : [...current, id]
-              )
+            onHandle={setHandle}
+            onAddHandle={() => void addHandle()}
+            onRemovePerson={(id) =>
+              setContacts((current) => current.filter((item) => item.id !== id))
             }
             onSplitMode={selectSplitMode}
             onCustomAmount={(id, value) =>
@@ -497,27 +583,32 @@ function BillInput({
 
 function PeopleStep({
   amountCents,
-  selectedIds,
+  selected,
+  handle,
+  resolvingHandle,
   splitMode,
   customAmounts,
   customTotal,
-  onTogglePerson,
+  onHandle,
+  onAddHandle,
+  onRemovePerson,
   onSplitMode,
   onCustomAmount,
 }: {
   amountCents: number;
-  selectedIds: string[];
+  selected: DraftContact[];
+  handle: string;
+  resolvingHandle: boolean;
   splitMode: BillSplitMode;
   customAmounts: Record<string, string>;
   customTotal: number;
-  onTogglePerson: (id: string) => void;
+  onHandle: (value: string) => void;
+  onAddHandle: () => void;
+  onRemovePerson: (id: string) => void;
   onSplitMode: (mode: BillSplitMode) => void;
   onCustomAmount: (id: string, value: string) => void;
 }) {
   const { theme } = useAppTheme();
-  const selected = BILL_CONTACTS.filter((contact) =>
-    selectedIds.includes(contact.id)
-  );
   return (
     <ScrollView
       className="flex-1"
@@ -544,47 +635,89 @@ function PeopleStep({
         className="mt-3 text-sm"
         style={{ color: theme.muted }}
       >
-        Tap a person to add or remove them.
+        Add Ferry handles. Everyone sees the same bill instantly.
       </Typography>
 
-      <View className="mt-8 flex-row justify-between">
-        {BILL_CONTACTS.map((contact) => {
-          const active = selectedIds.includes(contact.id);
-          return (
-            <HapticPressable
-              key={contact.id}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: active, disabled: contact.self }}
-              disabled={contact.self}
-              feedback="selection"
-              onPress={() => onTogglePerson(contact.id)}
-              className="w-[72px] items-center"
+      <View
+        className="mt-8 flex-row items-center rounded-full px-5"
+        style={{ backgroundColor: theme.card }}
+      >
+        <Typography weight="700" style={{ color: theme.muted }}>
+          @
+        </Typography>
+        <TextInput
+          accessibilityLabel="Ferry handle"
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={handle}
+          onChangeText={onHandle}
+          onSubmitEditing={onAddHandle}
+          returnKeyType="done"
+          placeholder="handle"
+          placeholderTextColor={theme.faint}
+          className="h-14 flex-1 px-2 font-inter-semibold text-sm"
+          style={{ color: theme.text }}
+        />
+        <HapticPressable
+          accessibilityRole="button"
+          accessibilityLabel="Add person"
+          feedback="selection"
+          disabled={!handle.trim() || resolvingHandle}
+          onPress={onAddHandle}
+          className="rounded-full px-3 py-2"
+          style={{ backgroundColor: theme.cardStrong }}
+        >
+          <Typography
+            weight="700"
+            className="text-xs"
+            style={{ color: theme.text }}
+          >
+            {resolvingHandle ? "Finding…" : "Add"}
+          </Typography>
+        </HapticPressable>
+      </View>
+
+      <View className="mt-6 flex-row flex-wrap gap-3">
+        {selected.map((contact) => (
+          <HapticPressable
+            key={contact.id}
+            accessibilityRole="button"
+            accessibilityLabel={contact.self ? "You" : `Remove ${contact.name}`}
+            disabled={contact.self}
+            feedback="selection"
+            onPress={() => onRemovePerson(contact.id)}
+            className="flex-row items-center rounded-full py-2 pl-2 pr-3"
+            style={{ backgroundColor: theme.card }}
+          >
+            <View
+              className="size-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: theme.accentSoft }}
             >
-              <View
-                className="size-14 items-center justify-center rounded-full border-2"
-                style={{
-                  backgroundColor: active ? theme.accentSoft : theme.card,
-                  borderColor: active ? theme.accent : "transparent",
-                }}
-              >
-                <Typography
-                  weight="700"
-                  className="text-lg"
-                  style={{ color: theme.text }}
-                >
-                  {contact.initials}
-                </Typography>
-              </View>
               <Typography
-                weight={active ? "700" : "500"}
-                className="mt-2 text-xs"
-                style={{ color: active ? theme.text : theme.muted }}
+                weight="700"
+                className="text-xs"
+                style={{ color: theme.text }}
               >
-                {contact.name}
+                {contact.initials}
               </Typography>
-            </HapticPressable>
-          );
-        })}
+            </View>
+            <Typography
+              weight="700"
+              className="ml-2 text-xs"
+              style={{ color: theme.text }}
+            >
+              {contact.self ? "You" : `@${contact.handle}`}
+            </Typography>
+            {!contact.self ? (
+              <Ionicons
+                name="close"
+                size={15}
+                color={theme.muted}
+                style={{ marginLeft: 6 }}
+              />
+            ) : null}
+          </HapticPressable>
+        ))}
       </View>
 
       <Typography
@@ -710,7 +843,7 @@ function ReviewStep({
   totalCents: number;
   dueLabel: string;
   splitMode: BillSplitMode;
-  participants: BillParticipant[];
+  participants: DraftParticipant[];
 }) {
   const { theme } = useAppTheme();
   return (
@@ -831,4 +964,13 @@ function DoneStep({ bill }: { bill: Bill | null }) {
       </Typography>
     </View>
   );
+}
+
+function initials(value: string): string {
+  return value
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, ScrollView, Share, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
@@ -9,36 +10,27 @@ import { ScreenLayout } from "@/components/ui/layout";
 import { PremiumActionButton } from "@/components/ui/molecules/PremiumActionButton";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useModalFlow } from "@/contexts/ModalFlowContext";
-import {
-  billPositionAmount,
-  formatBillMoney,
-  loadBills,
-  type Bill,
-} from "@/utils/bills";
-import { SEED_DEMO } from "@/utils/devSeed";
+import { useToast } from "@/contexts/ToastContext";
+import { useBill, useRemindBill } from "@/hooks/useBills";
+import { getAusdAddress, getMonadChain } from "@/lib/chain";
+import { PasskeyFailure } from "@/lib/mera";
+import { checkAuthorization } from "@/utils/authorization";
+import { apiClient, apiErrorMessage } from "@/utils/apiClient";
+import { billPositionAmount, formatBillMoney } from "@/utils/bills";
+import { toSignable } from "@/utils/typedData";
 
 export default function BillDetailScreen() {
   const { theme } = useAppTheme();
-  const { user, address } = useAuth();
-  const { showSendModal } = useModalFlow();
+  const { address, authorize } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const owner = user?.id ?? address ?? "ferry-user";
-  const [bill, setBill] = useState<Bill | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    void loadBills(owner, SEED_DEMO).then((items) => {
-      if (!active) return;
-      setBill(items.find((item) => item.id === id) ?? null);
-      setLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [id, owner]);
+  const billQuery = useBill(id);
+  const remind = useRemindBill();
+  const [paying, setPaying] = useState(false);
+  const [responding, setResponding] = useState(false);
+  const bill = billQuery.data ?? null;
 
   const share = async () => {
     if (!bill) return;
@@ -48,21 +40,95 @@ export default function BillDetailScreen() {
       .join("\n");
     await Share.share({
       title: bill.title,
-      message: `${bill.title}\n${waiting || formatBillMoney(bill.totalCents)}\n\nSettle with Ferry.`,
+      message: `${bill.title}\n${waiting || formatBillMoney(bill.totalCents)}\n\nOpen in Ferry: ferry://bills/${bill.id}`,
     });
   };
 
-  const primaryAction = () => {
-    if (!bill) return;
-    if (bill.position === "owe") {
-      showSendModal();
-      router.replace("/(tabs)" as never);
-      return;
+  const pay = async () => {
+    if (!bill || !address || paying) return;
+    const ownShare = bill.participants.find((participant) => participant.self);
+    if (!ownShare) return;
+    setPaying(true);
+    try {
+      const prepared = await apiClient.prepareBillPayment(bill.id);
+      const mismatch = checkAuthorization(prepared.typedData, {
+        from: address,
+        to: prepared.recipient.address,
+        amountRaw: ownShare.amountRaw,
+        token: getAusdAddress(),
+        chainId: getMonadChain().id,
+      });
+      if (mismatch) {
+        throw new Error(
+          "This bill payment didn't match what you approved. Nothing was sent."
+        );
+      }
+      const signature = await authorize((signer) =>
+        signer.signTypedData(toSignable(prepared.typedData) as never)
+      );
+      await apiClient.submitBillPayment(bill.id, {
+        intentId: prepared.intentId,
+        signature,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["bill", bill.id] }),
+        queryClient.invalidateQueries({ queryKey: ["bills"] }),
+        queryClient.invalidateQueries({ queryKey: ["transfers"] }),
+        queryClient.invalidateQueries({ queryKey: ["balances"] }),
+      ]);
+      showToast("Payment sent · confirming onchain");
+    } catch (error) {
+      if (error instanceof PasskeyFailure && error.kind === "cancelled") return;
+      showToast(
+        apiErrorMessage(error) ??
+          (error as Error).message ??
+          "Payment didn't finish"
+      );
+    } finally {
+      setPaying(false);
     }
-    void share();
   };
 
-  if (loading) {
+  const respond = async (accepted: boolean) => {
+    if (!bill || responding) return;
+    setResponding(true);
+    try {
+      await apiClient.respondToBill(bill.id, accepted);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["bill", bill.id] }),
+        queryClient.invalidateQueries({ queryKey: ["bills"] }),
+      ]);
+      showToast(accepted ? "Bill accepted" : "Invitation declined");
+    } catch (error) {
+      showToast(apiErrorMessage(error) ?? "We couldn't update the invitation");
+    } finally {
+      setResponding(false);
+    }
+  };
+
+  const primaryAction = async () => {
+    if (!bill) return;
+    if (bill.position === "owe") {
+      await pay();
+      return;
+    }
+    if (bill.position === "collecting") {
+      try {
+        const result = await remind.mutateAsync(bill.id);
+        showToast(
+          result.reminded === 1
+            ? "Reminder sent"
+            : `Reminded ${result.reminded} people`
+        );
+      } catch (error) {
+        showToast(apiErrorMessage(error) ?? "Reminder didn't send");
+      }
+      return;
+    }
+    await share();
+  };
+
+  if (billQuery.isLoading) {
     return (
       <ScreenLayout
         className="items-center justify-center"
@@ -107,9 +173,7 @@ export default function BillDetailScreen() {
       ? `Your share is ${formatBillMoney(positionAmount)}`
       : bill.position === "collecting"
         ? `${formatBillMoney(positionAmount)} still coming back`
-        : bill.position === "draft"
-          ? "Ready to share"
-          : "Everyone is settled";
+        : "Everyone is settled";
 
   return (
     <ScreenLayout
@@ -191,6 +255,51 @@ export default function BillDetailScreen() {
         </Typography>
 
         <View className="mt-10">
+          {bill.participants.find((participant) => participant.self)
+            ?.invitationStatus === "PENDING" ? (
+            <View
+              className="mb-5 rounded-[24px] p-4"
+              style={{ backgroundColor: theme.card }}
+            >
+              <Typography
+                weight="700"
+                className="text-sm"
+                style={{ color: theme.text }}
+              >
+                You were invited to this split
+              </Typography>
+              <View className="mt-4 flex-row gap-3">
+                <HapticPressable
+                  disabled={responding}
+                  onPress={() => void respond(false)}
+                  className="flex-1 items-center rounded-full py-3"
+                  style={{ backgroundColor: theme.cardStrong }}
+                >
+                  <Typography
+                    weight="700"
+                    className="text-xs"
+                    style={{ color: theme.muted }}
+                  >
+                    Decline
+                  </Typography>
+                </HapticPressable>
+                <HapticPressable
+                  disabled={responding}
+                  onPress={() => void respond(true)}
+                  className="flex-1 items-center rounded-full py-3"
+                  style={{ backgroundColor: theme.primary }}
+                >
+                  <Typography
+                    weight="700"
+                    className="text-xs"
+                    style={{ color: theme.primaryText }}
+                  >
+                    Accept
+                  </Typography>
+                </HapticPressable>
+              </View>
+            </View>
+          ) : null}
           {bill.participants.map((person) => (
             <View
               key={person.id}
@@ -218,7 +327,11 @@ export default function BillDetailScreen() {
                   className="mt-0.5 text-[11px]"
                   style={{ color: person.paid ? theme.muted : theme.accent }}
                 >
-                  {person.paid ? "Settled" : "Waiting"}
+                  {person.paymentStatus === "PAYMENT_PENDING"
+                    ? "Confirming"
+                    : person.paid
+                      ? "Settled"
+                      : "Waiting"}
                 </Typography>
               </View>
               <Typography
@@ -235,13 +348,26 @@ export default function BillDetailScreen() {
         <PremiumActionButton
           label={
             bill.position === "owe"
-              ? "Pay with Ferry"
+              ? paying
+                ? "Confirming…"
+                : bill.participants.find((participant) => participant.self)
+                      ?.paymentStatus === "PAYMENT_PENDING"
+                  ? "Payment confirming"
+                  : "Pay with Ferry"
               : bill.position === "settled"
                 ? "Share receipt"
-                : "Share reminder"
+                : remind.isPending
+                  ? "Sending reminder…"
+                  : "Remind everyone"
           }
           tone="ink"
-          onPress={primaryAction}
+          disabled={
+            paying ||
+            remind.isPending ||
+            bill.participants.find((participant) => participant.self)
+              ?.paymentStatus === "PAYMENT_PENDING"
+          }
+          onPress={() => void primaryAction()}
           style={{ marginTop: 36 }}
         />
       </ScrollView>

@@ -21,6 +21,7 @@ import { FlowsModule } from "./flows/flows.module";
 import { RelayerPolicyModule } from "./relayer/relayer-policy.module";
 import { RewardsModule } from "./rewards/rewards.module";
 import { PlusModule } from "./plus/plus.module";
+import { BillsModule } from "./bills/bills.module";
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PlusModule } from "./plus/plus.module";
     FlowsModule,
     RewardsModule,
     PlusModule,
+    BillsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -7,15 +7,13 @@ import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { useAppTheme } from "@/contexts/AppThemeContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useBills } from "@/hooks/useBills";
 import {
   billPositionAmount,
   formatBillMoney,
-  loadBills,
   type Bill,
   type BillCategory,
 } from "@/utils/bills";
-import { SEED_DEMO } from "@/utils/devSeed";
 
 const CATEGORY_ICON: Record<BillCategory, keyof typeof Ionicons.glyphMap> = {
   food: "restaurant-outline",
@@ -38,28 +36,13 @@ const BILL_FILTERS: { id: BillCategory | "all"; label: string }[] = [
 
 export default function BillsScreen() {
   const { theme } = useAppTheme();
-  const { user, address } = useAuth();
   const router = useRouter();
-  const owner = user?.id ?? address ?? "ferry-user";
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [loading, setLoading] = useState(true);
+  const billsQuery = useBills();
+  const bills = billsQuery.data ?? [];
   const [view, setView] = useState<"open" | "settled">("open");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<BillCategory | "all">("all");
   const [filtersVisible, setFiltersVisible] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    void loadBills(owner, SEED_DEMO).then((next) => {
-      if (!active) return;
-      setBills(next);
-      setLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [owner]);
 
   const openBills = bills.filter((bill) => bill.position !== "settled");
   const settledBills = bills.filter((bill) => bill.position === "settled");
@@ -182,6 +165,38 @@ export default function BillsScreen() {
           </View>
         </View>
 
+        <HapticPressable
+          accessibilityRole="button"
+          accessibilityLabel="Open bill groups"
+          feedback="selection"
+          onPress={() => router.push("/bills/groups" as never)}
+          className="mt-5 flex-row items-center py-2"
+        >
+          <View
+            className="size-10 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
+          >
+            <Ionicons name="people-outline" size={20} color={theme.text} />
+          </View>
+          <View className="ml-3 flex-1">
+            <Typography
+              weight="700"
+              className="text-sm"
+              style={{ color: theme.text }}
+            >
+              Your groups
+            </Typography>
+            <Typography
+              weight="500"
+              className="mt-0.5 text-xs"
+              style={{ color: theme.muted }}
+            >
+              Reuse the people you split with
+            </Typography>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.muted} />
+        </HapticPressable>
+
         <View
           className="mt-6 flex-row rounded-full p-1"
           style={{ backgroundColor: theme.cardStrong }}
@@ -294,9 +309,32 @@ export default function BillsScreen() {
           </Typography>
         </View>
 
-        {loading ? (
+        {billsQuery.isLoading ? (
           <View className="items-center py-16">
             <ActivityIndicator color={theme.accent} />
+          </View>
+        ) : billsQuery.isError ? (
+          <View className="items-center py-16">
+            <Typography
+              weight="700"
+              className="text-base"
+              style={{ color: theme.text }}
+            >
+              Bills couldn&apos;t sync
+            </Typography>
+            <HapticPressable
+              onPress={() => void billsQuery.refetch()}
+              className="mt-4 rounded-full px-5 py-3"
+              style={{ backgroundColor: theme.card }}
+            >
+              <Typography
+                weight="700"
+                className="text-xs"
+                style={{ color: theme.text }}
+              >
+                Try again
+              </Typography>
+            </HapticPressable>
           </View>
         ) : visibleBills.length ? (
           visibleBills.map((bill) => (
@@ -377,9 +415,7 @@ function BillRow({ bill, onPress }: { bill: Bill; onPress: () => void }) {
       ? "You paid"
       : bill.position === "owe"
         ? "You owe"
-        : bill.position === "draft"
-          ? "Draft"
-          : "Settled";
+        : "Settled";
 
   return (
     <HapticPressable
