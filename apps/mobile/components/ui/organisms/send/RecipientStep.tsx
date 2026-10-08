@@ -68,6 +68,7 @@ export default memo(function RecipientStep({
   const [destinationMode, setDestinationMode] = useState<"list" | "wallet">(
     "list"
   );
+  const [isEditingRecipient, setIsEditingRecipient] = useState(false);
   const [walletName, setWalletName] = useState("");
   const debouncedRecipient = useDebounce(recipient, 350);
   const { address } = useAuth();
@@ -388,51 +389,61 @@ export default memo(function RecipientStep({
           </View>
         ) : (
           <>
-            <View className="px-6">
-              <DestinationRow
-                icon="business-outline"
-                title="Add a bank account"
-                subtitle="6 currencies"
-                flags={["🇺🇸", "🇪🇺", "🇬🇧", "🇧🇷", "🇨🇴"]}
-                badge="Coming soon"
-                disabled
-              />
-              <DestinationRow
-                icon="wallet-outline"
-                title="Wallet"
-                subtitle="Monad"
-                onPress={openWallet}
-              />
-              <DestinationRow
-                icon="at-outline"
-                title="Username"
-                subtitle="Instantly on Ferry"
-                onPress={focusRecipient}
-                last
-              />
-            </View>
+            {!isEditingRecipient && (
+              <View className="px-6">
+                <DestinationRow
+                  icon="business-outline"
+                  title="Add a bank account"
+                  subtitle="6 currencies"
+                  flags={["🇺🇸", "🇪🇺", "🇬🇧", "🇧🇷", "🇨🇴"]}
+                  badge="Coming soon"
+                  disabled
+                />
+                <DestinationRow
+                  icon="wallet-outline"
+                  title="Wallet"
+                  subtitle="Monad"
+                  onPress={openWallet}
+                />
+                <DestinationRow
+                  icon="at-outline"
+                  title="Username"
+                  subtitle="Instantly on Ferry"
+                  onPress={focusRecipient}
+                  last
+                />
+              </View>
+            )}
 
-            <View className="mt-auto px-6 pb-7">
-              <HapticPressable
-                accessibilityLabel="Scan recipient QR code"
-                accessibilityRole="button"
-                feedback="selection"
-                onPress={() => scannerRef.current?.present()}
-                className="mb-4 flex-row items-center justify-center rounded-full border py-4"
-                style={{
-                  borderColor: theme.border,
-                  backgroundColor: theme.card,
-                }}
-              >
-                <Ionicons name="scan-outline" size={20} color={theme.text} />
-                <Typography
-                  weight="600"
-                  className="ml-2"
-                  style={{ color: theme.text }}
+            <View
+              className="px-6 pb-7"
+              style={{
+                flexDirection: isEditingRecipient ? "column-reverse" : "column",
+                marginTop: isEditingRecipient ? 0 : "auto",
+              }}
+            >
+              {!isEditingRecipient && (
+                <HapticPressable
+                  accessibilityLabel="Scan recipient QR code"
+                  accessibilityRole="button"
+                  feedback="selection"
+                  onPress={() => scannerRef.current?.present()}
+                  className="mb-4 flex-row items-center justify-center rounded-full border py-4"
+                  style={{
+                    borderColor: theme.border,
+                    backgroundColor: theme.card,
+                  }}
                 >
-                  Scan to send
-                </Typography>
-              </HapticPressable>
+                  <Ionicons name="scan-outline" size={20} color={theme.text} />
+                  <Typography
+                    weight="600"
+                    className="ml-2"
+                    style={{ color: theme.text }}
+                  >
+                    Scan to send
+                  </Typography>
+                </HapticPressable>
+              )}
               {matchingContacts.length > 0 ? (
                 <View
                   className="mb-3 overflow-hidden rounded-[24px] border"
@@ -511,6 +522,8 @@ export default memo(function RecipientStep({
                   accessibilityLabel="Name, username, or wallet address"
                   value={recipient}
                   onChangeText={setRecipient}
+                  onFocus={() => setIsEditingRecipient(true)}
+                  onBlur={() => setIsEditingRecipient(false)}
                   autoCapitalize="none"
                   autoCorrect={false}
                   clearButtonMode="while-editing"
