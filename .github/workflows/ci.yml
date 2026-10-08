@@ -35,7 +35,7 @@ jobs:
         with:
           version: stable
       - name: Install pinned forge-std
-        run: forge install foundry-rs/forge-std@rev=3ce09137c04cfa037fef27f4270f3ddfa4358156 --no-git
+        run: forge install foundry-rs/forge-std@rev=77041d2ce690e692d6e03cc812b57d1ddaa4d505 --no-git
       - run: forge fmt --check
       - run: forge build --sizes
       - run: forge test -vvv
