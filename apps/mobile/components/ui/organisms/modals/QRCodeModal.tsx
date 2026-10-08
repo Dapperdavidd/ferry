@@ -18,6 +18,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { cn } from "@/utils/cn";
 import { Toggle } from "@/components/ui/atoms/Toggle";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { ferryPayLink } from "@/utils/recipientQr";
 
 interface QRCodeModalProps {
   walletAddress: string;
@@ -29,6 +30,9 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
     const { showToast } = useToast();
     const { theme } = useAppTheme();
     const [isHideWalletEnabled, setIsHideWalletEnabled] = useState(false);
+    const [qrMode, setQrMode] = useState<"wallet" | "ferry">("wallet");
+    const payLink = ferryPayLink(walletAddress);
+    const qrValue = qrMode === "wallet" ? walletAddress : payLink;
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => <BlurBackdrop {...props} />,
@@ -36,10 +40,10 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
     );
 
     const handleCopyAddress = async () => {
-      await Clipboard.setStringAsync(walletAddress);
+      await Clipboard.setStringAsync(qrValue);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(
-        "Copied address",
+        qrMode === "wallet" ? "Copied address" : "Copied Ferry link",
         <Ionicons name="checkmark-circle" size={16} color={theme.text} />
       );
     };
@@ -71,8 +75,37 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
               className="mt-1 text-sm"
               style={{ color: theme.muted }}
             >
-              Only send AUSD on Monad to this address
+              {qrMode === "wallet"
+                ? "Scan with any Monad wallet to send AUSD"
+                : "Scan with iPhone Camera to open Ferry"}
             </Typography>
+          </View>
+
+          <View
+            className="mx-7 mt-2 flex-row rounded-full p-1"
+            style={{ backgroundColor: theme.cardStrong }}
+          >
+            {(["wallet", "ferry"] as const).map((mode) => (
+              <HapticPressable
+                key={mode}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  mode === "wallet"
+                    ? "Show wallet address QR"
+                    : "Show open in Ferry QR"
+                }
+                accessibilityState={{ selected: qrMode === mode }}
+                onPress={() => setQrMode(mode)}
+                className="flex-1 items-center rounded-full py-3"
+                style={{
+                  backgroundColor: qrMode === mode ? theme.card : "transparent",
+                }}
+              >
+                <Typography weight="700" style={{ color: theme.text }}>
+                  {mode === "wallet" ? "Wallet address" : "Open in Ferry"}
+                </Typography>
+              </HapticPressable>
+            ))}
           </View>
 
           <View
@@ -103,12 +136,12 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
                 className="text-[11px] uppercase tracking-[0.8px]"
                 style={{ color: theme.text }}
               >
-                Monad address
+                {qrMode === "wallet" ? "Monad address" : "Ferry payment link"}
               </Typography>
             </View>
             <View className="relative w-full bg-transparent">
               <MemoizedQRCodeModal
-                walletAddress={walletAddress}
+                value={qrValue}
                 color={isHideWalletEnabled ? "white" : theme.text}
               />
             </View>
@@ -126,7 +159,7 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
                   : theme.muted,
               }}
             >
-              {walletAddress}
+              {qrMode === "wallet" ? walletAddress : "Scan to send in Ferry"}
             </Typography>
           </HapticPressable>
 
@@ -183,7 +216,7 @@ export const QRCodeModal = forwardRef<BottomSheetModal, QRCodeModalProps>(
                   color: isHideWalletEnabled ? "white" : theme.primaryText,
                 }}
               >
-                Copy address
+                {qrMode === "wallet" ? "Copy address" : "Copy Ferry link"}
               </Typography>
             </HapticPressable>
           </View>
@@ -197,17 +230,17 @@ QRCodeModal.displayName = "QRCodeModal";
 
 const MemoizedQRCodeModal = memo(
   ({
-    walletAddress,
+    value,
     color = "black",
     backgroundColor = "transparent",
   }: {
-    walletAddress: string;
+    value: string;
     color?: string;
     backgroundColor?: string;
   }) => {
     return (
       <QRCode
-        value={walletAddress}
+        value={value}
         size={280}
         color={color}
         backgroundColor={backgroundColor}

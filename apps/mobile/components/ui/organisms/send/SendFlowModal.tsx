@@ -22,6 +22,7 @@ export interface SendFlowModalRef {
 
 interface SendFlowModalProps {
   onClose?: () => void;
+  initialRecipient?: string | null;
 }
 
 type Step = "Recipient" | "Amount";
@@ -31,7 +32,7 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const springConfig = {};
 
 export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
-  ({ onClose }, ref) => {
+  ({ onClose, initialRecipient }, ref) => {
     const { theme } = useAppTheme();
     const snapPoints = useMemo(() => ["94%"], []);
     const [, setStep] = useState<Step>("Recipient");
@@ -40,6 +41,10 @@ export const SendFlowModal = forwardRef<BottomSheetModal, SendFlowModalProps>(
     const [flowKey, setFlowKey] = useState(0);
 
     const translateX = useSharedValue(0);
+
+    React.useEffect(() => {
+      if (initialRecipient) setRecipient(initialRecipient);
+    }, [initialRecipient]);
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => <BlurBackdrop {...props} />,

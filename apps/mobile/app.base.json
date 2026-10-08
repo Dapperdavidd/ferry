@@ -20,7 +20,10 @@
         "NSFaceIDUsageDescription": "Ferry uses Face ID to unlock the app and confirm payments.",
         "NSPhotoLibraryUsageDescription": "Allow Ferry to choose a photo for your profile."
       },
-      "associatedDomains": ["webcredentials:ferry.money"],
+      "associatedDomains": [
+        "webcredentials:ferry.money",
+        "applinks:ferry.money"
+      ],
       "bundleIdentifier": "money.ferry.app",
       "appleTeamId": "YCKKUWB4WD"
     },

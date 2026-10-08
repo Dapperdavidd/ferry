@@ -10,9 +10,11 @@ import { usePlus } from "@/hooks/usePlus";
 interface ModalFlowContextType {
   isReceiveModalVisible: boolean;
   isSendModalVisible: boolean;
+  sendRecipient: string | null;
   showReceiveModal: () => void;
-  showSendModal: () => void;
+  showSendModal: (recipient?: string) => boolean;
   hideAllModals: () => void;
+  clearSendRecipient: () => void;
 }
 
 const ModalFlowContext = createContext<ModalFlowContextType | undefined>(
@@ -34,41 +36,50 @@ export function ModalFlowProvider({ children }: { children: React.ReactNode }) {
   });
   const [isReceiveModalVisible, setIsReceiveModalVisible] = useState(false);
   const [isSendModalVisible, setIsSendModalVisible] = useState(false);
+  const [sendRecipient, setSendRecipient] = useState<string | null>(null);
 
   const showReceiveModal = useCallback(() => {
     setIsReceiveModalVisible(true);
   }, []);
 
-  const showSendModal = useCallback(() => {
-    if (networkStatus?.capabilities.send !== true) {
-      showToast(`Send is coming soon on ${config.label}`);
-      return;
-    }
-    if (plus?.coveredSends.remaining === 0) {
-      router.push("/plus" as never);
-      return;
-    }
-    setIsSendModalVisible(true);
-  }, [
-    config.label,
-    networkStatus?.capabilities.send,
-    plus?.coveredSends.remaining,
-    router,
-  ]);
+  const showSendModal = useCallback(
+    (recipient?: string) => {
+      if (networkStatus?.capabilities.send !== true) {
+        showToast(`Send is coming soon on ${config.label}`);
+        return false;
+      }
+      if (plus?.coveredSends.remaining === 0) {
+        router.push("/plus" as never);
+        return false;
+      }
+      setSendRecipient(typeof recipient === "string" ? recipient : null);
+      setIsSendModalVisible(true);
+      return true;
+    },
+    [
+      config.label,
+      networkStatus?.capabilities.send,
+      plus?.coveredSends.remaining,
+      router,
+    ]
+  );
 
   const hideAllModals = useCallback(() => {
     setIsReceiveModalVisible(false);
     setIsSendModalVisible(false);
   }, []);
+  const clearSendRecipient = useCallback(() => setSendRecipient(null), []);
 
   return (
     <ModalFlowContext.Provider
       value={{
         isReceiveModalVisible,
         isSendModalVisible,
+        sendRecipient,
         showReceiveModal,
         showSendModal,
         hideAllModals,
+        clearSendRecipient,
       }}
     >
       {children}

@@ -15,7 +15,8 @@ import {
 import { Typography } from "@/components/ui/atoms/Typography";
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Ionicons } from "@expo/vector-icons";
-import { parseRecipient } from "@/components/ui/organisms/send/RecipientStep";
+import { parseRecipient } from "@/utils/recipientQr";
+import { getActiveNetworkConfig } from "@/utils/network";
 
 interface QRScannerModalProps {
   onScan: (address: string) => void;
@@ -46,11 +47,14 @@ export const QRScannerModal = forwardRef<BottomSheetModal, QRScannerModalProps>(
     const handleBarCodeScanned = useCallback(
       (result: BarcodeScanningResult) => {
         if (hasScanned.current) return;
-        const parsed = parseRecipient(result.data);
+        const parsed = parseRecipient(
+          result.data,
+          getActiveNetworkConfig().chainId
+        );
         if (!parsed) return;
         hasScanned.current = true;
 
-        onScan(parsed.kind === "handle" ? parsed.value : parsed.value);
+        onScan(parsed.kind === "handle" ? `@${parsed.value}` : parsed.value);
         handleClose();
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,7 +153,7 @@ const RenderContent = ({
         pointerEvents="none"
       >
         <Typography weight="500" className="text-2xl text-white">
-          Scan a QR code
+          Scan a Monad wallet or Ferry QR
         </Typography>
       </View>
     </View>

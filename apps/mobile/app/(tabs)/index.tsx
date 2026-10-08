@@ -50,6 +50,8 @@ function HomeScreenContent() {
     isReceiveModalVisible,
     hideAllModals,
     isSendModalVisible,
+    sendRecipient,
+    clearSendRecipient,
   } = useModalFlow();
   const { showToast } = useToast();
   const { network, switchNetwork } = useNetwork();
@@ -389,7 +391,11 @@ function HomeScreenContent() {
         )}
       </ScrollView>
 
-      <SendFlowModal ref={sendFlowModalRef} onClose={() => {}} />
+      <SendFlowModal
+        ref={sendFlowModalRef}
+        initialRecipient={sendRecipient}
+        onClose={clearSendRecipient}
+      />
       <ReceiveModal
         visible={isReceiveModalVisible}
         onClose={hideAllModals}

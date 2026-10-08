@@ -1,5 +1,14 @@
 {
   "webcredentials": {
     "apps": ["YCKKUWB4WD.money.ferry.app"]
+  },
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "YCKKUWB4WD.money.ferry.app",
+        "paths": ["/pay", "/pay/*"]
+      }
+    ]
   }
 }

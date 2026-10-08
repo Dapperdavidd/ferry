@@ -2,10 +2,9 @@ import React, { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Keyboard, TouchableWithoutFeedback, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
-import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
+import { BottomSheetModal, BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import { TextInput } from "react-native-gesture-handler";
 import { useQuery } from "@tanstack/react-query";
-import { isAddress } from "viem";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
@@ -16,6 +15,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useRecentRecipients } from "@/hooks/useRecentRecipients";
 import { apiClient, type DirectoryEntry } from "@/utils/apiClient";
 import { truncateAddress } from "@/utils/helper";
+import { parseRecipient } from "@/utils/recipientQr";
+import { QRScannerModal } from "./QRScannerModal";
 
 interface RecipientStepProps {
   onClose: () => void;
@@ -54,21 +55,6 @@ const selectionFromAddress = (address: string): RecipientSelection => ({
   payoutReady: false,
 });
 
-const HANDLE = /^@?[a-z0-9_]{3,20}$/i;
-
-/** "@ada", "ada" and "ferry://pay?to=@ada" all mean the handle ada. */
-export function parseRecipient(
-  text: string
-): { kind: "address" | "handle"; value: string } | null {
-  let raw = text.trim();
-  const link = raw.match(/^ferry:\/\/pay\?to=(.+)$/i);
-  if (link) raw = decodeURIComponent(link[1]);
-  if (isAddress(raw)) return { kind: "address", value: raw };
-  if (HANDLE.test(raw))
-    return { kind: "handle", value: raw.replace(/^@/, "").toLowerCase() };
-  return null;
-}
-
 export default memo(function RecipientStep({
   onClose,
   onNext,
@@ -77,6 +63,7 @@ export default memo(function RecipientStep({
 }: RecipientStepProps) {
   const { theme } = useAppTheme();
   const inputRef = useRef<TextInput | null>(null);
+  const scannerRef = useRef<BottomSheetModal>(null);
   const walletAddressRef = useRef<TextInput | null>(null);
   const [destinationMode, setDestinationMode] = useState<"list" | "wallet">(
     "list"
@@ -230,6 +217,11 @@ export default memo(function RecipientStep({
     setDestinationMode("wallet");
   };
 
+  const handleScan = (value: string) => {
+    setDestinationMode("list");
+    setRecipient(value);
+  };
+
   const handleBack = () => {
     if (destinationMode === "wallet") {
       Keyboard.dismiss();
@@ -355,6 +347,24 @@ export default memo(function RecipientStep({
             </View>
 
             <HapticPressable
+              accessibilityLabel="Scan wallet QR code"
+              accessibilityRole="button"
+              feedback="selection"
+              onPress={() => scannerRef.current?.present()}
+              className="mt-4 flex-row items-center justify-center rounded-full border py-4"
+              style={{ borderColor: theme.border, backgroundColor: theme.card }}
+            >
+              <Ionicons name="scan-outline" size={20} color={theme.text} />
+              <Typography
+                weight="600"
+                className="ml-2"
+                style={{ color: theme.text }}
+              >
+                Scan wallet QR
+              </Typography>
+            </HapticPressable>
+
+            <HapticPressable
               accessibilityLabel="Continue with wallet"
               accessibilityRole="button"
               accessibilityState={{ disabled: !walletAddress }}
@@ -403,6 +413,26 @@ export default memo(function RecipientStep({
             </View>
 
             <View className="mt-auto px-6 pb-7">
+              <HapticPressable
+                accessibilityLabel="Scan recipient QR code"
+                accessibilityRole="button"
+                feedback="selection"
+                onPress={() => scannerRef.current?.present()}
+                className="mb-4 flex-row items-center justify-center rounded-full border py-4"
+                style={{
+                  borderColor: theme.border,
+                  backgroundColor: theme.card,
+                }}
+              >
+                <Ionicons name="scan-outline" size={20} color={theme.text} />
+                <Typography
+                  weight="600"
+                  className="ml-2"
+                  style={{ color: theme.text }}
+                >
+                  Scan to send
+                </Typography>
+              </HapticPressable>
               {matchingContacts.length > 0 ? (
                 <View
                   className="mb-3 overflow-hidden rounded-[24px] border"
@@ -518,6 +548,7 @@ export default memo(function RecipientStep({
             </View>
           </>
         )}
+        <QRScannerModal ref={scannerRef} onScan={handleScan} />
       </View>
     </TouchableWithoutFeedback>
   );

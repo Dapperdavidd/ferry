@@ -14,7 +14,10 @@ export default (): ExpoConfig => {
     ...expo,
     owner: "samsonnoliens-team",
     plugins: [...(expo.plugins ?? []), "./plugins/with-ios-archive-symbols"],
-    ios: { ...expo.ios, associatedDomains: [`webcredentials:${rpId}`] },
+    ios: {
+      ...expo.ios,
+      associatedDomains: [`webcredentials:${rpId}`, `applinks:${rpId}`],
+    },
     extra: {
       ...expo.extra,
       rpId,

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Send with Ferry</title>
+    <style>
+      :root { --bg: #f7f7f4; --card: #fff; --text: #121310; --muted: #6d6f69; --accent: #e7e3c8; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0b0c0c; --card: #171918; --text: #f3f3ee; --muted: #a8aca7; --accent: #373823; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.45 -apple-system, BlinkMacSystemFont, Inter, system-ui, sans-serif; }
+      main { width: min(34rem, calc(100% - 32px)); min-height: 100vh; margin: auto; display: flex; flex-direction: column; padding: 32px 0; }
+      nav { font-weight: 750; letter-spacing: -0.03em; }
+      section { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+      .mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 22px; background: var(--accent); font-size: 26px; }
+      h1 { margin: 28px 0 0; font-size: clamp(2.6rem, 12vw, 4.5rem); line-height: 1; letter-spacing: -0.06em; }
+      p { color: var(--muted); }
+      .recipient { overflow-wrap: anywhere; padding: 20px; border-radius: 24px; background: var(--card); font-weight: 650; }
+      a { display: grid; place-items: center; min-height: 60px; margin-top: 18px; border-radius: 999px; background: var(--text); color: var(--bg); font-weight: 700; text-decoration: none; }
+      footer { padding: 12px 0; color: var(--muted); font-size: .8rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <nav>Ferry</nav>
+      <section>
+        <div class="mark" aria-hidden="true">↗</div>
+        <h1>Send with Ferry.</h1>
+        <p>Open the app to review the recipient and choose an amount. Scanning never sends money automatically.</p>
+        <div class="recipient" id="recipient">Checking payment link…</div>
+        <a id="open" href="#">Open Ferry</a>
+      </section>
+      <footer>Only send AUSD on Monad. Always check the recipient before confirming.</footer>
+    </main>
+    <script>
+      const recipient = new URLSearchParams(location.search).get("to") || "";
+      const valid = /^0x[0-9a-fA-F]{40}$/.test(recipient) || /^@[a-z0-9_]{3,20}$/i.test(recipient);
+      const open = document.querySelector("#open");
+      document.querySelector("#recipient").textContent = valid ? recipient : "Invalid recipient";
+      if (valid) {
+        open.href = `ferry://pay?to=${encodeURIComponent(recipient)}`;
+      } else {
+        open.hidden = true;
+      }
+    </script>
+  </body>
+</html>
