@@ -38,4 +38,11 @@ jobs:
         run: forge install foundry-rs/forge-std@rev=77041d2ce690e692d6e03cc812b57d1ddaa4d505 --no-git
       - run: forge fmt --check
       - run: forge build --sizes
-      - run: forge test -vvv
+      - name: Test local flow behavior
+        run: forge test -vvv --match-path 'test/FerryFlow*.t.sol'
+      - name: Test Monad testnet deployment
+        run: forge test -vvv --rpc-url monad_testnet --match-path test/DeployFerryFlow.t.sol
+      - name: Test Monad testnet settlement
+        run: forge test -vvv --rpc-url monad_testnet --match-path test/FerrySettlement.t.sol
+      - name: Test Monad mainnet deployment
+        run: forge test -vvv --rpc-url monad_mainnet --match-path test/DeployFerryFlowMainnet.t.sol
