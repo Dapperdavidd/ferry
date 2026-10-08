@@ -35,7 +35,7 @@ export function useTransfersInfinite() {
 }
 
 /** Polls the newest row; a change refreshes the lists, and a fresh arrival toasts. */
-export function usePendingWatch(hasPending = false) {
+export function usePendingWatch(hasPending = false, enabled = true) {
   const { isAuthenticated } = useAuth();
   const userId = useUserId();
   const queryClient = useQueryClient();
@@ -78,7 +78,7 @@ export function usePendingWatch(hasPending = false) {
       lastHeadIdRef.current = head?.id ?? null;
       return res;
     },
-    enabled: Boolean(isAuthenticated),
+    enabled: Boolean(isAuthenticated) && enabled,
     refetchInterval: hasPending ? PENDING_POLL_MS : IDLE_POLL_MS,
     staleTime: 0,
   });

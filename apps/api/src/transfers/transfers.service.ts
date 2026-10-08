@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { HttpStatus, Injectable, Logger, Optional } from "@nestjs/common";
 import { createId } from "@paralleldrive/cuid2";
 import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { getAddress, isAddress, toHex, type Address, type Hex } from "viem";
@@ -15,6 +15,7 @@ import { DbService } from "../db/db.service";
 import { cashouts, intents, transfers, users } from "../db/schema";
 import { UsersService } from "../users/users.service";
 import { RelayerPolicyService } from "../relayer/relayer-policy.service";
+import { EventsService } from "../events/events.service";
 import type { PrepareTransferRequest } from "./dtos";
 
 const INTENT_TTL_MS = 5 * 60_000;
@@ -60,6 +61,7 @@ export class TransfersService {
     private readonly chain: ChainService,
     private readonly users: UsersService,
     private readonly relayerPolicy: RelayerPolicyService,
+    @Optional() private readonly events?: EventsService,
   ) {}
 
   /** Resolves the recipient, checks balance and caps, and pins the exact authorization the app will sign. */
@@ -221,40 +223,65 @@ export class TransfersService {
         .update(intents)
         .set({ consumedAt: new Date() })
         .where(eq(intents.id, intentId));
-      await this.db.client.insert(transfers).values([
+      const senderRow = {
+        id: transferId,
+        userId,
+        kind: "transfer" as const,
+        direction: "SEND" as const,
+        amountRaw: auth.value.toString(),
+        fromAddress: auth.from,
+        toAddress: auth.to,
+        status: "PENDING" as const,
+        txHash,
+        intentId,
+        memo: details.memo ?? null,
+        usdValue,
+      };
+      const recipientRow = details.recipientUserId
+        ? {
+            id: createId(),
+            userId: details.recipientUserId,
+            kind: "receive" as const,
+            direction: "RECEIVE" as const,
+            amountRaw: auth.value.toString(),
+            fromAddress: auth.from,
+            toAddress: auth.to,
+            status: "PENDING" as const,
+            txHash,
+            intentId,
+            memo: details.memo ?? null,
+            usdValue,
+          }
+        : null;
+      await this.db.client
+        .insert(transfers)
+        .values(recipientRow ? [senderRow, recipientRow] : [senderRow]);
+      await this.events?.publish(
+        userId,
+        "transfer.pending",
+        "transfer",
+        senderRow.id,
         {
-          id: transferId,
-          userId,
-          kind: "transfer",
-          direction: "SEND",
-          amountRaw: auth.value.toString(),
-          fromAddress: auth.from,
-          toAddress: auth.to,
-          status: "PENDING",
-          txHash,
-          intentId,
-          memo: details.memo ?? null,
-          usdValue,
+          direction: senderRow.direction,
+          status: senderRow.status,
+          amountRaw: senderRow.amountRaw,
+          kind: senderRow.kind,
         },
-        ...(details.recipientUserId
-          ? [
-              {
-                id: createId(),
-                userId: details.recipientUserId,
-                kind: "receive" as const,
-                direction: "RECEIVE" as const,
-                amountRaw: auth.value.toString(),
-                fromAddress: auth.from,
-                toAddress: auth.to,
-                status: "PENDING" as const,
-                txHash,
-                intentId,
-                memo: details.memo ?? null,
-                usdValue,
-              },
-            ]
-          : []),
-      ]);
+      );
+      if (recipientRow) {
+        await this.events?.publish(
+          recipientRow.userId,
+          "transfer.pending",
+          "transfer",
+          recipientRow.id,
+          {
+            direction: recipientRow.direction,
+            status: recipientRow.status,
+            amountRaw: recipientRow.amountRaw,
+            kind: recipientRow.kind,
+          },
+        );
+      }
       this.logger.log(`transfer.sent id=${transferId} tx=${txHash}`);
       return { transferId, txHash, status: "PENDING" as const };
     });

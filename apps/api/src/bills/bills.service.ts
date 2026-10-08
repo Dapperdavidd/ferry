@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { createId } from "@paralleldrive/cuid2";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { Address, Hex } from "viem";
@@ -17,6 +17,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { TransfersService } from "../transfers/transfers.service";
 import { UsersService, type UserRow } from "../users/users.service";
+import { EventsService } from "../events/events.service";
 import type {
   AddBillGroupMemberRequest,
   CreateBillGroupRequest,
@@ -35,6 +36,7 @@ export class BillsService {
     private readonly usersService: UsersService,
     private readonly transfers: TransfersService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly events?: EventsService,
   ) {}
 
   async create(userId: string, body: CreateBillRequest) {
@@ -121,6 +123,13 @@ export class BillsService {
         inviterHandle: creator.handle,
       },
     );
+    await this.events?.publishMany(
+      [userId, ...participants.map((participant) => participant.id)],
+      "bill.updated",
+      "bill",
+      billId,
+      { action: "created" },
+    );
     return this.get(userId, billId);
   }
 
@@ -181,6 +190,10 @@ export class BillsService {
         HttpStatus.NOT_FOUND,
       );
     }
+    const memberIds = await this.billMemberIds(billId);
+    await this.events?.publishMany(memberIds, "bill.updated", "bill", billId, {
+      action: body.accepted ? "accepted" : "declined",
+    });
     return this.get(userId, billId);
   }
 
@@ -202,6 +215,13 @@ export class BillsService {
     await this.notifications.notifyBillReminder(
       pending.map((share) => share.userId),
       { billId, title: bill.title },
+    );
+    await this.events?.publishMany(
+      pending.map((share) => share.userId),
+      "bill.reminded",
+      "bill",
+      billId,
+      { action: "reminded" },
     );
     return { reminded: pending.length };
   }
@@ -294,6 +314,13 @@ export class BillsService {
             eq(billInvitations.inviteeUserId, userId),
           ),
         );
+      await this.events?.publishMany(
+        await this.billMemberIds(billId),
+        "bill.updated",
+        "bill",
+        billId,
+        { action: "payment-pending" },
+      );
       return result;
     });
   }
@@ -318,6 +345,13 @@ export class BillsService {
         })),
       ]);
     });
+    await this.events?.publishMany(
+      [userId, ...members.map((member) => member.id)],
+      "bill-group.updated",
+      "bill-group",
+      groupId,
+      { action: "created" },
+    );
     return this.getGroup(userId, groupId);
   }
 
@@ -364,6 +398,14 @@ export class BillsService {
       .update(billGroups)
       .set({ updatedAt: new Date() })
       .where(eq(billGroups.id, group.id));
+    const memberIds = await this.groupMemberIds(groupId);
+    await this.events?.publishMany(
+      memberIds,
+      "bill-group.updated",
+      "bill-group",
+      groupId,
+      { action: "member-added" },
+    );
     return this.getGroup(userId, groupId);
   }
 
@@ -606,6 +648,22 @@ export class BillsService {
       );
     }
     return group;
+  }
+
+  private async billMemberIds(billId: string) {
+    const rows = await this.db.client
+      .select({ userId: billShares.userId })
+      .from(billShares)
+      .where(eq(billShares.billId, billId));
+    return rows.map((row) => row.userId);
+  }
+
+  private async groupMemberIds(groupId: string) {
+    const rows = await this.db.client
+      .select({ userId: billGroupMembers.userId })
+      .from(billGroupMembers)
+      .where(eq(billGroupMembers.groupId, groupId));
+    return rows.map((row) => row.userId);
   }
 
   private async groupView(group: typeof billGroups.$inferSelect) {

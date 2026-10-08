@@ -68,6 +68,7 @@ import {
 } from "@/hooks/usePushRegistration";
 import { useRewardLifecycle } from "@/hooks/useRewardLifecycle";
 import { NetworkProvider } from "@/contexts/NetworkContext";
+import { useLiveEvents } from "@/hooks/useLiveEvents";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2 } },
@@ -291,7 +292,8 @@ function NetworkSession() {
  * invisible until something else happened to refetch.
  */
 function ActivityWatch() {
-  usePendingWatch();
+  const liveState = useLiveEvents();
+  usePendingWatch(false, liveState !== "connected");
   usePushRegistration();
   useNotificationRouting();
   return null;

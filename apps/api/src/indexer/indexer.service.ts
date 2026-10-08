@@ -25,6 +25,7 @@ import { ferryFlowAbi } from "../flows/flow.abi";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RewardsService } from "../rewards/rewards.service";
 import { UsersService } from "../users/users.service";
+import { EventsService } from "../events/events.service";
 
 const TICK_MS = 2_000;
 const CURSOR_KEY = "indexer:ausd_cursor";
@@ -47,6 +48,7 @@ export class IndexerService {
     private readonly notifications: NotificationsService,
     @Optional() private readonly config?: ConfigService,
     @Optional() private readonly rewards?: RewardsService,
+    @Optional() private readonly events?: EventsService,
   ) {}
 
   @Interval(TICK_MS)
@@ -157,6 +159,13 @@ export class IndexerService {
             .update(flowConfigurations)
             .set({ status: "CONFIRMED", confirmedAt: now, updatedAt: now })
             .where(eq(flowConfigurations.id, configuration.id));
+          await this.events?.publish(
+            configuration.userId,
+            "flow.updated",
+            "flow",
+            configuration.id,
+            { status: "CONFIRMED" },
+          );
           await this.reconcileRewards(
             configuration.userId,
             `flow:${configuration.id}`,
@@ -170,6 +179,13 @@ export class IndexerService {
               updatedAt: now,
             })
             .where(eq(flowConfigurations.id, configuration.id));
+          await this.events?.publish(
+            configuration.userId,
+            "flow.updated",
+            "flow",
+            configuration.id,
+            { status: "FAILED" },
+          );
           this.logger.error(
             `indexer.flow_config_event_mismatch id=${configuration.id} tx=${txHash}`,
           );
@@ -188,6 +204,13 @@ export class IndexerService {
             .update(flowPayments)
             .set({ status: "CONFIRMED", confirmedAt: now, updatedAt: now })
             .where(eq(flowPayments.id, payment.id));
+          await this.events?.publish(
+            payment.userId,
+            "flow.updated",
+            "flow-payment",
+            payment.id,
+            { status: "CONFIRMED" },
+          );
         } else {
           await this.db.client
             .update(flowPayments)
@@ -197,6 +220,13 @@ export class IndexerService {
               updatedAt: now,
             })
             .where(eq(flowPayments.id, payment.id));
+          await this.events?.publish(
+            payment.userId,
+            "flow.updated",
+            "flow-payment",
+            payment.id,
+            { status: "FAILED" },
+          );
           await this.releaseSponsorships([payment.intentId]);
           this.logger.error(
             `indexer.flow_payment_event_mismatch id=${payment.id} tx=${txHash}`,
@@ -209,15 +239,33 @@ export class IndexerService {
 
   private async markFlowsFailed(txHash: string): Promise<void> {
     const now = new Date();
-    const failedPayments = await this.db.client
-      .select({ intentId: flowPayments.intentId })
-      .from(flowPayments)
-      .where(
-        and(
-          eq(flowPayments.txHash, txHash),
-          eq(flowPayments.status, "PENDING"),
+    const [failedPayments, failedConfigurations] = await Promise.all([
+      this.db.client
+        .select({
+          id: flowPayments.id,
+          intentId: flowPayments.intentId,
+          userId: flowPayments.userId,
+        })
+        .from(flowPayments)
+        .where(
+          and(
+            eq(flowPayments.txHash, txHash),
+            eq(flowPayments.status, "PENDING"),
+          ),
         ),
-      );
+      this.db.client
+        .select({
+          id: flowConfigurations.id,
+          userId: flowConfigurations.userId,
+        })
+        .from(flowConfigurations)
+        .where(
+          and(
+            eq(flowConfigurations.txHash, txHash),
+            eq(flowConfigurations.status, "SUBMITTED"),
+          ),
+        ),
+    ]);
     await this.db.client
       .update(flowConfigurations)
       .set({ status: "FAILED", errorCode: "TX_FAILED", updatedAt: now })
@@ -239,6 +287,32 @@ export class IndexerService {
     await this.releaseSponsorships(
       failedPayments.map((payment) => payment.intentId),
     );
+    if (this.events) {
+      await Promise.all(
+        [
+          ...failedPayments.map((payment) => ({
+            userId: payment.userId,
+            entityType: "flow-payment",
+            id: payment.id,
+          })),
+          ...failedConfigurations.map((configuration) => ({
+            userId: configuration.userId,
+            entityType: "flow",
+            id: configuration.id,
+          })),
+        ].map((item) =>
+          this.events!.publish(
+            item.userId,
+            "flow.updated",
+            item.entityType,
+            item.id,
+            {
+              status: "FAILED",
+            },
+          ),
+        ),
+      );
+    }
     this.logger.warn(`indexer.flow_failed tx=${txHash}`);
   }
 
@@ -308,6 +382,18 @@ export class IndexerService {
             logIndex: log?.logIndex ?? null,
           })
           .where(eq(transfers.id, row.id));
+        await this.events?.publish(
+          row.userId,
+          "transfer.confirmed",
+          "transfer",
+          row.id,
+          {
+            direction: row.direction,
+            status: "CONFIRMED",
+            amountRaw: row.amountRaw,
+            kind: row.kind,
+          },
+        );
         if (row.direction === "SEND") {
           await this.reconcileBillPayment(row, now, Boolean(log));
         }
@@ -342,6 +428,13 @@ export class IndexerService {
     if (!this.rewards) return;
     try {
       await this.rewards.reconcileUser(userId);
+      await this.events?.publish(
+        userId,
+        "reward.updated",
+        "reward-account",
+        userId,
+        { source },
+      );
     } catch (error) {
       this.logger.warn(
         `indexer.rewards_reconcile_failed user=${userId} source=${source} error=${(error as Error).message}`,
@@ -351,7 +444,14 @@ export class IndexerService {
 
   private async markFailed(txHash: string): Promise<void> {
     const failedTransfers = await this.db.client
-      .select({ id: transfers.id, intentId: transfers.intentId })
+      .select({
+        id: transfers.id,
+        intentId: transfers.intentId,
+        userId: transfers.userId,
+        direction: transfers.direction,
+        amountRaw: transfers.amountRaw,
+        kind: transfers.kind,
+      })
       .from(transfers)
       .where(
         and(eq(transfers.txHash, txHash), eq(transfers.status, "PENDING")),
@@ -382,6 +482,24 @@ export class IndexerService {
         transfer.intentId ? [transfer.intentId] : [],
       ),
     );
+    if (this.events) {
+      await Promise.all(
+        failedTransfers.map((transfer) =>
+          this.events!.publish(
+            transfer.userId,
+            "transfer.failed",
+            "transfer",
+            transfer.id,
+            {
+              direction: transfer.direction,
+              status: "FAILED",
+              amountRaw: transfer.amountRaw,
+              kind: transfer.kind,
+            },
+          ),
+        ),
+      );
+    }
     this.logger.warn(`indexer.failed tx=${txHash}`);
   }
 
@@ -472,6 +590,13 @@ export class IndexerService {
         payerHandle: payer?.handle ?? null,
       },
     );
+    await this.events?.publishMany(
+      shares.map((share) => share.userId),
+      "bill.updated",
+      "bill",
+      bill.id,
+      { action: "paid" },
+    );
     this.logger.log(
       `indexer.bill_paid bill=${bill.id} share=${paidShare.id} tx=${transfer.txHash}`,
     );
@@ -558,8 +683,9 @@ export class IndexerService {
           )
           .limit(1);
         if (seen) continue;
+        const transferId = createId();
         await this.db.client.insert(transfers).values({
-          id: createId(),
+          id: transferId,
           userId,
           kind: "receive",
           direction: "RECEIVE",
@@ -583,6 +709,18 @@ export class IndexerService {
           fromHandle: sender?.handle ?? null,
           kind: "receive",
         });
+        await this.events?.publish(
+          userId,
+          "transfer.confirmed",
+          "transfer",
+          transferId,
+          {
+            direction: "RECEIVE",
+            status: "CONFIRMED",
+            amountRaw: value.toString(),
+            kind: "receive",
+          },
+        );
         this.logger.log(
           `indexer.arrival user=${userId} tx=${log.transactionHash}`,
         );

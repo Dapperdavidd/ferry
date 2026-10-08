@@ -11,7 +11,7 @@ export function useBills() {
     queryFn: () =>
       apiClient.listBills().then((items) => items.map(fromApiBill)),
     enabled: isAuthenticated === true,
-    refetchInterval: 10_000,
+    refetchInterval: 60_000,
     staleTime: 2_000,
   });
 }

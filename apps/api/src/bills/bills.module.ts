@@ -5,9 +5,16 @@ import { TransfersModule } from "../transfers/transfers.module";
 import { UsersModule } from "../users/users.module";
 import { BillGroupsController, BillsController } from "./bills.controller";
 import { BillsService } from "./bills.service";
+import { EventsModule } from "../events/events.module";
 
 @Module({
-  imports: [AuthModule, UsersModule, TransfersModule, NotificationsModule],
+  imports: [
+    AuthModule,
+    UsersModule,
+    TransfersModule,
+    NotificationsModule,
+    EventsModule,
+  ],
   controllers: [BillsController, BillGroupsController],
   providers: [BillsService],
   exports: [BillsService],

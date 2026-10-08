@@ -11,6 +11,7 @@ import {
 import { getBackendUrl } from "@/utils/runtimeConfig";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const LIVE_POLL_TIMEOUT_MS = 30_000;
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const rawAmount = z.string().regex(/^\d+$/);
@@ -42,6 +43,35 @@ export const NetworkStatusSchema = z.object({
   }),
 });
 export type NetworkStatus = z.infer<typeof NetworkStatusSchema>;
+
+export const LiveEventSchema = z.object({
+  id: z.string(),
+  type: z.enum([
+    "transfer.pending",
+    "transfer.confirmed",
+    "transfer.failed",
+    "bill.updated",
+    "bill.reminded",
+    "bill-group.updated",
+    "reward.updated",
+    "plus.updated",
+    "flow.updated",
+  ]),
+  entityType: z.string(),
+  entityId: z.string().nullable(),
+  payload: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.null()])
+  ),
+  createdAt: z.string(),
+});
+export type LiveEvent = z.infer<typeof LiveEventSchema>;
+
+export const EventPollResponseSchema = z.object({
+  events: z.array(LiveEventSchema),
+  cursor: z.string(),
+});
+export type EventPollResponse = z.infer<typeof EventPollResponseSchema>;
 
 export const ChallengeSchema = z.object({
   nonce: z.string(),
@@ -553,11 +583,12 @@ class BackendClient {
     method: Method,
     path: string,
     schema: z.ZodType<T>,
-    body?: unknown
+    body?: unknown,
+    timeoutMs = REQUEST_TIMEOUT_MS
   ): Promise<T> {
     const token = await AuthStorage.getToken();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
       response = await fetch(`${getBackendUrl()}${path}`, {
@@ -621,6 +652,20 @@ class BackendClient {
 
   network() {
     return this.request("GET", "/network", NetworkStatusSchema);
+  }
+
+  pollEvents(cursor?: string) {
+    if (this.isDemoMode())
+      return Promise.resolve({ events: [], cursor: cursor ?? "demo" });
+    const query = new URLSearchParams({ timeoutSeconds: "20" });
+    if (cursor) query.set("cursor", cursor);
+    return this.request(
+      "GET",
+      `/events?${query.toString()}`,
+      EventPollResponseSchema,
+      undefined,
+      LIVE_POLL_TIMEOUT_MS
+    );
   }
 
   // Auth

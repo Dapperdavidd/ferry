@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { createId } from "@paralleldrive/cuid2";
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
@@ -13,6 +13,7 @@ import {
   rewardEvents,
   transfers,
 } from "../db/schema";
+import { EventsService } from "../events/events.service";
 
 export const REWARD_POINTS = {
   FIRST_TRANSFER: 250,
@@ -61,7 +62,10 @@ const LEVELS = [
 
 @Injectable()
 export class RewardsService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    @Optional() private readonly events?: EventsService,
+  ) {}
 
   async me(userId: string) {
     const account = await this.ensureAccount(userId);
@@ -251,6 +255,13 @@ export class RewardsService {
         HttpStatus.CONFLICT,
       );
     }
+    await this.events?.publishMany(
+      [userId, inviter.userId],
+      "reward.updated",
+      "referral",
+      saved.id,
+      { status: saved.status },
+    );
     return referralView(saved);
   }
 
@@ -307,6 +318,7 @@ export class RewardsService {
     qualifyingTransferId: string | null,
   ) {
     if (!qualifyingTransferId) return;
+    let inviterUserId: string | null = null;
     await this.db.withTransaction(async () => {
       const [referral] = await this.db.client
         .select()
@@ -314,6 +326,7 @@ export class RewardsService {
         .where(eq(referrals.inviteeUserId, inviteeUserId))
         .for("update");
       if (!referral || referral.status !== "PENDING") return;
+      inviterUserId = referral.inviterUserId;
 
       const now = new Date();
       await Promise.all([
@@ -344,6 +357,15 @@ export class RewardsService {
         })
         .where(eq(referrals.id, referral.id));
     });
+    if (inviterUserId) {
+      await this.events?.publishMany(
+        [inviteeUserId, inviterUserId],
+        "reward.updated",
+        "referral",
+        qualifyingTransferId,
+        { status: "QUALIFIED" },
+      );
+    }
   }
 
   private async ensureAccount(userId: string) {

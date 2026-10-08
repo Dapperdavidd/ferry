@@ -15,7 +15,7 @@ export function useRewards() {
     queryFn: () => apiClient.getRewards(),
     enabled: Boolean(isAuthenticated),
     staleTime: 10_000,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
 }
 

@@ -327,6 +327,32 @@ export const pushDevices = pgTable(
 );
 
 /**
+ * Durable, per-user invalidation feed for live clients. Events carry only the
+ * small piece of context needed to refresh canonical API resources; product
+ * state continues to live in its domain tables.
+ */
+export const userEvents = pgTable(
+  "user_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    type: text("type").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    payload: jsonb("payload")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("user_events_user_created_idx").on(t.userId, t.createdAt, t.id),
+  ],
+);
+
+/**
  * One stable, non-transferable Ferry Miles account per Ferry user. Codes are
  * random instead of address-derived so a shared invite never leaks wallet
  * identity.
