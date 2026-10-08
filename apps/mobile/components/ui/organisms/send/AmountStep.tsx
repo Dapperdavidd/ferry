@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/utils/apiClient";
 import { AUSD_DECIMALS, formatLocalMoney, numberToRaw } from "@/utils/balances";
 import type { RecipientSelection } from "./RecipientStep";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 const MAX_DAILY_SEND = 5_000;
 
@@ -28,6 +29,7 @@ export default function AmountStep({
   onBack,
   onClose,
 }: AmountStepProps) {
+  const { theme } = useAppTheme();
   const router = useRouter(); // For final navigation to confirm
 
   const [amount, setAmount] = useState("");
@@ -183,22 +185,27 @@ export default function AmountStep({
   }, [amount]);
 
   return (
-    <View className="flex-1 bg-[#F7F7F4]">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <View className="relative flex-1 px-4 pb-5">
         <View className="min-h-16 flex-row items-center justify-between">
           <TouchableOpacity
             onPress={onBack}
             accessibilityRole="button"
             accessibilityLabel="Go back to recipient"
-            className="size-11 items-center justify-center rounded-full bg-white"
+            className="size-11 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
           >
-            <Ionicons name="chevron-back" size={24} color="#999" />
+            <Ionicons name="chevron-back" size={24} color={theme.muted} />
           </TouchableOpacity>
           <View className="items-center">
-            <Typography weight="700" className="text-lg">
+            <Typography
+              weight="700"
+              className="text-lg"
+              style={{ color: theme.text }}
+            >
               Enter amount
             </Typography>
-            <Typography className="text-sm text-gray-400">
+            <Typography className="text-sm" style={{ color: theme.muted }}>
               To {recipientLabel}
             </Typography>
           </View>
@@ -211,10 +218,8 @@ export default function AmountStep({
             adjustsFontSizeToFit
             minimumFontScale={0.6}
             numberOfLines={1}
-            className={cn(
-              "w-full text-center text-[64px] tracking-[-2.5px]",
-              !amount ? "text-gray-300" : "text-black"
-            )}
+            className="w-full text-center text-[64px] tracking-[-2.5px]"
+            style={{ color: amount ? theme.text : theme.faint }}
           >
             ${formattedAmount}
           </Typography>
@@ -270,14 +275,25 @@ export default function AmountStep({
             </View>
           </View>
         ) : (
-          <View className="mx-2 mb-5 flex-row items-center rounded-[24px] bg-[#F9F9F9] p-3">
+          <View
+            className="mx-2 mb-5 flex-row items-center rounded-[24px] p-3"
+            style={{ backgroundColor: theme.card }}
+          >
             <View className="flex-1 flex-row items-center gap-3">
               <TokenMark token="AUSD" size={38} />
               <View>
-                <Typography weight="700" className="text-[15px]">
+                <Typography
+                  weight="700"
+                  className="text-[15px]"
+                  style={{ color: theme.text }}
+                >
                   AUSD
                 </Typography>
-                <Typography weight="500" className="text-xs text-black/35">
+                <Typography
+                  weight="500"
+                  className="text-xs"
+                  style={{ color: theme.muted }}
+                >
                   {balance.toLocaleString("en-US", {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -288,10 +304,15 @@ export default function AmountStep({
             </View>
 
             <TouchableOpacity
-              className="rounded-full bg-black px-5 py-2.5"
+              className="rounded-full px-5 py-2.5"
+              style={{ backgroundColor: theme.primary }}
               onPress={() => setAmount(availableToSend.toString())}
             >
-              <Typography weight="700" className="text-xs text-white">
+              <Typography
+                weight="700"
+                className="text-xs"
+                style={{ color: theme.primaryText }}
+              >
                 MAX
               </Typography>
             </TouchableOpacity>
@@ -307,20 +328,23 @@ export default function AmountStep({
         <HapticPressable
           accessibilityRole="button"
           accessibilityLabel={label}
-          className={cn("w-full items-center rounded-full bg-black py-[17px]", {
+          className={cn("w-full items-center rounded-full py-[17px]", {
             "opacity-70": status === "idle",
             "opacity-100": status === "ready",
-            "bg-red-500/30": status === "error",
           })}
+          style={{
+            backgroundColor:
+              status === "error" ? theme.cardStrong : theme.primary,
+          }}
           onPress={handleContinue}
           disabled={status === "error" || status === "idle"}
         >
           <Typography
             weight="500"
-            className={cn(
-              "text-base text-white",
-              status === "error" && "text-red-500"
-            )}
+            className="text-base"
+            style={{
+              color: status === "error" ? "#C9413C" : theme.primaryText,
+            }}
           >
             {label}
           </Typography>

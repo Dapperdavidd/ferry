@@ -3,14 +3,14 @@ import { View } from "react-native";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { Ionicons } from "@expo/vector-icons";
 import HapticPressable from "../atoms/HapticPressable";
-import { useThemeColor } from "@/hooks/useThemeColor";
+import { useAppTheme } from "@/contexts/AppThemeContext";
 
 interface KeypadProps {
   onKeyPress: (key: string) => void;
 }
 
 export function Keypad({ onKeyPress }: KeypadProps) {
-  const textColor = useThemeColor({}, "text");
+  const { theme } = useAppTheme();
 
   const renderKey = (key: string) => (
     <HapticPressable
@@ -26,9 +26,13 @@ export function Keypad({ onKeyPress }: KeypadProps) {
       onPress={() => onKeyPress(key)}
     >
       {key === "backspace" ? (
-        <Ionicons name="backspace-outline" size={24} color={textColor} />
+        <Ionicons name="backspace-outline" size={24} color={theme.text} />
       ) : (
-        <Typography weight="600" className="text-[26px] text-foreground">
+        <Typography
+          weight="600"
+          className="text-[26px]"
+          style={{ color: theme.text }}
+        >
           {key}
         </Typography>
       )}
