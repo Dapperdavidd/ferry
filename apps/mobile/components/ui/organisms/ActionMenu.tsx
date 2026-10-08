@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FrostBlurView } from "@/components/ui/atoms/FrostBlurView";
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { useAppTheme } from "@/contexts/AppThemeContext";
-import { useModalFlow } from "@/contexts/ModalFlowContext";
 import { Typography } from "../atoms/Typography";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +23,6 @@ type ActionIcon = ComponentProps<typeof Ionicons>["name"];
 
 export function ActionMenu({ visible, onClose }: ActionMenuProps) {
   const { theme } = useAppTheme();
-  const { showReceiveModal, showSendModal } = useModalFlow();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { network, config } = useNetwork();
@@ -37,16 +35,6 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
 
   const actions = useMemo(
     () => [
-      {
-        title: "Receive",
-        icon: "arrow-down" as ActionIcon,
-        onPress: showReceiveModal,
-      },
-      {
-        title: "Send",
-        icon: "arrow-up" as ActionIcon,
-        onPress: showSendModal,
-      },
       {
         title: "Bills",
         icon: "receipt-outline" as ActionIcon,
@@ -66,7 +54,7 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
             : showToast(`Flow is coming soon on ${config.label}`),
       },
     ],
-    [config.label, flowsAvailable, router, showReceiveModal, showSendModal]
+    [config.label, flowsAvailable, router]
   );
 
   return (
