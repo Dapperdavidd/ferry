@@ -257,8 +257,13 @@ export default function SocialScreen() {
                 keyboardType="decimal-pad"
                 placeholder="$0.00"
                 placeholderTextColor={theme.faint}
-                className="border-b pb-3 font-inter-bold text-[34px]"
-                style={{ color: theme.text, borderColor: theme.border }}
+                className="h-16 border-b px-0 py-0 font-inter-bold text-[34px]"
+                style={{
+                  color: theme.text,
+                  borderColor: theme.border,
+                  lineHeight: 44,
+                  textAlignVertical: "center",
+                }}
               />
               <TextInput
                 accessibilityLabel="Drop note"
@@ -300,8 +305,13 @@ export default function SocialScreen() {
                 keyboardType="decimal-pad"
                 placeholder="$0.00"
                 placeholderTextColor={theme.faint}
-                className="mt-5 border-b pb-3 font-inter-bold text-[34px]"
-                style={{ color: theme.text, borderColor: theme.border }}
+                className="mt-5 h-16 border-b px-0 py-0 font-inter-bold text-[34px]"
+                style={{
+                  color: theme.text,
+                  borderColor: theme.border,
+                  lineHeight: 44,
+                  textAlignVertical: "center",
+                }}
               />
               <TextInput
                 accessibilityLabel="Request note"
