@@ -39,19 +39,19 @@ function LockScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-white px-6">
-      <StatusBar style="dark" />
+    <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-black px-6">
+      <StatusBar style="light" />
       <View className="flex-1 items-center justify-center">
-        <MaterialIcons name="lock" size={56} color="#C4C4C4" />
-        <Typography weight="500" className="mt-3 text-lg text-[#9E9E9E]">
+        <MaterialIcons name="lock" size={56} color="#D8D29B" />
+        <Typography weight="500" className="mt-3 text-lg text-white/70">
           Locked
         </Typography>
       </View>
       <HapticPressable
         onPress={attempt}
-        className="mb-2 items-center justify-center rounded-full bg-black py-4"
+        className="mb-2 items-center justify-center rounded-full bg-white py-4"
       >
-        <Typography weight="600" className="text-base text-white">
+        <Typography weight="600" className="text-base text-black">
           Unlock
         </Typography>
       </HapticPressable>

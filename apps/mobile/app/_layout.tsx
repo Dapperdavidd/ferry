@@ -3,12 +3,14 @@ import { Redirect, Slot, useSegments } from "expo-router";
 import {
   AppState,
   AppStateStatus,
+  Image,
   Platform,
   StyleSheet,
   View,
 } from "react-native";
 
 import { StatusBar } from "expo-status-bar";
+import { BlurView } from "expo-blur";
 import "react-native-reanimated";
 import "@/global.css";
 import "@/utils/cssInteropSetup";
@@ -35,6 +37,7 @@ import {
 } from "@tanstack/react-query";
 
 import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import {
   Inter_100Thin,
   Inter_200ExtraLight,
@@ -89,6 +92,7 @@ function ReactQueryFocusBridge() {
 // Keep the native splash up until the app is ready, then hand off to the
 // matching JS splash (LoadingScreen) — no white flash in between.
 SplashScreen.preventAutoHideAsync();
+void SystemUI.setBackgroundColorAsync("#0B0C0C");
 
 // Error tracking in release builds only, and only when a DSN is configured.
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
@@ -180,8 +184,23 @@ function AuthLayout() {
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           pointerEvents="auto"
-          style={[styles.securityLayer, { backgroundColor: "#FAFAF8" }]}
-        />
+          style={styles.securityLayer}
+        >
+          {Platform.OS === "ios" ? (
+            <BlurView intensity={100} tint="dark" style={styles.privacyBlur}>
+              <View style={styles.privacyShade}>
+                <StatusBar style="light" />
+                <Image
+                  source={require("@/assets/images/logo/ferry-mark-white-2048.png")}
+                  style={styles.privacyMark}
+                  resizeMode="contain"
+                />
+              </View>
+            </BlurView>
+          ) : (
+            <LoadingScreen />
+          )}
+        </View>
       )}
       {showLock && (
         <View pointerEvents="auto" style={styles.securityLayer}>
@@ -311,6 +330,19 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 10_000,
+  },
+  privacyBlur: {
+    flex: 1,
+  },
+  privacyShade: {
+    alignItems: "center",
+    backgroundColor: "rgba(11,12,12,0.72)",
+    flex: 1,
+    justifyContent: "center",
+  },
+  privacyMark: {
+    height: 72,
+    width: 72,
   },
 });
 

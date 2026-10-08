@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "ferry",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#0B0C0C",
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
