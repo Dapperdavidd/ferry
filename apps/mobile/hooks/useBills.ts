@@ -37,8 +37,14 @@ export function useBill(id: string | undefined) {
 export function useRemindBill() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.remindBill(id),
-    onSuccess: (_result, id) => {
+    mutationFn: ({
+      id,
+      tone,
+    }: {
+      id: string;
+      tone: "gentle" | "playful" | "urgent";
+    }) => apiClient.remindBill(id, tone),
+    onSuccess: (_result, { id }) => {
       void queryClient.invalidateQueries({ queryKey: ["bill", id] });
     },
   });

@@ -1,0 +1,1 @@
+ALTER TABLE "bills" ADD COLUMN "settlement_run_id" text;

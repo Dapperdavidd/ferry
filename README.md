@@ -22,6 +22,16 @@ Ferry Miles. The API reserves each covered send by intent under a database lock,
 allowance cannot be bypassed with concurrent submissions; the app only displays the
 server's result.
 
+**Ferry Together** is the real-time social payment layer: shareable payment requests,
+receipt-based Ferry Tables, optimized group settlement, recurring circles, escalating
+reminders, and Ferry Drops for people who have not joined yet. Postgres is the durable
+source of truth, every member receives live invalidation events and push deep links, and
+every payment is reconciled from its AUSD receipt. Ferry Drop is a non-custodial escrow:
+the bearer link locates the gift, while a recipient-bound passkey signature prevents the
+link from being redirected. Its contracts are live on Monad testnet at
+`0x8d422Ecdb5b746867Bb2bFD266C97c61F3963996` and Monad mainnet at
+`0xf1aa6D0dDdCAC00C553F801eDEaf24f6CB616FB5`.
+
 Built for Agora's "Best Cross-Border Payments App on Monad" bounty at Monad Metropolis,
 October 2026. The design is in
 [`docs/specs/cross-border-ausd-design.md`](docs/specs/cross-border-ausd-design.md).
@@ -41,6 +51,7 @@ untouched Xend snapshot, so the whole refit is reviewable as a diff from it.
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Passkey account, AUSD balances, sends, cash-out swaps, receipts | Real, on Monad testnet (chain 10143). Every action has a transaction hash on [testnet.monadscan.com](https://testnet.monadscan.com).                                                                                                                                                                  |
 | Ferry Flows                                                     | Contract, API, migration, event reconciliation, mobile configuration/review, and tests are implemented. FerryFlow is live on Monad testnet at `0x77b0662bD04798E9982A2df4547929f6B0a46659`; mainnet stays gated off. Without a configured deployment, sends retain the existing direct-transfer path. |
+| Ferry Together                                                  | Requests, Tables, optimized settlements, reminders, recurring circles, push deep links, and cross-device live events are server-backed. Recipient-bound Ferry Drop escrow is deployed and enabled on both testnet and mainnet.                                                                        |
 | Agora API                                                       | A client built from Agora's OpenAPI spec. Public metrics are live. USDC deposit routes, accounts and transactions switch from a clearly labelled safe preview to the real API when Ferry has an approved Agora organisation key.                                                                      |
 | Fiat payout after the pool                                      | A production Yellow Card adapter now resolves bank accounts, prices the local payout, creates idempotent bank sends and consumes signed webhooks. It is disabled until Ferry has KYB credentials and a funded partner balance. Monad testnet still settles to CTK; mainnet settles AUSD to USDC.      |
 
@@ -53,7 +64,7 @@ Turborepo over npm workspaces.
 | `apps/mobile`  | The Expo React Native app (`@ferry/mobile`). iOS first; Android shares the code.                                                                                   |
 | `apps/api`     | The NestJS API on Postgres (`@ferry/api`): auth, handles, balances and test funds, gasless transfers, cash-outs, the relayer, the indexer, push, the Agora client. |
 | `apps/site`    | The static site at `ferry.money`, which also serves the passkey association files.                                                                                 |
-| `contracts`    | Foundry contracts: deployed `FerrySettlement` for one-transaction cash-out, plus deployment-ready `FerryFlow` for atomic programmable incoming-money routing.      |
+| `contracts`    | Foundry contracts: `FerrySettlement`, `FerryFlow`, and the recipient-bound `FerryDrop` escrow.                                                                     |
 | `apps/backend` | Xend's old backend, kept only until `apps/api` has ported what it needs, then deleted. Not part of the install.                                                    |
 | `packages/*`   | Shared ESLint and TypeScript configs.                                                                                                                              |
 

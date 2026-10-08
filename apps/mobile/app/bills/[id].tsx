@@ -114,7 +114,13 @@ export default function BillDetailScreen() {
     }
     if (bill.position === "collecting") {
       try {
-        const result = await remind.mutateAsync(bill.id);
+        const tone =
+          bill.reminderCount >= 2
+            ? "urgent"
+            : bill.reminderCount === 1
+              ? "playful"
+              : "gentle";
+        const result = await remind.mutateAsync({ id: bill.id, tone });
         showToast(
           result.reminded === 1
             ? "Reminder sent"

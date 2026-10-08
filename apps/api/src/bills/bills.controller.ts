@@ -20,11 +20,13 @@ import {
   CreateBillSchema,
   ListBillsSchema,
   RespondInvitationSchema,
+  RemindBillSchema,
   SubmitBillPaymentSchema,
   type AddBillGroupMemberRequest,
   type CreateBillGroupRequest,
   type CreateBillRequest,
   type RespondInvitationRequest,
+  type RemindBillRequest,
   type SubmitBillPaymentRequest,
 } from "./dtos";
 
@@ -69,8 +71,12 @@ export class BillsController {
   @Post(":id/remind")
   @HttpCode(200)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  remind(@CurrentUser() principal: Principal, @Param("id") id: string) {
-    return this.bills.remind(principal.userId, id);
+  remind(
+    @CurrentUser() principal: Principal,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(RemindBillSchema)) body: RemindBillRequest,
+  ) {
+    return this.bills.remind(principal.userId, id, body.tone);
   }
 
   @Post(":id/payment/prepare")

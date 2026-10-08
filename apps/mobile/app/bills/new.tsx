@@ -73,6 +73,7 @@ export default function NewBillScreen() {
   const [category, setCategory] = useState<BillCategory>("food");
   const [dueLabel, setDueLabel] =
     useState<(typeof DUE_OPTIONS)[number]>("This week");
+  const [repeat, setRepeat] = useState<"once" | "weekly" | "monthly">("once");
   const [contacts, setContacts] = useState<DraftContact[]>([]);
   const [handle, setHandle] = useState("");
   const [resolvingHandle, setResolvingHandle] = useState(false);
@@ -101,6 +102,10 @@ export default function NewBillScreen() {
   }, [groupId, groups.data, user?.id]);
 
   const totalCents = Math.round((Number(amount) || 0) * 100);
+  const selectedGroup = groups.data?.find((item) => item.id === groupId);
+  const canSchedule = Boolean(
+    groupId && user?.id && selectedGroup?.ownerUserId === user.id
+  );
   const selfContact: DraftContact = {
     id: user?.id ?? "self",
     handle: user?.handle ?? null,
@@ -216,6 +221,28 @@ export default function NewBillScreen() {
           amountRaw: centsToRaw(participant.amountCents),
         })),
       });
+      if (groupId && repeat !== "once") {
+        const nextRun = new Date();
+        if (repeat === "weekly") nextRun.setUTCDate(nextRun.getUTCDate() + 7);
+        else nextRun.setUTCMonth(nextRun.getUTCMonth() + 1);
+        await apiClient.createRecurringBill({
+          title: title.trim(),
+          note: note.trim() || undefined,
+          totalRaw: centsToRaw(totalCents),
+          creatorAmountRaw: centsToRaw(participants[0]?.amountCents ?? 0),
+          category,
+          splitMode,
+          dueLabel,
+          groupId,
+          cadence: repeat,
+          nextRunAt: nextRun.toISOString(),
+          shares: participants.slice(1).map((participant) => ({
+            handle: participant.handle!,
+            amountRaw: centsToRaw(participant.amountCents),
+          })),
+        });
+        await queryClient.invalidateQueries({ queryKey: ["recurring-bills"] });
+      }
       const bill = fromApiBill(created);
       await queryClient.invalidateQueries({ queryKey: ["bills"] });
       setCreatedBill(bill);
@@ -299,6 +326,9 @@ export default function NewBillScreen() {
             onAmount={setAmount}
             onCategory={setCategory}
             onDueLabel={setDueLabel}
+            repeat={repeat}
+            recurringAvailable={canSchedule}
+            onRepeat={setRepeat}
           />
         ) : step === 2 ? (
           <PeopleStep
@@ -396,6 +426,9 @@ function BillDetailsStep({
   onAmount,
   onCategory,
   onDueLabel,
+  repeat,
+  recurringAvailable,
+  onRepeat,
 }: {
   title: string;
   note: string;
@@ -407,6 +440,9 @@ function BillDetailsStep({
   onAmount: (value: string) => void;
   onCategory: (value: BillCategory) => void;
   onDueLabel: (value: (typeof DUE_OPTIONS)[number]) => void;
+  repeat: "once" | "weekly" | "monthly";
+  recurringAvailable: boolean;
+  onRepeat: (value: "once" | "weekly" | "monthly") => void;
 }) {
   const { theme } = useAppTheme();
   return (
@@ -543,6 +579,45 @@ function BillDetailsStep({
           );
         })}
       </View>
+
+      {recurringAvailable ? (
+        <>
+          <Typography
+            weight="700"
+            className="mb-3 mt-6 text-sm"
+            style={{ color: theme.text }}
+          >
+            Repeat for this group
+          </Typography>
+          <View className="flex-row gap-2">
+            {(["once", "weekly", "monthly"] as const).map((option) => {
+              const active = repeat === option;
+              return (
+                <HapticPressable
+                  key={option}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  feedback="selection"
+                  onPress={() => onRepeat(option)}
+                  className="flex-1 items-center rounded-full border py-3"
+                  style={{
+                    borderColor: active ? theme.accent : theme.border,
+                    backgroundColor: active ? theme.accentSoft : theme.card,
+                  }}
+                >
+                  <Typography
+                    weight="600"
+                    className="text-xs capitalize"
+                    style={{ color: theme.text }}
+                  >
+                    {option}
+                  </Typography>
+                </HapticPressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
     </ScrollView>
   );
 }

@@ -22,6 +22,11 @@ export const LIVE_EVENT_TYPES = [
   "reward.updated",
   "plus.updated",
   "flow.updated",
+  "request.updated",
+  "settlement.updated",
+  "recurring.updated",
+  "table.updated",
+  "drop.updated",
 ] as const;
 
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];

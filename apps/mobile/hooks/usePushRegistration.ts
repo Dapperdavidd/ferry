@@ -51,6 +51,16 @@ function billIdFromNotice(data: Record<string, unknown>): string | null {
   return typeof data.billId === "string" ? data.billId : null;
 }
 
+function socialPathFromNotice(data: Record<string, unknown>): string | null {
+  if (typeof data.url !== "string") return null;
+  const match = data.url.match(
+    /^ferry:\/\/(requests|settlements|tables|drops)\/([^/?#]+)$/
+  );
+  return match?.[1] && match[2]
+    ? `/${match[1]}/${decodeURIComponent(match[2])}`
+    : null;
+}
+
 /**
  * A notification that arrives while the Consumer is looking at the app is
  * handled by the in-app toast instead, so the OS banner is suppressed. Two
@@ -90,6 +100,7 @@ export function useNotificationRouting() {
     const kind = noticeKind(response.notification);
     const data = noticeData(response.notification);
     const billId = billIdFromNotice(data);
+    const socialPath = socialPathFromNotice(data);
 
     // The list the Payment screen renders was fetched before this Payment
     // existed.
@@ -107,6 +118,15 @@ export function useNotificationRouting() {
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
       }
       router.push(`/bills/${billId}` as never);
+      return;
+    }
+
+    if (socialPath) {
+      void queryClient.invalidateQueries({ queryKey: ["payment-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["settlement"] });
+      void queryClient.invalidateQueries({ queryKey: ["ferry-table"] });
+      void queryClient.invalidateQueries({ queryKey: ["ferry-drop"] });
+      router.push(socialPath as never);
       return;
     }
 

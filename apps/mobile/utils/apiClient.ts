@@ -32,12 +32,14 @@ export const NetworkStatusSchema = z.object({
   network: z.enum(["mainnet", "testnet"]),
   chainId: z.number().int(),
   ausdAddress: address,
+  dropAddress: address.nullable(),
   explorerUrl: z.string().url(),
   capabilities: z.object({
     receive: z.boolean(),
     send: z.boolean(),
     faucet: z.boolean(),
     flows: z.boolean(),
+    drops: z.boolean(),
     cashout: z.boolean(),
     usdcDeposit: z.boolean(),
   }),
@@ -56,6 +58,11 @@ export const LiveEventSchema = z.object({
     "reward.updated",
     "plus.updated",
     "flow.updated",
+    "request.updated",
+    "settlement.updated",
+    "recurring.updated",
+    "table.updated",
+    "drop.updated",
   ]),
   entityType: z.string(),
   entityId: z.string().nullable(),
@@ -180,6 +187,8 @@ export const BillSchema = z.object({
   status: z.enum(["OPEN", "SETTLED", "CANCELLED"]),
   position: z.enum(["collecting", "owe", "settled"]),
   dueLabel: z.string(),
+  reminderCount: z.number().int().nonnegative(),
+  lastRemindedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   participants: z.array(BillParticipantSchema),
@@ -203,6 +212,156 @@ export const BillGroupSchema = z.object({
   ),
 });
 export type BillGroup = z.infer<typeof BillGroupSchema>;
+
+export const PaymentRequestSchema = z.object({
+  id: z.string(),
+  token: z.string(),
+  amountRaw: rawAmount,
+  memo: z.string(),
+  status: z.enum(["OPEN", "PAYMENT_PENDING", "PAID", "EXPIRED", "CANCELLED"]),
+  creator: z.object({
+    id: z.string(),
+    handle: z.string().nullable(),
+    name: z.string(),
+    address,
+  }),
+  payerUserId: z.string().nullable(),
+  self: z.boolean(),
+  expiresAt: z.string(),
+  paidAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type PaymentRequest = z.infer<typeof PaymentRequestSchema>;
+
+export const FerryDropSchema = z.object({
+  id: z.string(),
+  claimHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+  senderUserId: z.string(),
+  amountRaw: rawAmount,
+  memo: z.string(),
+  status: z.enum([
+    "PREPARED",
+    "FUNDING_PENDING",
+    "OPEN",
+    "CLAIM_PENDING",
+    "CLAIMED",
+    "REFUND_PENDING",
+    "REFUNDED",
+    "FAILED",
+  ]),
+  expiresAt: z.string(),
+  claimedAt: z.string().nullable(),
+  refundedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export const PublicFerryDropSchema = FerryDropSchema.extend({
+  sender: z.object({ handle: z.string().nullable(), name: z.string() }),
+});
+export const PrepareFerryDropSchema = z.object({
+  id: z.string(),
+  secret: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+  intentId: z.string(),
+  typedData: TypedDataSchema,
+  amountRaw: rawAmount,
+  memo: z.string(),
+  expiresAt: z.string(),
+});
+export const PrepareFerryDropClaimSchema = z.object({
+  deadline: rawAmount,
+  typedData: TypedDataSchema,
+});
+export const FerryDropTransactionSchema = z.object({
+  id: z.string(),
+  txHash: z.string().nullable().optional(),
+  status: FerryDropSchema.shape.status,
+});
+export type FerryDrop = z.infer<typeof FerryDropSchema>;
+
+export const RecurringBillSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string(),
+  groupId: z.string().nullable(),
+  title: z.string(),
+  note: z.string().nullable(),
+  totalRaw: rawAmount,
+  creatorAmountRaw: rawAmount,
+  category: z.string(),
+  splitMode: z.string(),
+  dueLabel: z.string().nullable(),
+  cadence: z.enum(["weekly", "monthly"]),
+  shares: z.array(z.object({ handle: z.string(), amountRaw: rawAmount })),
+  nextRunAt: z.string(),
+  lastRunAt: z.string().nullable(),
+  lastBillId: z.string().nullable(),
+  active: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type RecurringBill = z.infer<typeof RecurringBillSchema>;
+
+const SettlementPersonSchema = z.object({
+  id: z.string(),
+  handle: z.string().nullable(),
+  name: z.string(),
+});
+export const SettlementSchema = z.object({
+  id: z.string(),
+  groupId: z.string(),
+  status: z.enum(["OPEN", "SETTLED", "CANCELLED"]),
+  createdAt: z.string(),
+  settledAt: z.string().nullable(),
+  originalPaymentCount: z.number().int().nonnegative(),
+  legs: z.array(
+    z.object({
+      id: z.string(),
+      amountRaw: rawAmount,
+      status: z.enum(["PENDING", "PAYMENT_PENDING", "PAID"]),
+      self: z.boolean(),
+      from: SettlementPersonSchema,
+      to: SettlementPersonSchema,
+    })
+  ),
+});
+export type Settlement = z.infer<typeof SettlementSchema>;
+
+export const FerryTableSchema = z.object({
+  id: z.string(),
+  token: z.string(),
+  hostUserId: z.string(),
+  title: z.string(),
+  status: z.enum(["OPEN", "FINALIZED", "CANCELLED"]),
+  tipBasisPoints: z.number().int(),
+  finalizedBillId: z.string().nullable(),
+  selfJoined: z.boolean(),
+  members: z.array(
+    z.object({
+      userId: z.string(),
+      handle: z.string().nullable(),
+      name: z.string(),
+      self: z.boolean(),
+    })
+  ),
+  items: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      priceRaw: rawAmount,
+      quantity: z.number().int().positive(),
+      claims: z.array(
+        z.object({
+          userId: z.string(),
+          handle: z.string().nullable(),
+          name: z.string(),
+          quantity: z.number().int().positive(),
+          self: z.boolean(),
+        })
+      ),
+    })
+  ),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type FerryTable = z.infer<typeof FerryTableSchema>;
 
 export const CashoutSchema = z.object({
   outToken: z.string(),
@@ -566,7 +725,7 @@ export const apiErrorCode = (err: unknown) =>
 export const apiErrorMessage = (err: unknown) =>
   err instanceof ApiError ? err.message : null;
 
-type Method = "GET" | "POST" | "PUT" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 class BackendClient {
   private demoMode = SEED_DEMO;
@@ -980,11 +1139,16 @@ class BackendClient {
       { accepted }
     );
   }
-  remindBill(id: string) {
+  remindBill(id: string, tone: "gentle" | "playful" | "urgent" = "gentle") {
     return this.request(
       "POST",
       `/bills/${encodeURIComponent(id)}/remind`,
-      z.object({ reminded: z.number().int().nonnegative() })
+      z.object({
+        reminded: z.number().int().nonnegative(),
+        tone: z.enum(["gentle", "playful", "urgent"]),
+        count: z.number().int().nonnegative(),
+      }),
+      { tone }
     );
   }
   prepareBillPayment(id: string) {
@@ -1014,6 +1178,213 @@ class BackendClient {
       `/bill-groups/${encodeURIComponent(id)}/members`,
       BillGroupSchema,
       { handle }
+    );
+  }
+
+  // Ferry social payments
+  listPaymentRequests() {
+    return this.request(
+      "GET",
+      "/payment-requests",
+      z.array(PaymentRequestSchema)
+    );
+  }
+  getPublicPaymentRequest(token: string) {
+    return this.request(
+      "GET",
+      `/public/payment-requests/${encodeURIComponent(token)}`,
+      PaymentRequestSchema
+    );
+  }
+  createPaymentRequest(body: {
+    amountRaw: string;
+    memo: string;
+    expiresInHours?: number;
+  }) {
+    return this.request(
+      "POST",
+      "/payment-requests",
+      PaymentRequestSchema,
+      body
+    );
+  }
+  preparePaymentRequest(id: string) {
+    return this.request(
+      "POST",
+      `/payment-requests/${encodeURIComponent(id)}/prepare`,
+      PrepareTransferResponseSchema
+    );
+  }
+  submitPaymentRequest(
+    id: string,
+    body: { intentId: string; signature: string }
+  ) {
+    return this.request(
+      "POST",
+      `/payment-requests/${encodeURIComponent(id)}/submit`,
+      SubmitResponseSchema,
+      body
+    );
+  }
+  listRecurringBills() {
+    return this.request(
+      "GET",
+      "/recurring-bills",
+      z.array(RecurringBillSchema)
+    );
+  }
+  createRecurringBill(body: {
+    title: string;
+    note?: string;
+    totalRaw: string;
+    creatorAmountRaw: string;
+    category: ApiBill["category"];
+    splitMode: ApiBill["splitMode"];
+    dueLabel?: string;
+    groupId: string;
+    cadence: "weekly" | "monthly";
+    nextRunAt: string;
+    shares: { handle: string; amountRaw: string }[];
+  }) {
+    return this.request("POST", "/recurring-bills", RecurringBillSchema, body);
+  }
+  setRecurringBillActive(id: string, active: boolean) {
+    return this.request(
+      "PATCH",
+      `/recurring-bills/${encodeURIComponent(id)}`,
+      RecurringBillSchema,
+      { active }
+    );
+  }
+  createSettlement(groupId: string) {
+    return this.request(
+      "POST",
+      `/bill-groups/${encodeURIComponent(groupId)}/settlements`,
+      SettlementSchema
+    );
+  }
+  getSettlement(id: string) {
+    return this.request(
+      "GET",
+      `/settlements/${encodeURIComponent(id)}`,
+      SettlementSchema
+    );
+  }
+  prepareSettlementLeg(id: string, legId: string) {
+    return this.request(
+      "POST",
+      `/settlements/${encodeURIComponent(id)}/legs/${encodeURIComponent(legId)}/prepare`,
+      PrepareTransferResponseSchema
+    );
+  }
+  submitSettlementLeg(
+    id: string,
+    legId: string,
+    body: { intentId: string; signature: string }
+  ) {
+    return this.request(
+      "POST",
+      `/settlements/${encodeURIComponent(id)}/legs/${encodeURIComponent(legId)}/submit`,
+      SubmitResponseSchema,
+      body
+    );
+  }
+  listFerryTables() {
+    return this.request("GET", "/tables", z.array(FerryTableSchema));
+  }
+  getFerryTable(id: string) {
+    return this.request(
+      "GET",
+      `/tables/${encodeURIComponent(id)}`,
+      FerryTableSchema
+    );
+  }
+  getPublicFerryTable(token: string) {
+    return this.request(
+      "GET",
+      `/public/tables/${encodeURIComponent(token)}`,
+      FerryTableSchema
+    );
+  }
+  createFerryTable(body: {
+    title: string;
+    tipBasisPoints: number;
+    items: { name: string; priceRaw: string; quantity: number }[];
+  }) {
+    return this.request("POST", "/tables", FerryTableSchema, body);
+  }
+  joinFerryTable(token: string) {
+    return this.request(
+      "POST",
+      `/tables/join/${encodeURIComponent(token)}`,
+      FerryTableSchema
+    );
+  }
+  claimFerryTableItem(id: string, itemId: string, quantity: number) {
+    return this.request(
+      "PATCH",
+      `/tables/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}/claim`,
+      FerryTableSchema,
+      { quantity }
+    );
+  }
+  finalizeFerryTable(id: string) {
+    return this.request(
+      "POST",
+      `/tables/${encodeURIComponent(id)}/finalize`,
+      FerryTableSchema
+    );
+  }
+
+  // Ferry Drop escrow links
+  listFerryDrops() {
+    return this.request("GET", "/drops", z.array(FerryDropSchema));
+  }
+  getPublicFerryDrop(secret: string) {
+    return this.request(
+      "GET",
+      `/public/drops/${encodeURIComponent(secret)}`,
+      PublicFerryDropSchema
+    );
+  }
+  prepareFerryDrop(body: {
+    amountRaw: string;
+    memo: string;
+    expiresInHours?: number;
+  }) {
+    return this.request("POST", "/drops/prepare", PrepareFerryDropSchema, body);
+  }
+  submitFerryDrop(id: string, body: { intentId: string; signature: string }) {
+    return this.request(
+      "POST",
+      `/drops/${encodeURIComponent(id)}/submit`,
+      FerryDropTransactionSchema,
+      body
+    );
+  }
+  prepareFerryDropClaim(secret: string) {
+    return this.request(
+      "POST",
+      `/drops/claim/${encodeURIComponent(secret)}/prepare`,
+      PrepareFerryDropClaimSchema
+    );
+  }
+  claimFerryDrop(
+    secret: string,
+    body: { deadline: string; signature: string }
+  ) {
+    return this.request(
+      "POST",
+      `/drops/claim/${encodeURIComponent(secret)}`,
+      FerryDropTransactionSchema,
+      body
+    );
+  }
+  refundFerryDrop(id: string) {
+    return this.request(
+      "POST",
+      `/drops/${encodeURIComponent(id)}/refund`,
+      FerryDropTransactionSchema
     );
   }
 

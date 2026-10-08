@@ -32,6 +32,18 @@ export const intentKind = pgEnum("intent_kind", [
   "flow_config",
   "flow_payment",
   "plus_purchase",
+  "drop_create",
+]);
+
+export const dropStatus = pgEnum("drop_status", [
+  "PREPARED",
+  "FUNDING_PENDING",
+  "OPEN",
+  "CLAIM_PENDING",
+  "CLAIMED",
+  "REFUND_PENDING",
+  "REFUNDED",
+  "FAILED",
 ]);
 export const plusPurchaseStatus = pgEnum("plus_purchase_status", [
   "PENDING",
@@ -113,6 +125,19 @@ export interface StoredPayoutAccount {
 
 export interface CashoutPayoutData extends StoredPayoutAccount {
   beneficiaryUserId: string;
+}
+
+export interface StoredRecurringShare {
+  handle: string;
+  amountRaw: string;
+}
+
+export interface StoredSettlementObligation {
+  billId: string;
+  shareId: string;
+  fromUserId: string;
+  toUserId: string;
+  amountRaw: string;
 }
 
 /** One row per passkey-derived address. The address is the identity; the handle is what people send to. */
@@ -516,6 +541,9 @@ export const bills = pgTable(
     id: text("id").primaryKey(),
     creatorUserId: text("creator_user_id").notNull(),
     groupId: text("group_id"),
+    recurringTemplateId: text("recurring_template_id"),
+    recurrenceKey: text("recurrence_key"),
+    settlementRunId: text("settlement_run_id"),
     title: text("title").notNull(),
     note: text("note"),
     totalRaw: text("total_raw").notNull(),
@@ -523,6 +551,8 @@ export const bills = pgTable(
     category: text("category").notNull(),
     splitMode: text("split_mode").notNull(),
     dueLabel: text("due_label"),
+    reminderCount: integer("reminder_count").notNull().default(0),
+    lastRemindedAt: timestamp("last_reminded_at", { withTimezone: true }),
     status: billStatus("status").notNull().default("OPEN"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -534,6 +564,10 @@ export const bills = pgTable(
   (t) => [
     index("bills_creator_created_idx").on(t.creatorUserId, t.createdAt),
     index("bills_group_created_idx").on(t.groupId, t.createdAt),
+    uniqueIndex("bills_recurrence_idx").on(
+      t.recurringTemplateId,
+      t.recurrenceKey,
+    ),
   ],
 );
 
@@ -585,6 +619,231 @@ export const billInvitations = pgTable(
       t.inviteeUserId,
     ),
     index("bill_invitations_invitee_status_idx").on(t.inviteeUserId, t.status),
+  ],
+);
+
+/** Shareable AUSD requests. The token is a public locator, never an authority to move money. */
+export const paymentRequests = pgTable(
+  "payment_requests",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").notNull(),
+    creatorUserId: text("creator_user_id").notNull(),
+    payerUserId: text("payer_user_id"),
+    amountRaw: text("amount_raw").notNull(),
+    memo: text("memo"),
+    status: text("status").notNull().default("OPEN"),
+    transferId: text("transfer_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_requests_token_idx").on(t.token),
+    uniqueIndex("payment_requests_transfer_idx").on(t.transferId),
+    index("payment_requests_creator_created_idx").on(
+      t.creatorUserId,
+      t.createdAt,
+    ),
+  ],
+);
+
+/** Public-token escrow backed by FerryDrop; only token hashes are persisted. */
+export const ferryDrops = pgTable(
+  "ferry_drops",
+  {
+    id: text("id").primaryKey(),
+    claimHash: text("claim_hash").notNull(),
+    senderUserId: text("sender_user_id").notNull(),
+    senderAddress: text("sender_address").notNull(),
+    amountRaw: text("amount_raw").notNull(),
+    memo: text("memo"),
+    status: dropStatus("status").notNull().default("PREPARED"),
+    intentId: text("intent_id"),
+    fundingTxHash: text("funding_tx_hash"),
+    claimantUserId: text("claimant_user_id"),
+    claimantAddress: text("claimant_address"),
+    claimTxHash: text("claim_tx_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ferry_drops_claim_hash_idx").on(t.claimHash),
+    uniqueIndex("ferry_drops_intent_idx").on(t.intentId),
+    index("ferry_drops_sender_created_idx").on(t.senderUserId, t.createdAt),
+    index("ferry_drops_status_idx").on(t.status),
+  ],
+);
+
+/** A reusable bill recipe materialized by the scheduler under one advisory lock. */
+export const recurringBillTemplates = pgTable(
+  "recurring_bill_templates",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id").notNull(),
+    groupId: text("group_id"),
+    title: text("title").notNull(),
+    note: text("note"),
+    totalRaw: text("total_raw").notNull(),
+    creatorAmountRaw: text("creator_amount_raw").notNull(),
+    category: text("category").notNull(),
+    splitMode: text("split_mode").notNull(),
+    dueLabel: text("due_label"),
+    cadence: text("cadence").notNull(),
+    shares: jsonb("shares").$type<StoredRecurringShare[]>().notNull(),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastBillId: text("last_bill_id"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("recurring_templates_owner_idx").on(t.ownerUserId, t.createdAt),
+    index("recurring_templates_due_idx").on(t.active, t.nextRunAt),
+  ],
+);
+
+/** One immutable netting snapshot for a group night. */
+export const settlementRuns = pgTable(
+  "settlement_runs",
+  {
+    id: text("id").primaryKey(),
+    groupId: text("group_id").notNull(),
+    createdByUserId: text("created_by_user_id").notNull(),
+    status: text("status").notNull().default("OPEN"),
+    obligations: jsonb("obligations")
+      .$type<StoredSettlementObligation[]>()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("settlement_runs_group_created_idx").on(t.groupId, t.createdAt),
+  ],
+);
+
+export const settlementLegs = pgTable(
+  "settlement_legs",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    fromUserId: text("from_user_id").notNull(),
+    toUserId: text("to_user_id").notNull(),
+    amountRaw: text("amount_raw").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    transferId: text("transfer_id"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("settlement_legs_run_idx").on(t.runId),
+    index("settlement_legs_payer_status_idx").on(t.fromUserId, t.status),
+    uniqueIndex("settlement_legs_transfer_idx").on(t.transferId),
+  ],
+);
+
+/** A live, pre-bill room where members claim receipt line items. */
+export const ferryTables = pgTable(
+  "ferry_tables",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").notNull(),
+    hostUserId: text("host_user_id").notNull(),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("OPEN"),
+    tipBasisPoints: integer("tip_basis_points").notNull().default(0),
+    finalizedBillId: text("finalized_bill_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ferry_tables_token_idx").on(t.token),
+    index("ferry_tables_host_created_idx").on(t.hostUserId, t.createdAt),
+  ],
+);
+
+export const ferryTableMembers = pgTable(
+  "ferry_table_members",
+  {
+    id: text("id").primaryKey(),
+    tableId: text("table_id").notNull(),
+    userId: text("user_id").notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ferry_table_members_table_user_idx").on(t.tableId, t.userId),
+    index("ferry_table_members_user_idx").on(t.userId, t.joinedAt),
+  ],
+);
+
+export const ferryTableItems = pgTable(
+  "ferry_table_items",
+  {
+    id: text("id").primaryKey(),
+    tableId: text("table_id").notNull(),
+    name: text("name").notNull(),
+    priceRaw: text("price_raw").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("ferry_table_items_table_idx").on(t.tableId, t.createdAt)],
+);
+
+export const ferryTableClaims = pgTable(
+  "ferry_table_claims",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id").notNull(),
+    userId: text("user_id").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ferry_table_claims_item_user_idx").on(t.itemId, t.userId),
+    index("ferry_table_claims_user_idx").on(t.userId),
   ],
 );
 

@@ -197,6 +197,38 @@ export default function BillsScreen() {
           <Ionicons name="chevron-forward" size={18} color={theme.muted} />
         </HapticPressable>
 
+        <HapticPressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Ferry Together"
+          feedback="selection"
+          onPress={() => router.push("/social" as never)}
+          className="mt-2 flex-row items-center py-2"
+        >
+          <View
+            className="size-10 items-center justify-center rounded-full"
+            style={{ backgroundColor: theme.card }}
+          >
+            <Ionicons name="sparkles-outline" size={20} color={theme.text} />
+          </View>
+          <View className="ml-3 flex-1">
+            <Typography
+              weight="700"
+              className="text-sm"
+              style={{ color: theme.text }}
+            >
+              Ferry Together
+            </Typography>
+            <Typography
+              weight="500"
+              className="mt-0.5 text-xs"
+              style={{ color: theme.muted }}
+            >
+              Live tables, requests and recurring circles
+            </Typography>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.muted} />
+        </HapticPressable>
+
         <View
           className="mt-6 flex-row rounded-full p-1"
           style={{ backgroundColor: theme.cardStrong }}

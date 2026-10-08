@@ -38,6 +38,11 @@ export const ListBillsSchema = z.object({
 export const RespondInvitationSchema = z.object({ accepted: z.boolean() });
 export type RespondInvitationRequest = z.infer<typeof RespondInvitationSchema>;
 
+export const RemindBillSchema = z.object({
+  tone: z.enum(["gentle", "playful", "urgent"]).default("gentle"),
+});
+export type RemindBillRequest = z.infer<typeof RemindBillSchema>;
+
 export const SubmitBillPaymentSchema = SubmitSchema;
 export type SubmitBillPaymentRequest = z.infer<typeof SubmitBillPaymentSchema>;
 

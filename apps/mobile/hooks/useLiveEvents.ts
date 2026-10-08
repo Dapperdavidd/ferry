@@ -97,5 +97,45 @@ function applyEvent(
   if (event.type === "flow.updated") {
     void queryClient.invalidateQueries({ queryKey: ["flow"] });
     void queryClient.invalidateQueries({ queryKey: ["rewards"] });
+    return;
+  }
+
+  if (event.type === "request.updated") {
+    void queryClient.invalidateQueries({ queryKey: ["payment-requests"] });
+    if (event.entityId) {
+      void queryClient.invalidateQueries({
+        queryKey: ["payment-request"],
+      });
+    }
+    void queryClient.invalidateQueries({ queryKey: ["transfers"] });
+    void queryClient.invalidateQueries({ queryKey: ["balances"] });
+    return;
+  }
+
+  if (event.type === "settlement.updated") {
+    void queryClient.invalidateQueries({ queryKey: ["settlement"] });
+    void queryClient.invalidateQueries({ queryKey: ["bills"] });
+    void queryClient.invalidateQueries({ queryKey: ["transfers"] });
+    void queryClient.invalidateQueries({ queryKey: ["balances"] });
+    return;
+  }
+
+  if (event.type === "recurring.updated") {
+    void queryClient.invalidateQueries({ queryKey: ["recurring-bills"] });
+    void queryClient.invalidateQueries({ queryKey: ["bills"] });
+    return;
+  }
+
+  if (event.type === "table.updated") {
+    void queryClient.invalidateQueries({ queryKey: ["ferry-tables"] });
+    void queryClient.invalidateQueries({ queryKey: ["ferry-table"] });
+    return;
+  }
+
+  if (event.type === "drop.updated") {
+    void queryClient.invalidateQueries({ queryKey: ["ferry-drops"] });
+    void queryClient.invalidateQueries({ queryKey: ["ferry-drop"] });
+    void queryClient.invalidateQueries({ queryKey: ["transfers"] });
+    void queryClient.invalidateQueries({ queryKey: ["balances"] });
   }
 }

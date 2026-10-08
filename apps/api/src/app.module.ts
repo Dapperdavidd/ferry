@@ -23,6 +23,8 @@ import { RewardsModule } from "./rewards/rewards.module";
 import { PlusModule } from "./plus/plus.module";
 import { BillsModule } from "./bills/bills.module";
 import { EventsModule } from "./events/events.module";
+import { SocialModule } from "./social/social.module";
+import { DropsModule } from "./drops/drops.module";
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { EventsModule } from "./events/events.module";
     PlusModule,
     BillsModule,
     EventsModule,
+    SocialModule,
+    DropsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

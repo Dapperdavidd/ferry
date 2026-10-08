@@ -15,19 +15,35 @@ import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { PremiumActionButton } from "@/components/ui/molecules/PremiumActionButton";
 import { useAppTheme } from "@/contexts/AppThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useBillGroups, useCreateBillGroup } from "@/hooks/useBills";
-import { apiErrorMessage } from "@/utils/apiClient";
+import { apiClient, apiErrorMessage } from "@/utils/apiClient";
 
 export default function BillGroupsScreen() {
   const { theme } = useAppTheme();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const router = useRouter();
   const groups = useBillGroups();
   const createGroup = useCreateBillGroup();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [handles, setHandles] = useState("");
+  const [settlingGroup, setSettlingGroup] = useState<string | null>(null);
+
+  const settleGroup = async (groupId: string) => {
+    if (settlingGroup) return;
+    setSettlingGroup(groupId);
+    try {
+      const settlement = await apiClient.createSettlement(groupId);
+      router.push(`/settlements/${settlement.id}` as never);
+    } catch (error) {
+      showToast(apiErrorMessage(error) ?? "This group couldn't be settled");
+    } finally {
+      setSettlingGroup(null);
+    }
+  };
 
   const save = async () => {
     const members = handles
@@ -211,6 +227,32 @@ export default function BillGroupsScreen() {
                       Split with this group
                     </Typography>
                   </HapticPressable>
+                  {group.ownerUserId === user?.id ? (
+                    <HapticPressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Optimize payments for ${group.name}`}
+                      feedback="impact"
+                      disabled={Boolean(settlingGroup)}
+                      onPress={() => void settleGroup(group.id)}
+                      className="mt-2 flex-row items-center justify-center rounded-full border py-3"
+                      style={{ borderColor: theme.border }}
+                    >
+                      <Ionicons
+                        name="sparkles-outline"
+                        size={16}
+                        color={theme.text}
+                      />
+                      <Typography
+                        weight="700"
+                        className="ml-2 text-xs"
+                        style={{ color: theme.text }}
+                      >
+                        {settlingGroup === group.id
+                          ? "Optimizing…"
+                          : "Settle the Night"}
+                      </Typography>
+                    </HapticPressable>
+                  ) : null}
                 </View>
               ))}
             </View>

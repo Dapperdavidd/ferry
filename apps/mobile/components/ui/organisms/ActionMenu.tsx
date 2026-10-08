@@ -53,6 +53,11 @@ export function ActionMenu({ visible, onClose }: ActionMenuProps) {
         onPress: () => router.push("/bills" as never),
       },
       {
+        title: "Together",
+        icon: "sparkles-outline" as ActionIcon,
+        onPress: () => router.push("/social" as never),
+      },
+      {
         title: "Flow",
         icon: "git-branch-outline" as ActionIcon,
         onPress: () =>

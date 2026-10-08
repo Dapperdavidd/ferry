@@ -8,6 +8,7 @@ import {
   defineChain,
   fallback,
   http,
+  parseSignature,
   type Address,
   type Hex,
   type PublicClient,
@@ -20,6 +21,7 @@ import { HealthService } from "../health/health.service";
 import { ausdAbi, faucetAbi } from "./abi";
 import { settlementAbi } from "../cashout/settlement.abi";
 import { type Authorization, type TokenDomain } from "./authorization";
+import { ferryDropAbi } from "../drops/drop.abi";
 
 export interface ChainAddresses {
   ausd: Address;
@@ -28,6 +30,7 @@ export interface ChainAddresses {
   pair: Address | null;
   whitelister: Address | null;
   settlement: Address | null;
+  drop: Address | null;
 }
 
 const GAS_HEADROOM_PERCENT = 20n;
@@ -84,6 +87,7 @@ export class ChainService implements OnModuleInit {
       pair: optional("STABLE_SWAP_PAIR_ADDRESS"),
       whitelister: optional("STABLE_SWAP_WHITELISTER_ADDRESS"),
       settlement: optional("SETTLEMENT_ADDRESS"),
+      drop: optional("DROP_CONTRACT_ADDRESS"),
     };
   }
 
@@ -318,6 +322,132 @@ export class ChainService implements OnModuleInit {
           params.salt,
           params.deadline,
         ],
+      });
+      const gas = await this.publicClient.estimateContractGas({
+        ...request,
+        account,
+      });
+      return await wallet.writeContract({
+        ...request,
+        account,
+        chain: wallet.chain,
+        gas: (gas * (100n + GAS_HEADROOM_PERCENT)) / 100n,
+      });
+    } catch (err) {
+      throw this.describe(err);
+    }
+  }
+
+  async createDrop(params: {
+    claimHash: Hex;
+    expiresAt: bigint;
+    auth: Authorization;
+    signature: Hex;
+  }): Promise<Hex> {
+    const address = this.addresses.drop;
+    if (!address)
+      throw new ApiError(
+        "DROP_UNAVAILABLE",
+        "Ferry Drop is not available on this network yet.",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    const { account, wallet } = this.requireRelayer();
+    const { auth } = params;
+    try {
+      const { request } = await this.publicClient.simulateContract({
+        account,
+        address,
+        abi: ferryDropAbi,
+        functionName: "createDrop",
+        args: [
+          params.claimHash,
+          auth.from,
+          auth.value,
+          params.expiresAt,
+          auth.validAfter,
+          auth.validBefore,
+          auth.nonce,
+          params.signature,
+        ],
+      });
+      const gas = await this.publicClient.estimateContractGas({
+        ...request,
+        account,
+      });
+      return await wallet.writeContract({
+        ...request,
+        account,
+        chain: wallet.chain,
+        gas: (gas * (100n + GAS_HEADROOM_PERCENT)) / 100n,
+      });
+    } catch (err) {
+      throw this.describe(err);
+    }
+  }
+
+  async claimDrop(params: {
+    secret: Hex;
+    recipient: Address;
+    deadline: bigint;
+    signature: Hex;
+  }): Promise<Hex> {
+    const address = this.addresses.drop;
+    if (!address)
+      throw new ApiError(
+        "DROP_UNAVAILABLE",
+        "Ferry Drop is not available on this network yet.",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    const { account, wallet } = this.requireRelayer();
+    const { v, r, s } = parseSignature(params.signature);
+    if (v === undefined)
+      throw new ApiError("BAD_SIGNATURE", "That claim signature is invalid.");
+    try {
+      const { request } = await this.publicClient.simulateContract({
+        account,
+        address,
+        abi: ferryDropAbi,
+        functionName: "claim",
+        args: [
+          params.secret,
+          params.recipient,
+          params.deadline,
+          Number(v),
+          r,
+          s,
+        ],
+      });
+      const gas = await this.publicClient.estimateContractGas({
+        ...request,
+        account,
+      });
+      return await wallet.writeContract({
+        ...request,
+        account,
+        chain: wallet.chain,
+        gas: (gas * (100n + GAS_HEADROOM_PERCENT)) / 100n,
+      });
+    } catch (err) {
+      throw this.describe(err);
+    }
+  }
+
+  async refundDrop(claimHash: Hex): Promise<Hex> {
+    const address = this.addresses.drop;
+    if (!address)
+      throw new ApiError(
+        "DROP_UNAVAILABLE",
+        "Ferry Drop is not available on this network yet.",
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    const { account, wallet } = this.requireRelayer();
+    try {
+      const { request } = await this.publicClient.simulateContract({
+        account,
+        address,
+        abi: ferryDropAbi,
+        functionName: "refund",
+        args: [claimHash],
       });
       const gas = await this.publicClient.estimateContractGas({
         ...request,

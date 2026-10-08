@@ -137,16 +137,42 @@ export class NotificationsService {
 
   async notifyBillReminder(
     userIds: string[],
-    params: { billId: string; title: string },
+    params: {
+      billId: string;
+      title: string;
+      tone?: "gentle" | "playful" | "urgent";
+    },
   ): Promise<void> {
+    const copy =
+      params.tone === "urgent"
+        ? `“${params.title}” is overdue. Settle your share now.`
+        : params.tone === "playful"
+          ? `The group chat remembers “${params.title}” 👀`
+          : `Your share of “${params.title}” is still open.`;
     await this.notifyBillMembers(userIds, {
-      title: "Quick bill reminder",
-      body: `Your share of “${params.title}” is still open.`,
+      title: params.tone === "urgent" ? "Payment due" : "Quick bill reminder",
+      body: copy,
       data: {
         kind: "bill_reminder",
         billId: params.billId,
         url: `ferry://bills/${params.billId}`,
       },
+    });
+  }
+
+  async notifySocial(
+    userIds: string[],
+    message: {
+      title: string;
+      body: string;
+      kind: string;
+      url: string;
+    },
+  ): Promise<void> {
+    await this.notifyBillMembers(userIds, {
+      title: message.title,
+      body: message.body,
+      data: { kind: message.kind, url: message.url },
     });
   }
 

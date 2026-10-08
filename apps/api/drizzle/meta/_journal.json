@@ -57,6 +57,41 @@
       "when": 1791488004709,
       "tag": "0007_nice_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791493536071,
+      "tag": "0008_spicy_pestilence",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791493544324,
+      "tag": "0009_dazzling_silver_fox",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791493555779,
+      "tag": "0010_green_omega_red",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791493579689,
+      "tag": "0011_luxuriant_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791493914367,
+      "tag": "0012_overrated_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

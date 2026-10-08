@@ -39,7 +39,11 @@ export class BillsService {
     @Optional() private readonly events?: EventsService,
   ) {}
 
-  async create(userId: string, body: CreateBillRequest) {
+  async create(
+    userId: string,
+    body: CreateBillRequest,
+    origin?: { recurringTemplateId: string; recurrenceKey: string },
+  ) {
     const creator = await this.requireUser(userId);
     const participants = await this.resolveDistinctHandles(
       body.shares.map((share) => share.handle),
@@ -81,6 +85,8 @@ export class BillsService {
         id: billId,
         creatorUserId: userId,
         groupId: body.groupId ?? null,
+        recurringTemplateId: origin?.recurringTemplateId ?? null,
+        recurrenceKey: origin?.recurrenceKey ?? null,
         title: body.title,
         note: body.note || null,
         totalRaw: total.toString(),
@@ -197,7 +203,11 @@ export class BillsService {
     return this.get(userId, billId);
   }
 
-  async remind(userId: string, billId: string) {
+  async remind(
+    userId: string,
+    billId: string,
+    tone: "gentle" | "playful" | "urgent" = "gentle",
+  ) {
     const bill = await this.requireAccessibleBill(userId, billId);
     if (bill.creatorUserId !== userId) {
       throw new ApiError(
@@ -214,20 +224,35 @@ export class BillsService {
       );
     await this.notifications.notifyBillReminder(
       pending.map((share) => share.userId),
-      { billId, title: bill.title },
+      { billId, title: bill.title, tone },
     );
+    await this.db.client
+      .update(bills)
+      .set({
+        reminderCount: bill.reminderCount + 1,
+        lastRemindedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(bills.id, billId));
     await this.events?.publishMany(
       pending.map((share) => share.userId),
       "bill.reminded",
       "bill",
       billId,
-      { action: "reminded" },
+      { action: "reminded", tone, count: bill.reminderCount + 1 },
     );
-    return { reminded: pending.length };
+    return { reminded: pending.length, tone, count: bill.reminderCount + 1 };
   }
 
   async preparePayment(userId: string, from: Address, billId: string) {
     const bill = await this.requireAccessibleBill(userId, billId);
+    if (bill.settlementRunId) {
+      throw new ApiError(
+        "SETTLEMENT_IN_PROGRESS",
+        "This bill is being settled with the group’s optimized plan.",
+        HttpStatus.CONFLICT,
+      );
+    }
     if (bill.creatorUserId === userId) {
       throw new ApiError("NOT_PAYABLE", "You created this bill.");
     }
@@ -625,6 +650,8 @@ export class BillsService {
                 ? "settled"
                 : "owe",
         dueLabel: bill.dueLabel ?? "No rush",
+        reminderCount: bill.reminderCount,
+        lastRemindedAt: bill.lastRemindedAt?.toISOString() ?? null,
         createdAt: bill.createdAt.toISOString(),
         updatedAt: bill.updatedAt.toISOString(),
         participants,

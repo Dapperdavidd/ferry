@@ -43,6 +43,7 @@ const hexKey = Joi.string().pattern(/^0x[0-9a-fA-F]{64}$/);
         STABLE_SWAP_WHITELISTER_ADDRESS: address.optional().allow(""),
         SETTLEMENT_ADDRESS: address.optional().allow(""),
         FLOW_CONTRACT_ADDRESS: address.optional().allow(""),
+        DROP_CONTRACT_ADDRESS: address.optional().allow(""),
         FLOW_DEPLOYMENT_BLOCK: Joi.string().pattern(/^\d+$/).default("0"),
         PAYOUT_PARTNER_ADDRESS: address.optional().allow(""),
         PAYOUT_PROVIDER: Joi.string()

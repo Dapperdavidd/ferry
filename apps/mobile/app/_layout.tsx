@@ -69,6 +69,7 @@ import {
 import { useRewardLifecycle } from "@/hooks/useRewardLifecycle";
 import { NetworkProvider } from "@/contexts/NetworkContext";
 import { useLiveEvents } from "@/hooks/useLiveEvents";
+import { takePostAuthRoute } from "@/utils/postAuthNavigation";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2 } },
@@ -144,10 +145,20 @@ function AuthLayout() {
   const inAuthGroup = segments[0] === "(auth)";
   const atOnboarding = segments[0] === "onboarding";
   const atPayLink = segments[0] === "pay";
+  const atSocialLink =
+    segments[0] === "requests" ||
+    segments[0] === "tables" ||
+    segments[0] === "drops";
   // A handle is the identity people send to, so an account without one stays on onboarding.
   const needsHandle = isAuthenticated && (!user || !user.handle);
 
-  if (!isLoading && !isAuthenticated && !inAuthGroup && !atPayLink) {
+  if (
+    !isLoading &&
+    !isAuthenticated &&
+    !inAuthGroup &&
+    !atPayLink &&
+    !atSocialLink
+  ) {
     return <Redirect href="/login" withAnchor />;
   }
 
@@ -156,7 +167,9 @@ function AuthLayout() {
   }
 
   if (isAuthenticated && !needsHandle && (inAuthGroup || atOnboarding)) {
-    return <Redirect href="/(tabs)" withAnchor />;
+    return (
+      <Redirect href={(takePostAuthRoute() ?? "/(tabs)") as never} withAnchor />
+    );
   }
 
   const showLock = isAuthenticated && !inAuthGroup && isLocked;

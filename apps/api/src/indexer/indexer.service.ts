@@ -14,12 +14,16 @@ import {
   cashouts,
   bills,
   billShares,
+  billGroupMembers,
   flowConfigurations,
   flowPayments,
   intents,
   sendSponsorships,
   transfers,
   users,
+  paymentRequests,
+  settlementLegs,
+  settlementRuns,
 } from "../db/schema";
 import { ferryFlowAbi } from "../flows/flow.abi";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -396,6 +400,7 @@ export class IndexerService {
         );
         if (row.direction === "SEND") {
           await this.reconcileBillPayment(row, now, Boolean(log));
+          await this.reconcileSocialPayment(row, now, Boolean(log));
         }
         if (row.direction === "RECEIVE") {
           const sender = await this.users
@@ -472,6 +477,23 @@ export class IndexerService {
           updatedAt: new Date(),
         })
         .where(inArray(billShares.transferId, failedTransferIds));
+      await this.db.client
+        .update(paymentRequests)
+        .set({
+          status: "OPEN",
+          payerUserId: null,
+          transferId: null,
+          updatedAt: new Date(),
+        })
+        .where(inArray(paymentRequests.transferId, failedTransferIds));
+      await this.db.client
+        .update(settlementLegs)
+        .set({
+          status: "PENDING",
+          transferId: null,
+          updatedAt: new Date(),
+        })
+        .where(inArray(settlementLegs.transferId, failedTransferIds));
     }
     await this.db.client
       .update(cashouts)
@@ -600,6 +622,158 @@ export class IndexerService {
     this.logger.log(
       `indexer.bill_paid bill=${bill.id} share=${paidShare.id} tx=${transfer.txHash}`,
     );
+  }
+
+  private async reconcileSocialPayment(
+    transfer: typeof transfers.$inferSelect,
+    confirmedAt: Date,
+    receiptMatches: boolean,
+  ): Promise<void> {
+    if (!transfer.intentId) return;
+    const [intent] = await this.db.client
+      .select({ details: intents.details })
+      .from(intents)
+      .where(eq(intents.id, transfer.intentId))
+      .limit(1);
+    const details = (intent?.details ?? {}) as Record<string, unknown>;
+
+    if (typeof details.paymentRequestId === "string") {
+      if (!receiptMatches) return;
+      const [request] = await this.db.client
+        .update(paymentRequests)
+        .set({ status: "PAID", paidAt: confirmedAt, updatedAt: confirmedAt })
+        .where(
+          and(
+            eq(paymentRequests.id, details.paymentRequestId),
+            eq(paymentRequests.transferId, transfer.id),
+            eq(paymentRequests.status, "PAYMENT_PENDING"),
+          ),
+        )
+        .returning();
+      if (request) {
+        const participantIds = [
+          request.creatorUserId,
+          ...(request.payerUserId ? [request.payerUserId] : []),
+        ];
+        await this.events?.publishMany(
+          participantIds,
+          "request.updated",
+          "payment-request",
+          request.id,
+          { action: "paid", status: "PAID" },
+        );
+        await this.notifications.notifySocial([request.creatorUserId], {
+          title: "Request paid",
+          body: request.memo
+            ? `“${request.memo}” was paid.`
+            : "Your Ferry request was paid.",
+          kind: "request_paid",
+          url: `ferry://requests/${request.token}`,
+        });
+      }
+    }
+
+    if (
+      typeof details.settlementRunId !== "string" ||
+      typeof details.settlementLegId !== "string" ||
+      !receiptMatches
+    ) {
+      return;
+    }
+    const [paidLeg] = await this.db.client
+      .update(settlementLegs)
+      .set({ status: "PAID", paidAt: confirmedAt, updatedAt: confirmedAt })
+      .where(
+        and(
+          eq(settlementLegs.id, details.settlementLegId),
+          eq(settlementLegs.runId, details.settlementRunId),
+          eq(settlementLegs.transferId, transfer.id),
+          eq(settlementLegs.status, "PAYMENT_PENDING"),
+        ),
+      )
+      .returning();
+    if (!paidLeg) return;
+    const [run, legs] = await Promise.all([
+      this.db.client
+        .select()
+        .from(settlementRuns)
+        .where(eq(settlementRuns.id, paidLeg.runId))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      this.db.client
+        .select()
+        .from(settlementLegs)
+        .where(eq(settlementLegs.runId, paidLeg.runId)),
+    ]);
+    if (!run) return;
+    const groupMembers = await this.db.client
+      .select({ userId: billGroupMembers.userId })
+      .from(billGroupMembers)
+      .where(eq(billGroupMembers.groupId, run.groupId));
+    const groupUserIds = groupMembers.map((row) => row.userId);
+    await this.events?.publishMany(
+      groupUserIds,
+      "settlement.updated",
+      "settlement",
+      run.id,
+      { action: "leg-paid", legId: paidLeg.id },
+    );
+    if (!legs.every((leg) => leg.status === "PAID")) return;
+
+    const shareIds = run.obligations.map((obligation) => obligation.shareId);
+    const billIds = [...new Set(run.obligations.map((item) => item.billId))];
+    await this.db.withTransaction(async () => {
+      await this.db.client
+        .update(settlementRuns)
+        .set({
+          status: "SETTLED",
+          settledAt: confirmedAt,
+          updatedAt: confirmedAt,
+        })
+        .where(eq(settlementRuns.id, run.id));
+      if (shareIds.length) {
+        await this.db.client
+          .update(billShares)
+          .set({ status: "PAID", paidAt: confirmedAt, updatedAt: confirmedAt })
+          .where(inArray(billShares.id, shareIds));
+      }
+      for (const billId of billIds) {
+        const shares = await this.db.client
+          .select({ status: billShares.status })
+          .from(billShares)
+          .where(eq(billShares.billId, billId));
+        await this.db.client
+          .update(bills)
+          .set({
+            status: shares.every((share) => share.status === "PAID")
+              ? "SETTLED"
+              : "OPEN",
+            settlementRunId: null,
+            updatedAt: confirmedAt,
+          })
+          .where(eq(bills.id, billId));
+      }
+    });
+    await this.events?.publishMany(
+      groupUserIds,
+      "settlement.updated",
+      "settlement",
+      run.id,
+      { action: "settled", status: "SETTLED" },
+    );
+    await this.events?.publishMany(
+      groupUserIds,
+      "bill.updated",
+      "bill-group",
+      run.groupId,
+      { action: "group-settled" },
+    );
+    await this.notifications.notifySocial(groupUserIds, {
+      title: "The night is settled",
+      body: `${legs.length} optimized payments cleared the whole circle.`,
+      kind: "settlement_paid",
+      url: `ferry://settlements/${run.id}`,
+    });
   }
 
   private async releaseSponsorships(intentIds: string[]): Promise<void> {

@@ -20,6 +20,8 @@ function bill(position: Bill["position"], self: number, waiting: number): Bill {
     status: position === "settled" ? "SETTLED" : "OPEN",
     position,
     dueLabel: "Today",
+    reminderCount: 0,
+    lastRemindedAt: null,
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
     participants: [
