@@ -1,5 +1,12 @@
-import React, { useMemo, useCallback, forwardRef, useRef } from "react";
-import { View } from "react-native";
+import React, {
+  useMemo,
+  useCallback,
+  forwardRef,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { ActivityIndicator, Linking, StyleSheet, View } from "react-native";
 import {
   BottomSheetModal,
   BottomSheetView,
@@ -26,7 +33,9 @@ export const QRScannerModal = forwardRef<BottomSheetModal, QRScannerModalProps>(
   ({ onScan }, ref) => {
     const snapPoints = useMemo(() => ["94%"], []);
     const [permission, requestPermission] = useCameraPermissions();
+    const [isOpen, setIsOpen] = useState(false);
     const hasScanned = useRef(false);
+    const requestedOnOpen = useRef(false);
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => <BlurBackdrop {...props} />,
@@ -34,10 +43,24 @@ export const QRScannerModal = forwardRef<BottomSheetModal, QRScannerModalProps>(
     );
 
     const handleSheetChanges = useCallback((index: number) => {
-      if (index === -1) {
-        hasScanned.current = false;
-      }
+      const open = index >= 0;
+      setIsOpen(open);
+      if (!open) hasScanned.current = false;
     }, []);
+
+    useEffect(() => {
+      if (
+        !isOpen ||
+        !permission ||
+        permission.granted ||
+        !permission.canAskAgain ||
+        requestedOnOpen.current
+      )
+        return;
+
+      requestedOnOpen.current = true;
+      void requestPermission();
+    }, [isOpen, permission, requestPermission]);
 
     const handleClose = () => {
       // @ts-ignore
@@ -76,14 +99,17 @@ export const QRScannerModal = forwardRef<BottomSheetModal, QRScannerModalProps>(
           width: "9%",
         }}
         stackBehavior="push"
-        containerStyle={{ zIndex: 2 }}
+        backgroundStyle={{ backgroundColor: "#F0F0F0" }}
+        containerStyle={{ zIndex: 1000, elevation: 1000 }}
       >
         <BottomSheetView className="h-full flex-1 bg-[#F0F0F0]">
-          <RenderContent
-            permission={permission}
-            requestPermission={requestPermission}
-            handleBarCodeScanned={handleBarCodeScanned}
-          />
+          {isOpen ? (
+            <RenderContent
+              permission={permission}
+              requestPermission={requestPermission}
+              handleBarCodeScanned={handleBarCodeScanned}
+            />
+          ) : null}
         </BottomSheetView>
       </BottomSheetModal>
     );
@@ -104,7 +130,11 @@ const RenderContent = ({
   handleBarCodeScanned,
 }: RenderContentProps) => {
   if (!permission) {
-    return null;
+    return (
+      <View className="flex-1 items-center justify-center">
+        <ActivityIndicator color="#000000" />
+      </View>
+    );
   }
 
   if (!permission.granted) {
@@ -119,10 +149,14 @@ const RenderContent = ({
         </Typography>
         <HapticPressable
           className="rounded-full bg-black px-6 py-3"
-          onPress={requestPermission}
+          onPress={() =>
+            permission.canAskAgain
+              ? void requestPermission()
+              : void Linking.openSettings()
+          }
         >
           <Typography weight="600" className="text-white">
-            Grant Access
+            {permission.canAskAgain ? "Grant Access" : "Open Settings"}
           </Typography>
         </HapticPressable>
       </View>
@@ -132,7 +166,7 @@ const RenderContent = ({
   return (
     <View className="flex-1 rounded-3xl">
       <CameraView
-        style={{ flex: 1, height: 400, width: 400 }}
+        style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
