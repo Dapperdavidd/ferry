@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import HapticPressable from "@/components/ui/atoms/HapticPressable";
 import { Typography } from "@/components/ui/atoms/Typography";
 import { ScreenLayout } from "@/components/ui/layout";
 import { useAppTheme } from "@/contexts/AppThemeContext";
 import { useBills } from "@/hooks/useBills";
+import SharedBillsPanel from "@/components/ui/organisms/SharedBillsPanel";
 import {
   billPositionAmount,
   formatBillMoney,
@@ -37,6 +38,8 @@ const BILL_FILTERS: { id: BillCategory | "all"; label: string }[] = [
 export default function BillsScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
+  const { section } = useLocalSearchParams<{ section?: string }>();
+  const sharedSection = section === "shared";
   const billsQuery = useBills();
   const bills = billsQuery.data ?? [];
   const [view, setView] = useState<"open" | "settled">("open");
@@ -86,316 +89,346 @@ export default function BillsScreen() {
       lightColor={theme.background}
       darkColor={theme.background}
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 24 }}
-        showsVerticalScrollIndicator={false}
+      <View className="h-16 flex-row items-center justify-between px-6">
+        <HapticPressable
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Back to home"
+          feedback="selection"
+          onPress={() => router.back()}
+          className="size-12 items-center justify-center rounded-full"
+          style={{ backgroundColor: theme.card }}
+        >
+          <Ionicons name="chevron-back" size={24} color={theme.text} />
+        </HapticPressable>
+        <Typography
+          weight="700"
+          className="text-[19px] tracking-[-0.3px]"
+          style={{ color: theme.text }}
+        >
+          Bills
+        </Typography>
+        <HapticPressable
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Create a new bill"
+          feedback="impact"
+          onPress={() => router.push("/bills/new" as never)}
+          className="size-12 items-center justify-center rounded-full"
+          style={{ backgroundColor: theme.primary }}
+        >
+          <Ionicons name="add" size={24} color={theme.primaryText} />
+        </HapticPressable>
+      </View>
+
+      <View
+        className="mx-6 mb-2 mt-4 flex-row rounded-full p-1"
+        style={{ backgroundColor: theme.cardStrong }}
       >
-        <View className="h-16 flex-row items-center justify-between">
-          <HapticPressable
-            accessible
-            accessibilityRole="button"
-            accessibilityLabel="Back to home"
-            feedback="selection"
-            onPress={() => router.back()}
-            className="size-12 items-center justify-center rounded-full"
-            style={{ backgroundColor: theme.card }}
-          >
-            <Ionicons name="chevron-back" size={24} color={theme.text} />
-          </HapticPressable>
-          <Typography
-            weight="700"
-            className="text-[19px] tracking-[-0.3px]"
-            style={{ color: theme.text }}
-          >
-            Bills
-          </Typography>
-          <HapticPressable
-            accessible
-            accessibilityRole="button"
-            accessibilityLabel="Create a new bill"
-            feedback="impact"
-            onPress={() => router.push("/bills/new" as never)}
-            className="size-12 items-center justify-center rounded-full"
-            style={{ backgroundColor: theme.primary }}
-          >
-            <Ionicons name="add" size={24} color={theme.primaryText} />
-          </HapticPressable>
-        </View>
+        <HubSegment
+          label="Your bills"
+          icon="receipt-outline"
+          active={!sharedSection}
+          onPress={() => router.setParams({ section: "bills" })}
+        />
+        <HubSegment
+          label="Share & settle"
+          icon="people-outline"
+          active={sharedSection}
+          onPress={() => router.setParams({ section: "shared" })}
+        />
+      </View>
 
-        <View
-          className="mt-6 flex-row items-center border-y py-5"
-          style={{ borderColor: theme.border }}
-        >
-          <View className="flex-1">
-            <Typography
-              weight="600"
-              className="text-xs"
-              style={{ color: theme.muted }}
-            >
-              You&apos;re owed
-            </Typography>
-            <Typography
-              weight="700"
-              className="mt-1 text-[24px] tracking-[-0.7px]"
-              style={{ color: theme.text }}
-            >
-              {formatBillMoney(collecting)}
-            </Typography>
-          </View>
-          <View
-            className="mx-5 h-11 w-px"
-            style={{ backgroundColor: theme.border }}
-          />
-          <View className="flex-1">
-            <Typography
-              weight="600"
-              className="text-xs"
-              style={{ color: theme.muted }}
-            >
-              You owe
-            </Typography>
-            <Typography
-              weight="700"
-              className="mt-1 text-[24px] tracking-[-0.7px]"
-              style={{ color: theme.text }}
-            >
-              {formatBillMoney(owing)}
-            </Typography>
-          </View>
-        </View>
-
-        <HapticPressable
-          accessibilityRole="button"
-          accessibilityLabel="Open bill groups"
-          feedback="selection"
-          onPress={() => router.push("/bills/groups" as never)}
-          className="mt-5 flex-row items-center py-2"
+      {sharedSection ? (
+        <SharedBillsPanel />
+      ) : (
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 24 }}
+          showsVerticalScrollIndicator={false}
         >
           <View
-            className="size-10 items-center justify-center rounded-full"
-            style={{ backgroundColor: theme.card }}
+            className="mt-6 flex-row items-center border-y py-5"
+            style={{ borderColor: theme.border }}
           >
-            <Ionicons name="people-outline" size={20} color={theme.text} />
-          </View>
-          <View className="ml-3 flex-1">
-            <Typography
-              weight="700"
-              className="text-sm"
-              style={{ color: theme.text }}
-            >
-              Your groups
-            </Typography>
-            <Typography
-              weight="500"
-              className="mt-0.5 text-xs"
-              style={{ color: theme.muted }}
-            >
-              Reuse the people you split with
-            </Typography>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.muted} />
-        </HapticPressable>
-
-        <HapticPressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Ferry Together"
-          feedback="selection"
-          onPress={() => router.push("/social" as never)}
-          className="mt-2 flex-row items-center py-2"
-        >
-          <View
-            className="size-10 items-center justify-center rounded-full"
-            style={{ backgroundColor: theme.card }}
-          >
-            <Ionicons name="sparkles-outline" size={20} color={theme.text} />
-          </View>
-          <View className="ml-3 flex-1">
-            <Typography
-              weight="700"
-              className="text-sm"
-              style={{ color: theme.text }}
-            >
-              Ferry Together
-            </Typography>
-            <Typography
-              weight="500"
-              className="mt-0.5 text-xs"
-              style={{ color: theme.muted }}
-            >
-              Live tables, requests and recurring circles
-            </Typography>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.muted} />
-        </HapticPressable>
-
-        <View
-          className="mt-6 flex-row rounded-full p-1"
-          style={{ backgroundColor: theme.cardStrong }}
-        >
-          <BillSegment
-            label="Open"
-            count={openBills.length}
-            active={view === "open"}
-            onPress={() => setView("open")}
-          />
-          <BillSegment
-            label="Settled"
-            count={settledBills.length}
-            active={view === "settled"}
-            onPress={() => setView("settled")}
-          />
-        </View>
-
-        <View
-          className="mt-5 flex-row items-center border-b pb-3"
-          style={{ borderColor: theme.border }}
-        >
-          <Ionicons name="search-outline" size={20} color={theme.muted} />
-          <TextInput
-            accessibilityLabel="Search bills"
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setQuery}
-            placeholder="Search bills"
-            placeholderTextColor={theme.faint}
-            returnKeyType="search"
-            selectionColor={theme.accent}
-            value={query}
-            className="ml-3 flex-1 py-0 text-[15px]"
-            style={{ color: theme.text }}
-          />
-          <HapticPressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              filtersVisible ? "Hide filters" : "Filter bills"
-            }
-            accessibilityState={{ expanded: filtersVisible }}
-            feedback="selection"
-            onPress={() => setFiltersVisible((visible) => !visible)}
-            className="ml-3 flex-row items-center gap-2 py-1"
-          >
-            <Ionicons
-              name="options-outline"
-              size={19}
-              color={category === "all" ? theme.muted : theme.text}
-            />
-            <Typography
-              weight="700"
-              className="text-xs"
-              style={{ color: category === "all" ? theme.muted : theme.text }}
-            >
-              Filter
-            </Typography>
-          </HapticPressable>
-        </View>
-
-        {filtersVisible ? (
-          <ScrollView
-            horizontal
-            className="-mx-6"
-            contentContainerStyle={{ gap: 22, paddingHorizontal: 24 }}
-            showsHorizontalScrollIndicator={false}
-          >
-            {BILL_FILTERS.map((filter) => (
-              <HapticPressable
-                key={filter.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: category === filter.id }}
-                feedback="selection"
-                onPress={() => setCategory(filter.id)}
-                className="border-b-2 py-3"
-                style={{
-                  borderBottomColor:
-                    category === filter.id ? theme.text : "transparent",
-                }}
+            <View className="flex-1">
+              <Typography
+                weight="600"
+                className="text-xs"
+                style={{ color: theme.muted }}
               >
-                <Typography
-                  weight={category === filter.id ? "700" : "600"}
-                  className="text-xs"
-                  style={{
-                    color: category === filter.id ? theme.text : theme.muted,
-                  }}
-                >
-                  {filter.label}
-                </Typography>
-              </HapticPressable>
-            ))}
-          </ScrollView>
-        ) : null}
-
-        <View className="mb-3 mt-7 flex-row items-center justify-between">
-          <Typography
-            weight="700"
-            className="text-[18px]"
-            style={{ color: theme.text }}
-          >
-            {view === "open" ? "Open bills" : "Settled bills"}
-          </Typography>
-          <Typography
-            weight="600"
-            className="text-xs"
-            style={{ color: theme.muted }}
-          >
-            {visibleBills.length} {visibleBills.length === 1 ? "bill" : "bills"}
-          </Typography>
-        </View>
-
-        {billsQuery.isLoading ? (
-          <View className="items-center py-16">
-            <ActivityIndicator color={theme.accent} />
+                You&apos;re owed
+              </Typography>
+              <Typography
+                weight="700"
+                className="mt-1 text-[24px] tracking-[-0.7px]"
+                style={{ color: theme.text }}
+              >
+                {formatBillMoney(collecting)}
+              </Typography>
+            </View>
+            <View
+              className="mx-5 h-11 w-px"
+              style={{ backgroundColor: theme.border }}
+            />
+            <View className="flex-1">
+              <Typography
+                weight="600"
+                className="text-xs"
+                style={{ color: theme.muted }}
+              >
+                You owe
+              </Typography>
+              <Typography
+                weight="700"
+                className="mt-1 text-[24px] tracking-[-0.7px]"
+                style={{ color: theme.text }}
+              >
+                {formatBillMoney(owing)}
+              </Typography>
+            </View>
           </View>
-        ) : billsQuery.isError ? (
-          <View className="items-center py-16">
-            <Typography
-              weight="700"
-              className="text-base"
-              style={{ color: theme.text }}
-            >
-              Bills couldn&apos;t sync
-            </Typography>
-            <HapticPressable
-              onPress={() => void billsQuery.refetch()}
-              className="mt-4 rounded-full px-5 py-3"
+
+          <HapticPressable
+            accessibilityRole="button"
+            accessibilityLabel="Open bill groups"
+            feedback="selection"
+            onPress={() => router.push("/bills/groups" as never)}
+            className="mt-5 flex-row items-center py-2"
+          >
+            <View
+              className="size-10 items-center justify-center rounded-full"
               style={{ backgroundColor: theme.card }}
             >
+              <Ionicons name="people-outline" size={20} color={theme.text} />
+            </View>
+            <View className="ml-3 flex-1">
+              <Typography
+                weight="700"
+                className="text-sm"
+                style={{ color: theme.text }}
+              >
+                Your groups
+              </Typography>
+              <Typography
+                weight="500"
+                className="mt-0.5 text-xs"
+                style={{ color: theme.muted }}
+              >
+                Reuse the people you split with
+              </Typography>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.muted} />
+          </HapticPressable>
+
+          <View
+            className="mt-6 flex-row rounded-full p-1"
+            style={{ backgroundColor: theme.cardStrong }}
+          >
+            <BillSegment
+              label="Open"
+              count={openBills.length}
+              active={view === "open"}
+              onPress={() => setView("open")}
+            />
+            <BillSegment
+              label="Settled"
+              count={settledBills.length}
+              active={view === "settled"}
+              onPress={() => setView("settled")}
+            />
+          </View>
+
+          <View
+            className="mt-5 flex-row items-center border-b pb-3"
+            style={{ borderColor: theme.border }}
+          >
+            <Ionicons name="search-outline" size={20} color={theme.muted} />
+            <TextInput
+              accessibilityLabel="Search bills"
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setQuery}
+              placeholder="Search bills"
+              placeholderTextColor={theme.faint}
+              returnKeyType="search"
+              selectionColor={theme.accent}
+              value={query}
+              className="ml-3 flex-1 py-0 text-[15px]"
+              style={{ color: theme.text }}
+            />
+            <HapticPressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                filtersVisible ? "Hide filters" : "Filter bills"
+              }
+              accessibilityState={{ expanded: filtersVisible }}
+              feedback="selection"
+              onPress={() => setFiltersVisible((visible) => !visible)}
+              className="ml-3 flex-row items-center gap-2 py-1"
+            >
+              <Ionicons
+                name="options-outline"
+                size={19}
+                color={category === "all" ? theme.muted : theme.text}
+              />
               <Typography
                 weight="700"
                 className="text-xs"
-                style={{ color: theme.text }}
+                style={{ color: category === "all" ? theme.muted : theme.text }}
               >
-                Try again
+                Filter
               </Typography>
             </HapticPressable>
           </View>
-        ) : visibleBills.length ? (
-          visibleBills.map((bill) => (
-            <BillRow
-              key={bill.id}
-              bill={bill}
-              onPress={() => router.push(`/bills/${bill.id}` as never)}
-            />
-          ))
-        ) : (
-          <View className="items-center py-16">
-            <Ionicons
-              name="checkmark-circle-outline"
-              size={34}
-              color={theme.faint}
-            />
+
+          {filtersVisible ? (
+            <ScrollView
+              horizontal
+              className="-mx-6"
+              contentContainerStyle={{ gap: 22, paddingHorizontal: 24 }}
+              showsHorizontalScrollIndicator={false}
+            >
+              {BILL_FILTERS.map((filter) => (
+                <HapticPressable
+                  key={filter.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: category === filter.id }}
+                  feedback="selection"
+                  onPress={() => setCategory(filter.id)}
+                  className="border-b-2 py-3"
+                  style={{
+                    borderBottomColor:
+                      category === filter.id ? theme.text : "transparent",
+                  }}
+                >
+                  <Typography
+                    weight={category === filter.id ? "700" : "600"}
+                    className="text-xs"
+                    style={{
+                      color: category === filter.id ? theme.text : theme.muted,
+                    }}
+                  >
+                    {filter.label}
+                  </Typography>
+                </HapticPressable>
+              ))}
+            </ScrollView>
+          ) : null}
+
+          <View className="mb-3 mt-7 flex-row items-center justify-between">
             <Typography
               weight="700"
-              className="mt-4 text-base"
+              className="text-[18px]"
               style={{ color: theme.text }}
             >
-              {query || category !== "all"
-                ? "No matching bills"
-                : "Nothing waiting"}
+              {view === "open" ? "Open bills" : "Settled bills"}
+            </Typography>
+            <Typography
+              weight="600"
+              className="text-xs"
+              style={{ color: theme.muted }}
+            >
+              {visibleBills.length}{" "}
+              {visibleBills.length === 1 ? "bill" : "bills"}
             </Typography>
           </View>
-        )}
-      </ScrollView>
+
+          {billsQuery.isLoading ? (
+            <View className="items-center py-16">
+              <ActivityIndicator color={theme.accent} />
+            </View>
+          ) : billsQuery.isError ? (
+            <View className="items-center py-16">
+              <Typography
+                weight="700"
+                className="text-base"
+                style={{ color: theme.text }}
+              >
+                Bills couldn&apos;t sync
+              </Typography>
+              <HapticPressable
+                onPress={() => void billsQuery.refetch()}
+                className="mt-4 rounded-full px-5 py-3"
+                style={{ backgroundColor: theme.card }}
+              >
+                <Typography
+                  weight="700"
+                  className="text-xs"
+                  style={{ color: theme.text }}
+                >
+                  Try again
+                </Typography>
+              </HapticPressable>
+            </View>
+          ) : visibleBills.length ? (
+            visibleBills.map((bill) => (
+              <BillRow
+                key={bill.id}
+                bill={bill}
+                onPress={() => router.push(`/bills/${bill.id}` as never)}
+              />
+            ))
+          ) : (
+            <View className="items-center py-16">
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={34}
+                color={theme.faint}
+              />
+              <Typography
+                weight="700"
+                className="mt-4 text-base"
+                style={{ color: theme.text }}
+              >
+                {query || category !== "all"
+                  ? "No matching bills"
+                  : "Nothing waiting"}
+              </Typography>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </ScreenLayout>
+  );
+}
+
+function HubSegment({
+  label,
+  icon,
+  active,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const { theme } = useAppTheme();
+  return (
+    <HapticPressable
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      feedback="selection"
+      scaleOnPress={false}
+      onPress={onPress}
+      className="min-h-12 flex-1 flex-row items-center justify-center gap-2 rounded-full px-2"
+      style={{ backgroundColor: active ? theme.card : "transparent" }}
+    >
+      <Ionicons
+        name={icon}
+        size={17}
+        color={active ? theme.text : theme.muted}
+      />
+      <Typography
+        weight={active ? "700" : "600"}
+        className="text-[13px]"
+        style={{ color: active ? theme.text : theme.muted }}
+      >
+        {label}
+      </Typography>
+    </HapticPressable>
   );
 }
 
